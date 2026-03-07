@@ -1,0 +1,95 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary: {
+          50: '#F0F5FF',
+          100: '#E6F0FF',
+          200: '#BFD9FF',
+          300: '#99C2FF',
+          400: '#4D8FFF',
+          500: '#2563FF',
+          600: '#0B66FF',
+          700: '#0952CC',
+          800: '#063E99',
+          900: '#042A66',
+        },
+        accent: {
+          50: '#ECFDF5',
+          600: '#06B6D4',
+          700: '#0891B2',
+        },
+        success: {
+          50: '#F0FDF4',
+          600: '#16A34A',
+          700: '#15803D',
+        },
+        warning: {
+          50: '#FFFBEB',
+          600: '#F59E0B',
+          700: '#D97706',
+        },
+        danger: {
+          50: '#FEF2F2',
+          600: '#DC2626',
+          700: '#B91C1C',
+        },
+        neutral: {
+          50: '#FAFAFA',
+          100: '#F3F4F6',
+          200: '#E5E7EB',
+          300: '#D1D5DB',
+          400: '#9CA3AF',
+          500: '#6B7280',
+          600: '#4B5563',
+          700: '#374151',
+          800: '#1F2937',
+          900: '#111827',
+        },
+      },
+      spacing: {
+        '1': '8px',
+        '2': '16px',
+        '3': '24px',
+        '4': '32px',
+        '5': '40px',
+        '6': '48px',
+      },
+      fontSize: {
+        xs: '12px',
+        sm: '13px',
+        base: '14px',
+        lg: '16px',
+        h3: '18px',
+        h2: '22px',
+        h1: '28px',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['Fira Code', 'Monaco', 'monospace'],
+      },
+      borderRadius: {
+        xs: '4px',
+        sm: '6px',
+        md: '8px',
+        lg: '12px',
+        xl: '16px',
+      },
+      boxShadow: {
+        xs: '0 1px 2px rgba(2, 6, 23, 0.05)',
+        sm: '0 1px 3px rgba(2, 6, 23, 0.1), 0 1px 2px rgba(2, 6, 23, 0.06)',
+        md: '0 2px 6px rgba(2, 6, 23, 0.08)',
+        lg: '0 4px 12px rgba(2, 6, 23, 0.1)',
+        xl: '0 8px 24px rgba(2, 6, 23, 0.12)',
+      },
+      transitionDuration: {
+        fast: '100ms',
+        normal: '150ms',
+        slow: '250ms',
+      },
+    },
+  },
+  plugins: [],
+}

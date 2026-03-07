@@ -1,0 +1,479 @@
+// ─── Pipeline DAG Types ────────────────────────────────────────────────────────
+// These are the canonical input types the code generation engine receives.
+// All engines (PySpark, Scala, SQL, Pandas) consume this same contract.
+
+export type NodeType = 'source' | 'transformation' | 'sink';
+export type TechnologyType = 'pyspark' | 'scala-spark' | 'sql' | 'pandas';
+export type SparkVersion = '3.5' | '3.4' | '3.3' | '3.2' | '3.1' | '2.4';
+export type FileFormat = 'parquet' | 'csv' | 'json' | 'orc' | 'avro' | 'delta' | 'iceberg' | 'hudi';
+export type JoinType = 'inner' | 'left' | 'right' | 'full' | 'cross' | 'left_semi' | 'left_anti';
+export type AggregateFunction = 'sum' | 'count' | 'avg' | 'min' | 'max' | 'first' | 'last' | 'collect_list' | 'collect_set' | 'countDistinct';
+export type OrderDirection = 'asc' | 'desc';
+export type WriteMode = 'overwrite' | 'append' | 'ignore' | 'error' | 'merge';
+export type PartitionStrategy = 'none' | 'hash' | 'range' | 'round_robin';
+
+// ─── Data Type Mapping ─────────────────────────────────────────────────────────
+export type DataTypeName =
+  | 'string' | 'integer' | 'long' | 'double' | 'float' | 'decimal'
+  | 'boolean' | 'date' | 'timestamp' | 'binary' | 'array' | 'map' | 'struct';
+
+export interface DataType {
+  name: DataTypeName;
+  nullable?: boolean;
+  precision?: number;  // decimal
+  scale?: number;      // decimal
+  elementType?: DataType;  // array
+  keyType?: DataType;      // map
+  valueType?: DataType;    // map
+  fields?: SchemaField[];  // struct
+}
+
+export interface SchemaField {
+  name: string;
+  dataType: DataType;
+  nullable?: boolean;
+  description?: string;
+  tags?: Record<string, string>;
+}
+
+export interface Schema {
+  fields: SchemaField[];
+}
+
+// ─── Source Configurations ─────────────────────────────────────────────────────
+export type SourceType =
+  | 'jdbc' | 'file' | 'kafka' | 'hive' | 'delta' | 'iceberg'
+  | 's3' | 'adls' | 'gcs' | 'hdfs' | 'api' | 'mongodb' | 'cassandra';
+
+export interface JdbcSourceConfig {
+  url: string;
+  driver: string;
+  table?: string;
+  query?: string;
+  user?: string;
+  password?: string;
+  passwordSecret?: string;  // secret manager key
+  numPartitions?: number;
+  partitionColumn?: string;
+  lowerBound?: number;
+  upperBound?: number;
+  fetchSize?: number;
+  pushDownPredicate?: boolean;
+  customOptions?: Record<string, string>;
+}
+
+export interface FileSourceConfig {
+  path: string;
+  format: FileFormat;
+  schema?: Schema;
+  inferSchema?: boolean;
+  header?: boolean;            // csv
+  delimiter?: string;          // csv
+  multiLine?: boolean;         // json
+  mergeSchema?: boolean;       // parquet/delta
+  pathGlobFilter?: string;
+  modifiedBefore?: string;
+  modifiedAfter?: string;
+  recursiveFileLookup?: boolean;
+  customOptions?: Record<string, string>;
+}
+
+export interface KafkaSourceConfig {
+  bootstrapServers: string;
+  topic: string;
+  startingOffsets?: 'earliest' | 'latest' | string;
+  endingOffsets?: 'latest' | string;
+  groupId?: string;
+  keyDeserializer?: string;
+  valueDeserializer?: string;
+  schemaRegistryUrl?: string;
+  valueFormat?: 'json' | 'avro' | 'protobuf' | 'string';
+  valueSchema?: Schema;
+  streaming?: boolean;
+  triggerInterval?: string;
+  watermarkDelay?: string;
+  customOptions?: Record<string, string>;
+}
+
+export interface HiveSourceConfig {
+  database: string;
+  table: string;
+  partitionFilter?: string;
+  pushDownPredicate?: boolean;
+}
+
+export interface DeltaSourceConfig {
+  path?: string;
+  tableName?: string;
+  version?: number;
+  timestamp?: string;
+  readChangeFeed?: boolean;
+  startingVersion?: number;
+  startingTimestamp?: string;
+}
+
+export interface IcebergSourceConfig {
+  catalog: string;
+  namespace: string;
+  table: string;
+  snapshotId?: number;
+  asOfTimestamp?: string;
+  readChangelog?: boolean;
+}
+
+export type SourceConfig =
+  | JdbcSourceConfig
+  | FileSourceConfig
+  | KafkaSourceConfig
+  | HiveSourceConfig
+  | DeltaSourceConfig
+  | IcebergSourceConfig;
+
+// ─── Transformation Configurations ────────────────────────────────────────────
+export type TransformationType =
+  | 'filter' | 'select' | 'rename' | 'drop' | 'cast'
+  | 'join' | 'union' | 'aggregate' | 'window'
+  | 'pivot' | 'unpivot' | 'flatten' | 'explode'
+  | 'derive' | 'dedup' | 'sort' | 'limit'
+  | 'fillna' | 'dropna' | 'lookup' | 'custom_sql'
+  | 'custom_udf' | 'data_quality' | 'encrypt' | 'mask'
+  | 'sample' | 'cache' | 'repartition';
+
+export interface FilterConfig {
+  condition: string;  // SQL-style condition: "age > 18 AND status = 'active'"
+}
+
+export interface SelectConfig {
+  columns: string[];           // column names or expressions
+  expressions?: ExpressionMap; // alias → expression
+}
+
+export interface ExpressionMap {
+  [alias: string]: string;  // "full_name": "concat(first_name, ' ', last_name)"
+}
+
+export interface RenameConfig {
+  mappings: Record<string, string>;  // old_name → new_name
+}
+
+export interface CastConfig {
+  casts: Array<{ column: string; targetType: DataType }>;
+}
+
+export interface JoinConfig {
+  rightInput: string;       // node ID of right dataset
+  type: JoinType;
+  conditions: JoinCondition[];
+  broadcastHint?: 'left' | 'right' | 'none';
+  skewHint?: boolean;
+}
+
+export interface JoinCondition {
+  leftColumn: string;
+  rightColumn: string;
+}
+
+export interface AggregateConfig {
+  groupBy: string[];
+  aggregations: Aggregation[];
+  having?: string;
+}
+
+export interface Aggregation {
+  function: AggregateFunction;
+  column: string;
+  alias: string;
+  distinct?: boolean;
+}
+
+export interface WindowConfig {
+  partitionBy: string[];
+  orderBy: OrderBySpec[];
+  windowFunctions: WindowFunction[];
+  rowsBetween?: [number | 'unbounded', number | 'unbounded'];
+  rangeBetween?: [number | 'unbounded', number | 'unbounded'];
+}
+
+export interface WindowFunction {
+  function: string;  // 'row_number', 'rank', 'lag', 'lead', 'sum', etc.
+  column?: string;
+  offset?: number;   // lag/lead
+  defaultValue?: string;
+  alias: string;
+}
+
+export interface OrderBySpec {
+  column: string;
+  direction: OrderDirection;
+  nullsFirst?: boolean;
+}
+
+export interface DeriveConfig {
+  columns: Array<{ name: string; expression: string; dataType?: DataType }>;
+}
+
+export interface DedupConfig {
+  columns?: string[];  // subset; if empty, all columns
+  keepFirst?: boolean;
+}
+
+export interface SortConfig {
+  orderBy: OrderBySpec[];
+}
+
+export interface FillnaConfig {
+  value?: string | number | boolean;
+  columnValues?: Record<string, string | number | boolean>;
+}
+
+export interface DataQualityConfig {
+  rules: DQRule[];
+  failureAction: 'fail' | 'warn' | 'drop' | 'quarantine';
+  quarantinePath?: string;
+}
+
+export interface DQRule {
+  name: string;
+  column?: string;
+  type: 'not_null' | 'unique' | 'range' | 'regex' | 'referential' | 'custom';
+  params?: Record<string, string | number | boolean>;
+  expression?: string;
+}
+
+export interface RepartitionConfig {
+  numPartitions?: number;
+  columns?: string[];
+  strategy?: PartitionStrategy;
+}
+
+export interface CustomSqlConfig {
+  sql: string;         // Can reference input as {input} or by node id
+  tempViewName?: string;
+}
+
+export interface CustomUdfConfig {
+  functionName: string;
+  language: 'python' | 'scala' | 'sql';
+  returnType: DataType;
+  code: string;
+  columns: Array<{ inputColumns: string[]; outputColumn: string }>;
+}
+
+export interface MaskConfig {
+  columns: Array<{
+    name: string;
+    strategy: 'hash' | 'truncate' | 'replace' | 'regex_replace' | 'null';
+    params?: Record<string, string>;
+  }>;
+}
+
+export type TransformationConfig =
+  | FilterConfig | SelectConfig | RenameConfig | CastConfig
+  | JoinConfig | AggregateConfig | WindowConfig | DeriveConfig
+  | DedupConfig | SortConfig | FillnaConfig | DataQualityConfig
+  | RepartitionConfig | CustomSqlConfig | CustomUdfConfig
+  | MaskConfig | LookupConfig | PivotConfig | UnpivotConfig
+  | ExplodeConfig | FlattenConfig | LimitConfig | UnionConfig | SampleConfig;
+  groupByColumns: string[];
+  pivotColumn: string;
+  pivotValues?: string[];
+  aggregations: Aggregation[];
+}
+
+export interface UnpivotConfig {
+  idColumns: string[];
+  valueColumn: string;
+  variableColumn: string;
+  valueColumns: string[];
+}
+
+export interface ExplodeConfig {
+  column: string;
+  alias?: string;
+  outer?: boolean;  // explode_outer
+}
+
+export interface FlattenConfig {
+  separator?: string;  // nested struct separator, default '_'
+  columns?: string[];  // which struct columns to flatten; empty = all
+}
+
+export interface LimitConfig {
+  n: number;
+}
+
+export interface UnionConfig {
+  byName?: boolean;   // true = unionByName (schema-tolerant), false = positional union
+  all?: boolean;      // true = allow missing columns (requires byName=true)
+}
+
+export interface SampleConfig {
+  fraction: number;          // 0.0 – 1.0
+  withReplacement?: boolean;
+  seed?: number;
+}
+
+export interface LookupConfig {
+  lookupDatasetNodeId: string;
+  joinColumns: Record<string, string>;  // input_col → lookup_col
+  returnColumns: string[];
+  defaultValue?: Record<string, string | number>;
+  cacheEnabled?: boolean;
+}
+
+export interface CustomUdfConfig {
+  functionName: string;
+  language: 'python' | 'scala' | 'sql';
+  returnType: DataType;
+  code: string;
+  columns: Array<{ inputColumns: string[]; outputColumn: string }>;
+}
+
+export type TransformationConfig =
+  | FilterConfig | SelectConfig | RenameConfig | CastConfig
+  | JoinConfig | AggregateConfig | WindowConfig | DeriveConfig
+  | DedupConfig | SortConfig | FillnaConfig | DataQualityConfig
+  | RepartitionConfig | CustomSqlConfig | CustomUdfConfig
+  | MaskConfig | LookupConfig | PivotConfig | UnpivotConfig
+  | ExplodeConfig | FlattenConfig;
+
+// ─── Sink Configurations ───────────────────────────────────────────────────────
+export type SinkType =
+  | 'jdbc' | 'file' | 'kafka' | 'hive' | 'delta' | 'iceberg'
+  | 's3' | 'adls' | 'gcs' | 'hdfs' | 'console' | 'noop';
+
+export interface JdbcSinkConfig {
+  url: string;
+  driver: string;
+  table: string;
+  mode: WriteMode;
+  user?: string;
+  password?: string;
+  passwordSecret?: string;
+  batchSize?: number;
+  truncate?: boolean;
+  createTableOptions?: string;
+  customOptions?: Record<string, string>;
+}
+
+export interface FileSinkConfig {
+  path: string;
+  format: FileFormat;
+  mode: WriteMode;
+  partitionBy?: string[];
+  numPartitions?: number;
+  compression?: string;
+  header?: boolean;         // csv
+  delimiter?: string;       // csv
+  customOptions?: Record<string, string>;
+}
+
+export interface KafkaSinkConfig {
+  bootstrapServers: string;
+  topic: string;
+  keyColumn?: string;
+  valueFormat?: 'json' | 'avro' | 'string';
+  schemaRegistryUrl?: string;
+  customOptions?: Record<string, string>;
+}
+
+export interface HiveSinkConfig {
+  database: string;
+  table: string;
+  mode: WriteMode;
+  partitionBy?: string[];
+  fileFormat?: FileFormat;
+  createIfNotExists?: boolean;
+}
+
+export interface DeltaSinkConfig {
+  path?: string;
+  tableName?: string;
+  mode: WriteMode;
+  partitionBy?: string[];
+  mergeKey?: string[];           // for merge mode
+  mergeCondition?: string;       // custom merge condition
+  optimizeWrite?: boolean;
+  autoCompact?: boolean;
+  zorderBy?: string[];
+}
+
+export interface IcebergSinkConfig {
+  catalog: string;
+  namespace: string;
+  table: string;
+  mode: WriteMode;
+  partitionSpec?: IcebergPartitionSpec[];
+  mergeKey?: string[];
+  createIfNotExists?: boolean;
+}
+
+export interface IcebergPartitionSpec {
+  column: string;
+  transform: 'identity' | 'year' | 'month' | 'day' | 'hour' | 'bucket' | 'truncate';
+  param?: number;  // bucket count or truncate width
+}
+
+export type SinkConfig =
+  | JdbcSinkConfig | FileSinkConfig | KafkaSinkConfig
+  | HiveSinkConfig | DeltaSinkConfig | IcebergSinkConfig;
+
+// ─── Pipeline Node ─────────────────────────────────────────────────────────────
+export interface PipelineNode {
+  id: string;
+  name: string;
+  type: NodeType;
+  sourceType?: SourceType;
+  transformationType?: TransformationType;
+  sinkType?: SinkType;
+  config: SourceConfig | TransformationConfig | SinkConfig;
+  inputs: string[];         // input node IDs
+  outputSchema?: Schema;    // optional inferred/declared schema
+  description?: string;
+  tags?: Record<string, string>;
+  enabled?: boolean;
+}
+
+// ─── Pipeline / Job Definition ─────────────────────────────────────────────────
+export interface SparkConfig {
+  appName: string;
+  master?: string;
+  deployMode?: 'client' | 'cluster';
+  executorMemory?: string;
+  driverMemory?: string;
+  executorCores?: number;
+  numExecutors?: number;
+  dynamicAllocation?: boolean;
+  minExecutors?: number;
+  maxExecutors?: number;
+  shufflePartitions?: number;
+  adaptiveQueryExecution?: boolean;
+  extraSparkConf?: Record<string, string>;
+}
+
+export interface PipelineEnvironment {
+  sparkVersion: SparkVersion;
+  technology: TechnologyType;
+  enableDeltaLake?: boolean;
+  enableIceberg?: boolean;
+  enableHudi?: boolean;
+  enableGlue?: boolean;
+  pythonVersion?: '3.8' | '3.9' | '3.10' | '3.11';
+  extraDependencies?: string[];  // maven coords or pip packages
+}
+
+export interface PipelineDefinition {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  environment: PipelineEnvironment;
+  sparkConfig: SparkConfig;
+  nodes: PipelineNode[];
+  variables?: Record<string, string>;   // runtime variables
+  secrets?: string[];                   // referenced secret keys
+  schedule?: string;                    // cron
+  tags?: Record<string, string>;
+  createdAt?: string;
+  updatedAt?: string;
+}
