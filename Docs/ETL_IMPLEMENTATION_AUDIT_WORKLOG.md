@@ -26,6 +26,57 @@ Severity legend:
 - `2026-03-18` — Ran `npm run build` in `Frontend/`; build did not complete successfully in current audit pass and an independent repo scan also reported frontend quality-gate failures.
 - `2026-03-18` — Verified frontend screen wiring against `Frontend/src/components`, `Frontend/src/store/slices`, and `Frontend/src/services/api.ts`.
 - `2026-03-18` — Verified backend route coverage against `Backend/src/api/server.ts` and route files under `Backend/src/api/routes`.
+- `2026-03-18` — Re-ran `npm run build` in `Backend/`; build passed.
+- `2026-03-18` — Re-ran `npm run build` in `Frontend/`; build passed.
+- `2026-03-18` — Re-ran `npm test -- --run` in `Frontend/`; tests passed.
+
+## Remediation Delta (2026-03-18)
+
+Latest verified status updates (superseding original finding status tags above):
+
+- `SYS-001` -> `FULLY WIRED` (backend compile gate now green).
+- `SYS-002` -> `PARTIAL` (frontend build/test gates restored with `jsdom` + tests; lint/typecheck parity remains to be verified end-to-end).
+- `SYS-003` -> `FULLY WIRED` (frontend default API base URL aligned to backend default port).
+- `UI-001` -> `FULLY WIRED` (global pipeline add wired to create action).
+- `UI-002` -> `FULLY WIRED` (global orchestrator add wired to create action).
+- `HEAD-001` -> `FULLY WIRED` (misleading `Save All` affordance removed).
+- `HEAD-002` -> `FULLY WIRED` (stub `Publish` affordance removed).
+- `HEAD-003` -> `FULLY WIRED` (search converted to explicit "coming soon" placeholder).
+- `PROJ-001` -> `FULLY WIRED` (project load path now typed/mapped with visible error state).
+- `PROJ-002` -> `FULLY WIRED` (project save uses explicit payload mapping and surfaces failures).
+- `PROJ-006` -> `PARTIAL` (name/description mapping fixed; unsupported fields now read-only).
+- `FOLD-001` -> `FULLY WIRED` (folder save now uses backend rename API).
+- `FOLD-002` -> `FULLY WIRED` (new sub-folder action wired).
+- `FOLD-003` -> `FULLY WIRED` (new pipeline action wired).
+- `FOLD-004` -> `FULLY WIRED` (new orchestrator action wired).
+- `FOLD-005` -> `FULLY WIRED` (folder contents now loaded from children/pipelines/orchestrators APIs).
+- `GOV-001` -> `PARTIAL` (governance users mapper aligned to backend DTO and role shapes where available).
+- `GOV-003` -> `PARTIAL` (search/filter now stateful; row menu remains non-functional).
+- `USER-001` -> `FULLY WIRED` (broken save path removed by eliminating unsupported save affordance).
+- `USER-002` -> `FULLY WIRED` (stub reset/deactivate controls removed from workspace header actions).
+- `USER-004` -> `PARTIAL` (user DTO mapping and role-object normalization fixed; activity/audit/session remains stubbed).
+- `GOV-API-001` -> `FULLY WIRED` (broken `updateUser` client contract removed to match backend surface).
+- `API-004` -> `FULLY WIRED` (`GET /api/orchestrators` list route added).
+- `API-007` -> `FULLY WIRED` (pipeline audit endpoint now propagates backend errors instead of false-empty success).
+- `API-008` -> `FULLY WIRED` (orchestrator audit endpoint now propagates backend errors instead of false-empty success).
+- `API-009` -> `FULLY WIRED` (cancel endpoints now return 404/409 when no valid transition occurs).
+- `API-011` -> `FULLY WIRED` (connection test-result persistence columns aligned to schema).
+- `API-012` -> `FULLY WIRED` (connection summaries now derive health status from backend data path).
+- `API-015` -> `FULLY WIRED` (node-template create now uses middleware-derived user identity).
+- `API-016` -> `FULLY WIRED` (`POST /api/connections/test` implemented).
+- `API-017` -> `PARTIAL` (`GET /api/nodes/:nodeId/preview` route implemented with stable placeholder payload contract).
+- `API-018` -> `FULLY WIRED` (runtime whitelist added for list ordering params before SQL assembly).
+- `API-019` -> `FULLY WIRED` (folder/orchestrator delete now validates existence and returns 404 on missing rows).
+- `SYS-004` -> `FULLY WIRED` (frontend build now passes in current workspace configuration).
+- `SYS-005` -> `FULLY WIRED` (frontend test runner now operational with `jsdom` installed).
+- `API-020` -> `FULLY WIRED` (pipeline save payload mapping fixed in workspace + header paths).
+- `API-021` -> `FULLY WIRED` (codegen client now sends `{ options: { ... } }` contract expected by backend).
+- `PIPE-005` -> `FULLY WIRED` (parameter load failures now shown in UI with retry path).
+- `API-022` -> `PARTIAL` (pipeline run now captures request options and persists environment/technology metadata; deeper execution-model integration remains).
+- `API-023` -> `PARTIAL` (orchestrator run now accepts/echoes options and applies environment where resolvable; no concurrency persistence model yet).
+- `DB-001` -> `PARTIAL` (folder delete moved to DB procedure; create path still route-implemented).
+- `DB-002` -> `PARTIAL` (orchestrator delete moved to DB procedure; create path still route-implemented).
+- `DB-003` -> `FULLY WIRED` (connector health read now uses `catalog.fn_get_connector_health`).
 
 ## Findings Log
 
