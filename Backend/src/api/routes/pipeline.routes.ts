@@ -16,7 +16,8 @@ function getUserId(res: Response): string {
   return (res.locals['userId'] as string) ?? 'system';
 }
 async function setSession(client: any, userId: string) {
-  const key = process.env['APP_ENCRYPTION_KEY'] ?? 'default-key';
+  const key = process.env['APP_ENCRYPTION_KEY'];
+  if (!key) throw new Error('APP_ENCRYPTION_KEY is required');
   await client.query(`SET LOCAL app.user_id = '${userId.replace(/'/g, "''")}'`);
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }
@@ -412,9 +413,23 @@ router.put('/:id', requirePermission('PIPELINE_EDIT'), async (req: Request, res:
         const payload = JSON.stringify({ nodes: body.nodes ?? [], edges: body.edges ?? [] });
         const layout = body.uiLayout ? JSON.stringify(body.uiLayout) : null;
 
-        await client.query(
+        const vResult = await client.query(
           `CALL catalog.pr_commit_pipeline_version($1, $2, $3::jsonb, $4::jsonb, $5::uuid, null)`,
           [id, commitMsg, payload, layout, userId],
+        );
+        const versionId = vResult.rows[0].p_version_id;
+
+        const datasetMap = (body.nodes ?? [])
+          .filter((n: any) => (n.type === 'source' || n.type === 'target') && n.config?.datasetId)
+          .map((n: any) => ({
+            dataset_id: n.config.datasetId,
+            access_mode_code: n.type === 'source' ? 'READ' : 'WRITE',
+            node_id_text: n.id
+          }));
+
+        await client.query(
+          `CALL catalog.pr_sync_pipeline_dataset_map($1::uuid, $2::uuid, $3::jsonb)`,
+          [id, versionId, JSON.stringify(datasetMap)]
         );
       }
     });
@@ -816,6 +831,96 @@ router.put('/:id/parameters', requirePermission('PIPELINE_EDIT'), async (req: Re
   } catch (err) { return next(err); }
 });
 
+// ─── Pipeline Alerts (Notification Rules) ─────────────────────────────────────
+
+router.get('/:id/alerts', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const rows = await db.transaction(async client => {
+      await setSession(client, userId);
+      const r = await client.query(
+        `SELECT
+           notification_rule_id,
+           event_type_code,
+           channel_type_code,
+           channel_target_text,
+           is_rule_active_flag,
+           created_dtm
+         FROM gov.fn_get_notification_rules_for_entity('PIPELINE', $1::uuid)`,
+        [req.params['id']],
+      );
+      return r.rows;
+    });
+
+    const mapped = rows.map((row: any) => ({
+      id: String(row.notification_rule_id),
+      eventTypeCode: String(row.event_type_code),
+      channelTypeCode: String(row.channel_type_code),
+      channelTargetText: String(row.channel_target_text),
+      enabled: row.is_rule_active_flag === true,
+      createdDtm: row.created_dtm ?? null,
+    }));
+
+    return res.json({ success: true, data: mapped });
+  } catch (err) { return next(err); }
+});
+
+router.put('/:id/alerts', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const body = (req.body ?? {}) as { rules?: unknown[] };
+    const rules = Array.isArray(body.rules) ? body.rules : [];
+
+    await db.transaction(async client => {
+      await setSession(client, userId);
+
+      const current = await client.query(
+        `SELECT notification_rule_id
+         FROM gov.fn_get_notification_rules_for_entity('PIPELINE', $1::uuid)`,
+        [req.params['id']],
+      );
+      const currentIds = new Set<string>(current.rows.map((r: any) => String(r.notification_rule_id)));
+      const desiredIds = new Set<string>();
+
+      for (const raw of rules) {
+        const r = raw as any;
+        const id = typeof r.id === 'string' ? r.id.trim() : '';
+        const eventTypeCode = typeof r.eventTypeCode === 'string' ? r.eventTypeCode.trim().toUpperCase() : '';
+        const channelTypeCode = typeof r.channelTypeCode === 'string' ? r.channelTypeCode.trim().toUpperCase() : '';
+        const channelTargetText = typeof r.channelTargetText === 'string' ? r.channelTargetText.trim() : '';
+        const enabled = r.enabled === true;
+
+        if (!eventTypeCode || !channelTypeCode || !channelTargetText) continue;
+
+        if (id && currentIds.has(id)) {
+          desiredIds.add(id);
+          await client.query(
+            `CALL gov.pr_set_notification_rule_active($1::uuid, $2)`,
+            [id, enabled],
+          );
+          continue;
+        }
+
+        const created = await client.query(
+          `CALL gov.pr_create_notification_rule('PIPELINE', $1::uuid, $2, $3, $4, $5::uuid, null)`,
+          [req.params['id'], eventTypeCode, channelTypeCode, channelTargetText, userId],
+        );
+        const newId = created.rows[0]?.p_notification_rule_id;
+        if (newId) desiredIds.add(String(newId));
+      }
+
+      for (const id of currentIds) {
+        if (!desiredIds.has(id)) {
+          await client.query(`CALL gov.pr_delete_notification_rule($1::uuid)`, [id]);
+        }
+      }
+    });
+
+    log.info('pipelines.alertsSave', 'Pipeline alert rules saved', { pipelineId: req.params['id'], userId });
+    return res.json({ success: true });
+  } catch (err) { return next(err); }
+});
+
 router.get('/:id/permissions', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
@@ -932,11 +1037,11 @@ router.get('/:id/audit-logs', requirePermission('AUDIT_VIEW'), async (req: Reque
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT id, timestamp, user_id, action_code
+        `SELECT id, action_dtm, user_id, action_code
          FROM catalog.fn_get_pipeline_audit_logs($1::uuid, $2, $3)`,
         [req.params['id'], limit, offset]);
       return r.rows.map((row:any) => ({
-        id:String(row.id), timestamp:row.timestamp, user:row.user_id??'system',
+        id:String(row.id), timestamp:row.action_dtm, user:row.user_id??'system',
         action:row.action_code==='U'?'PIPELINE_SAVED':row.action_code==='I'?'PIPELINE_CREATED':'PIPELINE_DELETED',
         summary:`Pipeline ${row.action_code==='U'?'updated':row.action_code==='I'?'created':'deleted'}`,
       }));

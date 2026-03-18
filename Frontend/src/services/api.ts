@@ -133,6 +133,14 @@ class APIClient {
     return this.client.put(`/pipelines/${id}/permissions`, data);
   }
 
+  getPipelineAlerts(id: string) {
+    return this.client.get(`/pipelines/${id}/alerts`);
+  }
+
+  savePipelineAlerts(id: string, rules: Array<{ id?: string; eventTypeCode: string; channelTypeCode: string; channelTargetText: string; enabled: boolean }>) {
+    return this.client.put(`/pipelines/${id}/alerts`, { rules });
+  }
+
   getPreview(nodeId: string, options: Record<string, unknown> = {}) {
     return this.client.get(`/nodes/${nodeId}/preview`, { params: options });
   }
@@ -155,6 +163,22 @@ class APIClient {
 
   getOrchestrator(id: string) {
     return this.client.get(`/orchestrators/${id}`);
+  }
+
+  getOrchestratorPipelines(id: string) {
+    return this.client.get(`/orchestrators/${id}/pipelines`);
+  }
+
+  getOrchestratorSchedule(id: string) {
+    return this.client.get(`/orchestrators/${id}/schedule`);
+  }
+
+  saveOrchestratorSchedule(id: string, data: { cronExpression: string; timezone?: string; environment?: string; isActive?: boolean }) {
+    return this.client.put(`/orchestrators/${id}/schedule`, data);
+  }
+
+  deleteOrchestratorSchedule(id: string) {
+    return this.client.delete(`/orchestrators/${id}/schedule`);
   }
 
   createOrchestrator(data: {
@@ -337,6 +361,10 @@ class APIClient {
 
   getMonitorKpis(params: Record<string, string | null | undefined>) {
     return this.client.get('/executions/kpis', { params });
+  }
+
+  getEnvironments() {
+    return this.client.get('/executions/environments');
   }
 
   getPipelineRuns(params: Record<string, string | number | null | undefined>) {

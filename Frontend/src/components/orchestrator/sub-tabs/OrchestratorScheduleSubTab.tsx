@@ -3,8 +3,9 @@
  * Types: Cron | Interval | Event | Manual
  * Fields: Name, Enabled, Timezone, Retry policy, Failure handling
  */
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Calendar, Info, Clock, Zap, Hand, RefreshCw } from 'lucide-react';
+import api from '@/services/api';
 
 type ScheduleType = 'cron' | 'interval' | 'event' | 'manual';
 
@@ -63,13 +64,87 @@ const TYPE_LABELS: Record<ScheduleType, string> = {
   manual:   'Manual Only',
 };
 
-export function OrchestratorScheduleSubTab({ onDirty }: { onDirty?: () => void }) {
+export function OrchestratorScheduleSubTab({ orchId, onDirty }: { orchId: string; onDirty?: () => void }) {
   const [cfg, setCfg] = useState<ScheduleConfig>(DEFAULTS);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
 
   const update = (patch: Partial<ScheduleConfig>) => {
     setCfg(prev => ({ ...prev, ...patch }));
     onDirty?.();
   };
+
+  const isPersistable = useMemo(() => cfg.type === 'cron' || cfg.type === 'manual', [cfg.type]);
+
+  const load = useCallback(async () => {
+    if (!orchId) return;
+    setIsLoading(true);
+    setError(null);
+    setBanner(null);
+    try {
+      const res = await api.getOrchestratorSchedule(orchId);
+      const row = (res.data as any)?.data ?? null;
+      if (!row) {
+        setCfg(prev => ({ ...prev, enabled: false, type: 'cron' }));
+        setBanner('No schedule configured yet.');
+        return;
+      }
+      setCfg(prev => ({
+        ...prev,
+        enabled: row.is_schedule_active === true,
+        type: 'cron',
+        cronExpression: String(row.cron_expression_text ?? prev.cronExpression),
+        timezone: String(row.timezone_name_text ?? prev.timezone),
+      }));
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to load schedule');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [orchId]);
+
+  const save = useCallback(async () => {
+    if (!orchId) return;
+    setIsSaving(true);
+    setError(null);
+    setBanner(null);
+    try {
+      if (!isPersistable) {
+        setError('Only Cron and Manual schedules are supported by the backend right now.');
+        return;
+      }
+      await api.saveOrchestratorSchedule(orchId, {
+        cronExpression: cfg.type === 'manual' ? '0 0 1 1 *' : cfg.cronExpression,
+        timezone: cfg.timezone,
+        isActive: cfg.enabled,
+      });
+      setBanner('Schedule saved.');
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to save schedule');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [orchId, cfg.type, cfg.cronExpression, cfg.timezone, cfg.enabled, isPersistable]);
+
+  const clear = useCallback(async () => {
+    if (!orchId) return;
+    setIsSaving(true);
+    setError(null);
+    setBanner(null);
+    try {
+      await api.deleteOrchestratorSchedule(orchId);
+      setCfg(DEFAULTS);
+      setBanner('Schedule deleted.');
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to delete schedule');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [orchId]);
+
+  useEffect(() => { void load(); }, [load]);
 
   const F = ({ label, field, type = 'text', options, placeholder }: {
     label: string; field: keyof ScheduleConfig; type?: string;
@@ -101,6 +176,48 @@ export function OrchestratorScheduleSubTab({ onDirty }: { onDirty?: () => void }
   return (
     <div className="flex-1 overflow-auto p-5 bg-[#0d0f1a]">
       <div className="max-w-2xl space-y-6">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            disabled={isLoading || isSaving}
+            className="flex items-center gap-2 h-8 px-3 rounded bg-slate-800/50 border border-slate-700 text-[12px] text-slate-200 hover:border-slate-600 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button
+            onClick={save}
+            disabled={isLoading || isSaving}
+            className="ml-auto h-8 px-3 rounded bg-blue-600 text-white text-[12px] font-medium hover:bg-blue-500 disabled:opacity-50"
+          >
+            {isSaving ? 'Saving…' : 'Save Schedule'}
+          </button>
+          <button
+            onClick={clear}
+            disabled={isLoading || isSaving}
+            className="h-8 px-3 rounded bg-slate-800/50 border border-slate-700 text-[12px] text-slate-200 hover:border-slate-600 disabled:opacity-50"
+          >
+            Delete
+          </button>
+        </div>
+
+        {error && (
+          <div className="p-3 rounded border border-red-900/50 bg-red-900/20 text-red-200 text-[12px]">
+            {error}
+          </div>
+        )}
+        {banner && !error && (
+          <div className="p-3 rounded border border-slate-800 bg-slate-900/30 text-slate-300 text-[12px]">
+            {banner}
+          </div>
+        )}
+
+        {!isPersistable && (
+          <div className="p-3 rounded border border-amber-900/40 bg-amber-900/10 text-amber-200 text-[12px] flex items-start gap-2">
+            <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            Interval and Event schedules are not persisted yet. Select Cron or Manual to save.
+          </div>
+        )}
 
         {/* Basic settings */}
         <div className="space-y-4">

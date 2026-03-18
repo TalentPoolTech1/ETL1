@@ -6,6 +6,11 @@
 
 BEGIN;
 
+-- Drop functions that have changed return types to allow CREATE OR REPLACE
+DROP FUNCTION IF EXISTS catalog.fn_get_connectors();
+DROP FUNCTION IF EXISTS catalog.fn_get_connectors_by_tech(TEXT, INTEGER, UUID);
+DROP FUNCTION IF EXISTS catalog.fn_get_connector_by_id(UUID);
+
 -- ============================================================================
 -- READ OPERATIONS — CONNECTORS
 -- ============================================================================
@@ -60,7 +65,7 @@ LANGUAGE sql STABLE AS $$
     FROM catalog.connectors c
     LEFT JOIN etl.users u ON c.created_by_user_id = u.user_id
     LEFT JOIN catalog.connector_health h ON c.connector_id = h.connector_id
-    LEFT JOIN meta.technology_types t ON c.technology_id = t.technology_id
+    LEFT JOIN meta.technology_types t ON c.technology_id = t.tech_id
     WHERE (p_tech_code IS NULL OR t.tech_code = p_tech_code)
       AND (p_after_id IS NULL OR c.connector_id > p_after_id)
     ORDER BY c.connector_id
@@ -83,7 +88,8 @@ RETURNS TABLE (
     created_dtm            TIMESTAMPTZ,
     updated_dtm            TIMESTAMPTZ,
     created_by_user_id     UUID,
-    updated_by_user_id     UUID
+    updated_by_user_id     UUID,
+    technology_id          UUID
 )
 LANGUAGE sql STABLE AS $$
     SELECT c.connector_id, c.connector_display_name, c.connector_type_code,

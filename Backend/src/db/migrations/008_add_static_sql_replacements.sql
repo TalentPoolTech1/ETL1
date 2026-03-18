@@ -412,13 +412,13 @@ CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_audit_logs(
 )
 RETURNS TABLE (
     id          BIGINT,
-    timestamp   TIMESTAMPTZ,
+    action_dtm  TIMESTAMPTZ,
     user_id     UUID,
     action_code CHAR(1)
 )
 LANGUAGE sql STABLE AS $$
     SELECT h.hist_id        AS id,
-           h.hist_action_dtm AS timestamp,
+           h.hist_action_dtm AS action_dtm,
            h.hist_action_by  AS user_id,
            h.hist_action_cd  AS action_code
     FROM history.pipelines_history h
@@ -436,13 +436,13 @@ CREATE OR REPLACE FUNCTION catalog.fn_get_orchestrator_audit_logs(
 )
 RETURNS TABLE (
     id          BIGINT,
-    timestamp   TIMESTAMPTZ,
+    action_dtm  TIMESTAMPTZ,
     user_id     UUID,
     action_code CHAR(1)
 )
 LANGUAGE sql STABLE AS $$
     SELECT h.hist_id        AS id,
-           h.hist_action_dtm AS timestamp,
+           h.hist_action_dtm AS action_dtm,
            h.hist_action_by  AS user_id,
            h.hist_action_cd  AS action_code
     FROM history.orchestrators_history h

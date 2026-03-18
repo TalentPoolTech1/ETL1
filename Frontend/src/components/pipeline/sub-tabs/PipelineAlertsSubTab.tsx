@@ -1,8 +1,9 @@
 /**
- * Pipeline > Alerts sub-tab — Configure alerting rules for execution events
+ * Pipeline > Alerts sub-tab — Configure alert routing rules (persisted)
  */
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Bell, BellOff, AlertTriangle, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import api from '@/services/api';
 
 type AlertEvent = 'EXECUTION_FAILED' | 'EXECUTION_SUCCEEDED' | 'EXECUTION_STARTED'
   | 'TIMED_OUT' | 'SLA_BREACHED' | 'RETRY_EXHAUSTED' | 'ROWS_BELOW_THRESHOLD' | 'ROWS_ABOVE_THRESHOLD';
@@ -54,21 +55,125 @@ const CHANNEL_COLORS: Record<AlertChannel, string> = {
 export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
   const [newRule, setNewRule] = useState<Partial<AlertRule>>({
     name: '', enabled: true, event: 'EXECUTION_FAILED', channel: 'email', target: '',
   });
 
+  const toEventTypeCode = (e: AlertEvent): string => {
+    switch (e) {
+      case 'EXECUTION_FAILED': return 'RUN_FAILURE';
+      case 'EXECUTION_SUCCEEDED': return 'RUN_SUCCESS';
+      case 'EXECUTION_STARTED': return 'RUN_START';
+      case 'SLA_BREACHED': return 'SLA_VIOLATION';
+      default: return 'RUN_FAILURE';
+    }
+  };
+
+  const toChannelTypeCode = (c: AlertChannel): string => {
+    switch (c) {
+      case 'email': return 'EMAIL';
+      case 'slack': return 'SLACK';
+      case 'webhook': return 'WEBHOOK';
+      case 'pagerduty': return 'PAGERDUTY';
+    }
+  };
+
+  const fromEventTypeCode = (c: string): AlertEvent => {
+    switch (String(c || '').toUpperCase()) {
+      case 'RUN_SUCCESS': return 'EXECUTION_SUCCEEDED';
+      case 'RUN_START': return 'EXECUTION_STARTED';
+      case 'SLA_VIOLATION': return 'SLA_BREACHED';
+      case 'RUN_FAILURE':
+      default: return 'EXECUTION_FAILED';
+    }
+  };
+
+  const fromChannelTypeCode = (c: string): AlertChannel => {
+    switch (String(c || '').toUpperCase()) {
+      case 'SLACK': return 'slack';
+      case 'WEBHOOK': return 'webhook';
+      case 'PAGERDUTY': return 'pagerduty';
+      case 'EMAIL':
+      default: return 'email';
+    }
+  };
+
+  const load = useCallback(async () => {
+    if (!pipelineId) return;
+    setIsLoading(true);
+    setError(null);
+    setBanner(null);
+    try {
+      const res = await api.getPipelineAlerts(pipelineId);
+      const rows = (res.data as any)?.data ?? [];
+      const mapped: AlertRule[] = (Array.isArray(rows) ? rows : []).map((r: any) => {
+        const event = fromEventTypeCode(r.eventTypeCode);
+        const channel = fromChannelTypeCode(r.channelTypeCode);
+        const target = String(r.channelTargetText ?? '');
+        return {
+          id: String(r.id),
+          name: `${EVENT_LABELS[event]} → ${channel}`,
+          enabled: r.enabled === true,
+          event,
+          channel,
+          target,
+        };
+      });
+      setRules(mapped);
+      if (mapped.length === 0) setBanner('No alert rules configured yet.');
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to load alert rules');
+      setRules([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [pipelineId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const save = useCallback(async (nextRules: AlertRule[]) => {
+    if (!pipelineId) return;
+    setIsSaving(true);
+    setError(null);
+    setBanner(null);
+    try {
+      await api.savePipelineAlerts(
+        pipelineId,
+        nextRules
+          .filter(r => r.target?.trim())
+          .map(r => ({
+            id: r.id.startsWith('tmp-') ? undefined : r.id,
+            eventTypeCode: toEventTypeCode(r.event),
+            channelTypeCode: toChannelTypeCode(r.channel),
+            channelTargetText: r.target.trim(),
+            enabled: r.enabled,
+          })),
+      );
+      setRules(nextRules);
+      setBanner('Alert rules saved.');
+      setShowAdd(false);
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to save alert rules');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [pipelineId]);
+
   const toggleRule = (id: string) =>
-    setRules(prev => prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
+    void save(rules.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r));
 
   const deleteRule = (id: string) =>
-    setRules(prev => prev.filter(r => r.id !== id));
+    void save(rules.filter(r => r.id !== id));
 
   const addRule = () => {
     if (!newRule.name || !newRule.target) return;
-    setRules(prev => [...prev, { ...newRule, id: crypto.randomUUID() } as AlertRule]);
+    const tmp: AlertRule = { ...newRule, id: `tmp-${crypto.randomUUID()}` } as AlertRule;
+    void save([...rules, tmp]);
     setNewRule({ name: '', enabled: true, event: 'EXECUTION_FAILED', channel: 'email', target: '' });
-    setShowAdd(false);
   };
 
   return (
@@ -78,11 +183,28 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
         <Bell className="w-4 h-4 text-amber-400" />
         <span className="text-[12px] font-medium text-slate-300">Alert Rules</span>
         <span className="text-[11px] text-slate-600">· {rules.filter(r => r.enabled).length} active / {rules.length} total</span>
+        <button onClick={load}
+          disabled={isLoading || isSaving}
+          className="ml-2 h-7 px-3 bg-slate-800/40 hover:bg-slate-700/40 text-slate-200 rounded text-[12px] transition-colors disabled:opacity-50">
+          {isLoading ? 'Loading…' : 'Refresh'}
+        </button>
         <button onClick={() => setShowAdd(v => !v)}
+          disabled={isSaving}
           className="ml-auto flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors">
           <Plus className="w-3 h-3" /> Add Rule
         </button>
       </div>
+
+      {error && (
+        <div className="px-4 py-3 border-b border-slate-800 bg-red-900/10 text-red-200 text-[12px]">
+          {error}
+        </div>
+      )}
+      {banner && !error && (
+        <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/20 text-slate-300 text-[12px]">
+          {banner}
+        </div>
+      )}
 
       {/* Add rule form */}
       {showAdd && (

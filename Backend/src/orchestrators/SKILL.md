@@ -37,10 +37,14 @@ produces `execution.orchestrator_runs` rows, with child pipeline runs tracked in
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/api/orchestrators/:id` | Get orchestrator by ID |
+| `GET` | `/api/orchestrators/:id/pipelines` | List pipelines in orchestrator (design-time map) |
 | `POST` | `/api/orchestrators` | Create orchestrator |
 | `PUT` | `/api/orchestrators/:id` | Update orchestrator (name, desc, DAG definition) |
 | `DELETE` | `/api/orchestrators/:id` | Physical delete |
 | `POST` | `/api/orchestrators/:id/run` | Trigger orchestrator run (MANUAL) |
+| `GET` | `/api/orchestrators/:id/schedule` | Get cron schedule (if defined) |
+| `PUT` | `/api/orchestrators/:id/schedule` | Create/update cron schedule |
+| `DELETE` | `/api/orchestrators/:id/schedule` | Delete schedule |
 | `GET` | `/api/orchestrators/:id/permissions` | Get permissions (stub) |
 | `PUT` | `/api/orchestrators/:id/permissions` | Update permissions (stub) |
 | `GET` | `/api/orchestrators/:id/audit-logs` | Get history from `history.orchestrators_history` |
@@ -137,3 +141,9 @@ The execution engine (not yet built) picks up `PENDING` rows and:
   It creates `PENDING` orchestrator_runs rows. The execution engine owns the fan-out logic.
 - `2026-03-17` — **Missing Endpoint:** `GET /api/orchestrators` (list all, or list by projectId)
   is required by the Frontend `OrchestratorWorkspace` component but does not exist yet.
+
+- `2026-03-18` — **ORCH-002 Change:** Added `GET /api/orchestrators/:id/pipelines` to return
+  the design-time pipeline membership via `catalog.fn_get_pipelines_for_orchestrator(...)`.
+
+- `2026-03-18` — **ORCH-003 Change:** Added orchestrator schedule endpoints (`GET/PUT/DELETE /api/orchestrators/:id/schedule`)
+  backed by `execution.fn_get_entity_schedule(...)` and `execution.pr_set_entity_schedule(...)` / `execution.pr_delete_entity_schedule(...)`.

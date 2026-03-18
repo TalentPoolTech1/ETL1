@@ -240,6 +240,67 @@ LANGUAGE sql STABLE AS $$
 $$;
 COMMENT ON FUNCTION gov.fn_get_notification_rules_for_event(UUID, TEXT) IS 'Returns all active alert routing targets for a specific entity and event type. Called by the notification dispatcher after a run completes.';
 ;
+
+CREATE OR REPLACE FUNCTION gov.fn_get_notification_rules_for_entity(
+    p_entity_type_code TEXT,
+    p_entity_id UUID
+)
+RETURNS TABLE (
+    notification_rule_id UUID,
+    entity_type_code TEXT,
+    entity_id UUID,
+    event_type_code TEXT,
+    channel_type_code TEXT,
+    channel_target_text TEXT,
+    is_rule_active_flag BOOLEAN,
+    created_dtm TIMESTAMPTZ,
+    created_by_user_id UUID
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        notification_rule_id,
+        entity_type_code,
+        entity_id,
+        event_type_code,
+        channel_type_code,
+        channel_target_text,
+        is_rule_active_flag,
+        created_dtm,
+        created_by_user_id
+    FROM gov.notification_rules
+    WHERE entity_type_code = p_entity_type_code
+      AND entity_id = p_entity_id
+    ORDER BY created_dtm DESC;
+$$;
+COMMENT ON FUNCTION gov.fn_get_notification_rules_for_entity(TEXT, UUID) IS 'Lists all notification rules (active and inactive) for a specific entity. Used by the UI configuration screens.';
+;
+
+CREATE OR REPLACE PROCEDURE gov.pr_set_notification_rule_active(
+    p_notification_rule_id UUID,
+    p_is_rule_active_flag BOOLEAN
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE gov.notification_rules
+    SET is_rule_active_flag = p_is_rule_active_flag
+    WHERE notification_rule_id = p_notification_rule_id;
+END;
+$$;
+COMMENT ON PROCEDURE gov.pr_set_notification_rule_active(UUID, BOOLEAN) IS 'Enables or disables a notification rule without deleting it.';
+;
+
+CREATE OR REPLACE PROCEDURE gov.pr_delete_notification_rule(
+    p_notification_rule_id UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    -- Law 4: Physical delete. History trigger captures row before removal.
+    DELETE FROM gov.notification_rules
+    WHERE notification_rule_id = p_notification_rule_id;
+END;
+$$;
+COMMENT ON PROCEDURE gov.pr_delete_notification_rule(UUID) IS 'Law 4: Physically deletes a notification rule. History trigger preserves the prior row image in history.notification_rules_history.';
+;
 -- Secret Management
 CREATE OR REPLACE PROCEDURE gov.pr_store_secret(p_key TEXT, p_plain_value TEXT, OUT p_secret_id UUID)
 LANGUAGE plpgsql AS $$

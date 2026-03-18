@@ -69,6 +69,8 @@ one endpoint at a time.
 | `GET` | `/api/pipelines/:id/lineage` | inline in routes | Reads `execution.run_lineage` |
 | `GET` | `/api/pipelines/:id/permissions` | inline in routes | Reads `gov.project_user_roles` |
 | `PUT` | `/api/pipelines/:id/permissions` | stub | Not yet implemented |
+| `GET` | `/api/pipelines/:id/alerts` | inline in routes | Lists `gov.notification_rules` for the pipeline |
+| `PUT` | `/api/pipelines/:id/alerts` | inline in routes | Reconciles alert rules (create/update active/delete) |
 | `GET` | `/api/pipelines/:id/audit-logs` | inline in routes | Reads `history.pipelines_history` |
 
 ---
@@ -136,6 +138,7 @@ The full node type definitions live in `Backend/src/codegen/core/types/pipeline.
 | `GET /api/pipelines` (list all) still uses legacy controller → wrong table | HIGH | Rewrite in `pipeline.routes.ts` using `catalog.pipelines` |
 | `validate`, `generate`, `listArtifacts`, `downloadArtifact`, `getVersionHistory` delegate to legacy controller/repository | HIGH | Must be migrated endpoint by endpoint |
 | `PUT /:id/permissions` is a stub — returns `{ success: true }` without doing anything | HIGH | Implement `gov.project_user_roles` upsert |
+| Pipeline Alerts UI was local-only | HIGH | Now backed by `gov.notification_rules` with `GET/PUT /api/pipelines/:id/alerts` |
 | No pipeline `SKILL.md`-level validation that `ir_payload_json` matches the codegen schema | MEDIUM | Validate on save |
 | `POST /:id/run` does not check if `active_version_id` is NULL before inserting | MEDIUM | Null version_id will break execution engine |
 

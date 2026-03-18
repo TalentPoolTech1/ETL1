@@ -1,6 +1,9 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
+import api from '@/services/api';
+import { useAppDispatch } from '@/store/hooks';
+import { openTab } from '@/store/slices/tabsSlice';
 
 const RUN_STATUS_COLOR: Record<string, string> = {
   success:   'bg-success-100 text-success-800',
@@ -11,33 +14,111 @@ const RUN_STATUS_COLOR: Record<string, string> = {
 };
 
 interface RunRow { id: string; start: string; duration: string; status: string; triggeredBy: string; }
+interface PipelineRow { pipeline_id: string; pipeline_display_name: string; active_version_id: string | null; }
 
-const MOCK_RUNS: RunRow[] = [
-  { id: 'orch-run-001', start: '2026-03-02 14:20', duration: '12m 34s', status: 'success',  triggeredBy: 'schedule' },
-  { id: 'orch-run-002', start: '2026-03-02 10:00', duration: '9m 18s',  status: 'failed',   triggeredBy: 'manual'   },
-  { id: 'orch-run-003', start: '2026-03-01 22:00', duration: '11m 52s', status: 'success',  triggeredBy: 'schedule' },
-  { id: 'orch-run-004', start: '2026-03-01 18:30', duration: '—',       status: 'running',  triggeredBy: 'api'      },
-  { id: 'orch-run-005', start: '2026-03-01 10:00', duration: '—',       status: 'pending',  triggeredBy: 'manual'   },
-];
+function formatDuration(ms?: number | null) {
+  if (!ms || ms <= 0) return '—';
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  if (m <= 0) return `${r}s`;
+  return `${m}m ${r}s`;
+}
 
-const MOCK_PIPELINES = [
-  { id: 'p-1', name: 'ingest-customers',     status: 'active' },
-  { id: 'p-2', name: 'transform-orders',     status: 'active' },
-  { id: 'p-3', name: 'aggregate-daily-kpis', status: 'active' },
-  { id: 'p-4', name: 'load-data-warehouse',  status: 'draft'  },
-];
-
-export function OrchestratorOverviewSubTab() {
+export function OrchestratorOverviewSubTab({ orchId }: { orchId: string }) {
+  const dispatch = useAppDispatch();
   const [editing, setEditing] = useState(false);
-  const [draftName, setDraftName] = useState('daily-etl-orchestrator');
-  const [draftDesc, setDraftDesc] = useState('Orchestrates the daily ETL batch across customer, order, and KPI pipelines.');
+  const [draftName, setDraftName] = useState('');
+  const [draftDesc, setDraftDesc] = useState('');
+  const [pipelines, setPipelines] = useState<PipelineRow[]>([]);
+  const [runs, setRuns] = useState<RunRow[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const successRate = Math.round(
-    (MOCK_RUNS.filter(r => r.status === 'success').length / MOCK_RUNS.filter(r => r.status !== 'pending' && r.status !== 'running').length) * 100
-  );
+  const load = useCallback(async () => {
+    if (!orchId) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [orchRes, pipeRes, runsRes] = await Promise.all([
+        api.getOrchestrator(orchId),
+        api.getOrchestratorPipelines(orchId),
+        api.getOrchestratorRuns({ orchestratorId: orchId, page: 1, pageSize: 20 }),
+      ]);
+
+      const orch = (orchRes.data as any)?.data ?? (orchRes.data as any);
+      setDraftName(String(orch?.orch_display_name ?? orch?.orchDisplayName ?? ''));
+      setDraftDesc(String(orch?.orch_desc_text ?? orch?.orchDescText ?? ''));
+
+      const pipeRows = (pipeRes.data as any)?.data ?? [];
+      setPipelines(Array.isArray(pipeRows) ? pipeRows : []);
+
+      const runRows = (runsRes.data as any)?.data ?? (runsRes.data as any)?.runs ?? [];
+      const mappedRuns: RunRow[] = (Array.isArray(runRows) ? runRows : []).map((r: any) => ({
+        id: String(r.orchRunId ?? r.orch_run_id ?? r.orch_run_id ?? r.id ?? ''),
+        start: String(r.startDtm ?? r.start_dtm ?? r.createdDtm ?? r.created_dtm ?? '—'),
+        duration: typeof r.runDurationMs === 'number' ? formatDuration(r.runDurationMs) : (r.duration ?? '—'),
+        status: String(r.runStatusCode ?? r.run_status_code ?? r.status ?? 'pending').toLowerCase(),
+        triggeredBy: String(r.triggerTypeCode ?? r.trigger_type_code ?? r.trigger ?? 'manual').toLowerCase(),
+      })).filter(x => x.id);
+      setRuns(mappedRuns);
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to load orchestrator overview');
+      setPipelines([]);
+      setRuns([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [orchId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const successRate = useMemo(() => {
+    const completed = runs.filter(r => r.status !== 'pending' && r.status !== 'running');
+    if (completed.length === 0) return 0;
+    const ok = completed.filter(r => r.status === 'success').length;
+    return Math.round((ok / completed.length) * 100);
+  }, [runs]);
+
+  const lastRunStart = runs[0]?.start ?? '—';
+
+  const openPipeline = (pipelineId: string, name: string) => {
+    dispatch(openTab({
+      id: `pipeline-${pipelineId}`,
+      type: 'pipeline',
+      objectId: pipelineId,
+      objectName: name,
+      hierarchyPath: `Orchestrator → Pipelines → ${name}`,
+    } as any));
+  };
+
+  const triggerRun = async () => {
+    if (!orchId) return;
+    try {
+      await api.runOrchestrator(orchId);
+      void load();
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to trigger run');
+    }
+  };
+
+  const saveProfile = async () => {
+    if (!orchId) return;
+    try {
+      await api.saveOrchestrator(orchId, { orchDisplayName: draftName, orchDescText: draftDesc });
+      setEditing(false);
+    } catch (e: any) {
+      setError(e?.response?.data?.userMessage ?? e?.message ?? 'Failed to save orchestrator');
+    }
+  };
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      {error && (
+        <div className="p-3 rounded border border-danger-200 bg-danger-50 text-danger-700 text-sm">
+          {error}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -57,8 +138,8 @@ export function OrchestratorOverviewSubTab() {
                 className="w-full px-3 py-2 border border-neutral-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
               <div className="flex gap-2">
-                <Button size="sm" onClick={() => setEditing(false)}>Save</Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+                <Button size="sm" onClick={saveProfile} disabled={isLoading}>Save</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={isLoading}>Cancel</Button>
               </div>
             </div>
           ) : (
@@ -77,20 +158,20 @@ export function OrchestratorOverviewSubTab() {
           )}
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <Button size="sm">▶ Run</Button>
-          <Button size="sm" variant="ghost">Schedule</Button>
-          <Button size="sm" variant="ghost">Clone</Button>
-          <Button size="sm" variant="ghost">Export</Button>
+          <Button size="sm" onClick={triggerRun} disabled={isLoading}>▶ Run</Button>
+          <Button size="sm" variant="ghost" onClick={load} disabled={isLoading}>Refresh</Button>
+          <Button size="sm" variant="ghost" disabled title="Not implemented yet">Clone</Button>
+          <Button size="sm" variant="ghost" disabled title="Not implemented yet">Export</Button>
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Pipelines',    value: MOCK_PIPELINES.length },
+          { label: 'Pipelines',    value: pipelines.length },
           { label: 'Success rate', value: `${successRate}%` },
-          { label: 'Last run',     value: MOCK_RUNS[0]?.start ?? '—' },
-          { label: 'Schedule',     value: 'Daily 22:00 UTC' },
+          { label: 'Last run',     value: lastRunStart },
+          { label: 'Schedule',     value: '—' },
         ].map(stat => (
           <div key={stat.label} className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
             <div className="text-2xl font-bold text-neutral-900">{stat.value}</div>
@@ -112,18 +193,18 @@ export function OrchestratorOverviewSubTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {MOCK_PIPELINES.map(p => (
-                <tr key={p.id} className="hover:bg-neutral-50 transition-colors">
-                  <td className="px-4 py-2 text-neutral-800 font-medium">{p.name}</td>
+              {pipelines.map(p => (
+                <tr key={p.pipeline_id} className="hover:bg-neutral-50 transition-colors">
+                  <td className="px-4 py-2 text-neutral-800 font-medium">{p.pipeline_display_name}</td>
                   <td className="px-4 py-2">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                      p.status === 'active' ? 'bg-success-100 text-success-800' : 'bg-neutral-100 text-neutral-600'
+                      p.active_version_id ? 'bg-success-100 text-success-800' : 'bg-neutral-100 text-neutral-600'
                     }`}>
-                      {p.status}
+                      {p.active_version_id ? 'active' : 'draft'}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-right">
-                    <button className="text-xs text-primary-600 hover:underline">Open ↗</button>
+                    <button className="text-xs text-primary-600 hover:underline" onClick={() => openPipeline(p.pipeline_id, p.pipeline_display_name)}>Open ↗</button>
                   </td>
                 </tr>
               ))}
@@ -145,7 +226,7 @@ export function OrchestratorOverviewSubTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {MOCK_RUNS.map(run => (
+              {runs.map(run => (
                 <tr key={run.id} className="hover:bg-neutral-50 transition-colors">
                   <td className="px-4 py-2 font-mono text-xs text-primary-600 cursor-pointer hover:underline">{run.id}</td>
                   <td className="px-4 py-2 text-neutral-600">{run.start}</td>

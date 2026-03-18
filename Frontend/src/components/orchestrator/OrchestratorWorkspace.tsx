@@ -49,7 +49,7 @@ export function OrchestratorWorkspace({ tabId }: OrchestratorWorkspaceProps) {
       </div>
 
       {activeSubTab === 'properties'   && <OrchestratorPropertiesSubTab orchId={orchId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}
-      {activeSubTab === 'schedule'     && <OrchestratorScheduleSubTab onDirty={() => dispatch(markTabUnsaved(tabId))} />}
+      {activeSubTab === 'schedule'     && <OrchestratorScheduleSubTab orchId={orchId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}
       {activeSubTab === 'permissions'  && <OrchestratorPermissionsSubTab orchId={orchId} />}
       {activeSubTab === 'runs'         && <OrchestratorExecutionHistorySubTab orchId={orchId} />}
     </div>

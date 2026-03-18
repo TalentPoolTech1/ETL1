@@ -42,7 +42,7 @@ CREATE INDEX idx_pipeline_versions_created_at  ON pipeline_versions(created_at D
 -- ─── Generated Artifacts ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS generated_artifacts (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    pipeline_id     UUID         NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+    pipeline_id     UUID         NOT NULL,  -- references catalog.pipelines(pipeline_id); no FK to avoid cross-schema dep on legacy table
     pipeline_version VARCHAR(50) NOT NULL,
     technology      VARCHAR(50)  NOT NULL,
     spark_version   VARCHAR(20),

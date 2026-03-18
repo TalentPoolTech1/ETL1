@@ -27,7 +27,8 @@ function getUserId(res: Response): string {
 }
 
 async function setSession(client: any, userId: string) {
-  const key = process.env['APP_ENCRYPTION_KEY'] ?? 'default-key';
+  const key = process.env['APP_ENCRYPTION_KEY'];
+  if (!key) throw new Error('APP_ENCRYPTION_KEY is required');
   await client.query(`SET LOCAL app.user_id = '${userId.replace(/'/g, "''")}'`);
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }

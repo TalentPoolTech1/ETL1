@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { LoggerFactory } from '../shared/logging';
 

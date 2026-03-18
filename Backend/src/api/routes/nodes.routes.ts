@@ -1,10 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
+import { requirePermission } from '../middleware/rbac.middleware';
 
 const router = Router();
 router.use(userIdMiddleware);
 
-router.get('/:nodeId/preview', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:nodeId/preview', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const nodeId = req.params['nodeId']!;
     const limitRaw = Number.parseInt(String(req.query['limit'] ?? '100'), 10);

@@ -2,13 +2,12 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { codegenService } from '../../codegen/codegen.service';
 import { PipelineDefinition } from '../../codegen/core/types/pipeline.types';
 import { GenerationOptions } from '../../codegen/core/interfaces/engine.interfaces';
+import { requirePermission } from '../middleware/rbac.middleware';
 
 const router = Router();
 
-// ─── POST /api/codegen/generate ───────────────────────────────────────────────
-// Body: { pipeline: PipelineDefinition, options?: GenerationOptions }
-// Returns: GeneratedArtifact with all code files
-router.post('/generate', async (req: Request, res: Response, next: NextFunction) => {
+// POST /api/codegen/generate — Body: { pipeline, options } — Returns: GeneratedArtifact
+router.post('/generate', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { pipeline, options } = req.body as {
       pipeline: PipelineDefinition;
@@ -35,9 +34,8 @@ router.post('/generate', async (req: Request, res: Response, next: NextFunction)
   }
 });
 
-// ─── POST /api/codegen/validate ───────────────────────────────────────────────
-// Validate pipeline definition only (no code generation).
-router.post('/validate', (req: Request, res: Response, next: NextFunction) => {
+// POST /api/codegen/validate — Validate pipeline definition only (no code generation).
+router.post('/validate', requirePermission('PIPELINE_VIEW'), (req: Request, res: Response, next: NextFunction) => {
   try {
     const { pipeline } = req.body as { pipeline: PipelineDefinition };
 
@@ -52,16 +50,14 @@ router.post('/validate', (req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-// ─── GET /api/codegen/technologies ────────────────────────────────────────────
-// Returns list of supported technologies.
-router.get('/technologies', (_req: Request, res: Response) => {
+// GET /api/codegen/technologies — Returns list of supported technologies.
+router.get('/technologies', requirePermission('PIPELINE_VIEW'), (_req: Request, res: Response) => {
   const technologies = codegenService.listTechnologies();
   return res.status(200).json({ technologies });
 });
 
-// ─── POST /api/codegen/preview ────────────────────────────────────────────────
-// Generate code and return only the primary script (for UI preview).
-router.post('/preview', async (req: Request, res: Response, next: NextFunction) => {
+// POST /api/codegen/preview — Generate code and return only the primary script (for UI preview).
+router.post('/preview', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { pipeline, options } = req.body as {
       pipeline: PipelineDefinition;

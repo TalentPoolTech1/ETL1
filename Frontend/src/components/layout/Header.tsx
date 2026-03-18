@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Bell, HelpCircle, Search, Zap, ChevronDown,
   Save, Play, CheckCircle2, Undo2, Redo2,
-  Loader2, AlertTriangle,
+  Loader2, AlertTriangle, Upload, Layers,
 } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { logout } from '@/store/slices/authSlice';
@@ -11,18 +11,41 @@ import api from '@/services/api';
 
 // ─── Environment selector ─────────────────────────────────────────────────────
 
-const ENVIRONMENTS = ['Development', 'QA', 'Staging', 'Production'];
-const ENV_COLORS: Record<string, string> = {
-  Development: 'bg-emerald-900/40 text-emerald-300 border-emerald-700',
-  QA:          'bg-blue-900/40 text-blue-300 border-blue-700',
-  Staging:     'bg-amber-900/40 text-amber-300 border-amber-700',
-  Production:  'bg-red-900/40 text-red-300 border-red-700',
+const FALLBACK_ENV_COLORS: Record<string, string> = {
+  default: 'bg-slate-800/40 text-slate-300 border-slate-700',
+  prod:    'bg-red-900/40 text-red-300 border-red-700',
+  nonProd: 'bg-emerald-900/40 text-emerald-300 border-emerald-700',
 };
 
 function EnvironmentSelector() {
-  const [env, setEnv]   = useState('Development');
+  const [env, setEnv]   = useState<string>('');
   const [open, setOpen] = useState(false);
-  const colorClass = ENV_COLORS[env] ?? ENV_COLORS['Development']!;
+  const [envs, setEnvs] = useState<Array<{ env_id: string; env_display_name: string; is_prod_env_flag: boolean }>>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    api.getEnvironments()
+      .then(res => {
+        const rows = (res.data as any)?.data ?? [];
+        const normalized = Array.isArray(rows) ? rows : [];
+        if (!mounted) return;
+        setEnvs(normalized);
+        if (!env && normalized.length > 0) setEnv(String(normalized[0].env_display_name ?? ''));
+      })
+      .catch(() => {
+        // Keep selector usable even if environments endpoint is unavailable.
+        if (!mounted) return;
+        setEnvs([]);
+        if (!env) setEnv('Default');
+      });
+    return () => { mounted = false; };
+  }, [env]);
+
+  const colorClass = useMemo(() => {
+    const match = envs.find(e => String(e.env_display_name) === env);
+    if (!match) return FALLBACK_ENV_COLORS.default;
+    return match.is_prod_env_flag ? FALLBACK_ENV_COLORS.prod : FALLBACK_ENV_COLORS.nonProd;
+  }, [env, envs]);
 
   return (
     <div className="relative">
@@ -31,22 +54,24 @@ function EnvironmentSelector() {
         className={`flex items-center gap-1.5 h-7 px-2.5 rounded border text-[12px] font-medium transition-colors ${colorClass}`}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
-        {env}
+        {env || 'Environment'}
         <ChevronDown className="w-3 h-3 opacity-60" />
       </button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1d2e] border border-slate-700 rounded-lg shadow-xl py-1 min-w-[140px]">
-            {ENVIRONMENTS.map(e => (
-              <button key={e} onClick={() => { setEnv(e); setOpen(false); }}
-                className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-slate-700 ${e === env ? 'text-blue-300' : 'text-slate-300'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  e === 'Production' ? 'bg-red-400' : e === 'Staging' ? 'bg-amber-400' : e === 'QA' ? 'bg-blue-400' : 'bg-emerald-400'
-                }`} />
-                {e}
-              </button>
-            ))}
+            {(envs.length > 0 ? envs : [{ env_id: 'default', env_display_name: env || 'Default', is_prod_env_flag: false }]).map(e => {
+              const name = String((e as any).env_display_name ?? 'Default');
+              const isProd = Boolean((e as any).is_prod_env_flag);
+              return (
+                <button key={String((e as any).env_id ?? name)} onClick={() => { setEnv(name); setOpen(false); }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-slate-700 ${name === env ? 'text-blue-300' : 'text-slate-300'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isProd ? 'bg-red-400' : 'bg-emerald-400'}`} />
+                  {name}
+                </button>
+              );
+            })}
           </div>
         </>
       )}
@@ -82,11 +107,14 @@ function ToolbarActions() {
   const dispatch       = useAppDispatch();
   const activeTabId    = useAppSelector(s => s.tabs.activeTabId);
   const activeTab      = useAppSelector(s => s.tabs.allTabs.find(t => t.id === activeTabId));
+  const allTabs        = useAppSelector(s => s.tabs.allTabs);
   const activePipeline = useAppSelector(s => s.pipeline.activePipeline);
   const unsaved        = useAppSelector(s => s.pipeline.unsavedChanges);
   // ↓ count (number) — stable reference, no memoization needed
 
   const [isSaving, setIsSaving]       = useState(false);
+  const [isSavingAll, setIsSavingAll] = useState(false);
+  const [isPublishing, setPublishing] = useState(false);
   const [isRunning, setIsRunning]     = useState(false);
   const [isValidating, setValidating] = useState(false);
 
@@ -132,6 +160,51 @@ function ToolbarActions() {
     finally { setValidating(false); }
   }, [type, objectId, isValidating]);
 
+  const handleSaveAll = useCallback(async () => {
+    if (isSavingAll) return;
+    setIsSavingAll(true);
+    try {
+      // Save the active pipeline (full canvas data from Redux)
+      if (type === 'pipeline' && activePipeline && activeTab) {
+        await api.savePipeline(activePipeline.id, {
+          pipelineDisplayName: activePipeline.name,
+          pipelineDescText: activePipeline.description,
+          nodes: activePipeline.nodes,
+          edges: activePipeline.edges,
+          changeSummary: 'Saved via Save All',
+        });
+        dispatch(markTabSaved(activeTab.id));
+      }
+      // For non-active dirty pipeline tabs: save metadata only (no canvas data available without load)
+      const otherDirtyPipelineTabs = allTabs.filter(
+        t => t.isDirty && t.type === 'pipeline' && t.id !== activeTab?.id,
+      );
+      await Promise.allSettled(
+        otherDirtyPipelineTabs.map(t =>
+          api.savePipeline(t.objectId, { pipelineDisplayName: t.objectName })
+            .then(() => dispatch(markTabSaved(t.id)))
+            .catch(() => { /* tab stays dirty */ }),
+        ),
+      );
+    } catch (err: unknown) {
+      alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Save All failed');
+    } finally {
+      setIsSavingAll(false);
+    }
+  }, [allTabs, activeTab, activePipeline, isSavingAll, type, dispatch]);
+
+  const handlePublish = useCallback(async () => {
+    if (isPublishing || !objectId || type !== 'pipeline') return;
+    setPublishing(true);
+    try {
+      await api.generateCode(objectId);
+    } catch (err: unknown) {
+      alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Publish failed');
+    } finally {
+      setPublishing(false);
+    }
+  }, [type, objectId, isPublishing]);
+
   const canRun      = type === 'pipeline' || type === 'orchestrator';
   const canValidate = type === 'pipeline' || type === 'orchestrator';
   const hasDirty    = !!(unsaved || activeTab?.isDirty || activeTab?.unsaved);
@@ -151,6 +224,11 @@ function ToolbarActions() {
         disabled={!activeTab}
         variant={hasDirty ? 'warning' : 'ghost'} />
 
+      <TBtn icon={Layers} label="Save All" title="Save All dirty tabs (Ctrl+Shift+S)"
+        onClick={handleSaveAll} loading={isSavingAll}
+        disabled={!allTabs.some(t => t.isDirty || t.unsaved)}
+        variant="ghost" />
+
       <div className="w-px h-5 bg-slate-700 mx-1 flex-shrink-0" />
 
       {canValidate && (
@@ -161,6 +239,11 @@ function ToolbarActions() {
       {canRun && (
         <TBtn icon={Play} label="Run" title="Run (F5)"
           onClick={handleRun} loading={isRunning} variant="success" />
+      )}
+
+      {type === 'pipeline' && (
+        <TBtn icon={Upload} label="Publish" title="Generate & publish code"
+          onClick={handlePublish} loading={isPublishing} variant="primary" />
       )}
 
     </div>

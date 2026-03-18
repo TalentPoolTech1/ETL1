@@ -15,6 +15,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db/connection';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
 import { LoggerFactory } from '../../shared/logging';
+import { requirePermission } from '../middleware/rbac.middleware';
 
 const router = Router();
 router.use(userIdMiddleware);
@@ -27,14 +28,15 @@ function getUserId(res: Response): string {
 }
 
 async function setSession(client: any, userId: string) {
-  const key = process.env['APP_ENCRYPTION_KEY'] ?? 'default-key';
+  const key = process.env['APP_ENCRYPTION_KEY'];
+  if (!key) throw new Error('APP_ENCRYPTION_KEY is required');
   await client.query(`SET LOCAL app.user_id = '${userId.replace(/'/g, "''")}'`);
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }
 
 // ─── List root folders for a project ──────────────────────────────────────────
 
-router.get('/project/:projectId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/project/:projectId', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
@@ -53,7 +55,7 @@ router.get('/project/:projectId', async (req: Request, res: Response, next: Next
 
 // ─── List sub-folders of a parent folder ──────────────────────────────────────
 
-router.get('/:id/children', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/children', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
@@ -72,7 +74,7 @@ router.get('/:id/children', async (req: Request, res: Response, next: NextFuncti
 
 // ─── Get pipelines in a folder ────────────────────────────────────────────────
 
-router.get('/:id/pipelines', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/pipelines', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
@@ -91,7 +93,7 @@ router.get('/:id/pipelines', async (req: Request, res: Response, next: NextFunct
 
 // ─── Get orchestrators in a folder ────────────────────────────────────────────
 
-router.get('/:id/orchestrators', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/orchestrators', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
@@ -110,7 +112,7 @@ router.get('/:id/orchestrators', async (req: Request, res: Response, next: NextF
 
 // ─── Get single folder ────────────────────────────────────────────────────────
 
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const row = await db.transaction(async client => {
@@ -136,7 +138,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Create folder ────────────────────────────────────────────────────────────
 
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requirePermission('PIPELINE_CREATE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { projectId, parentFolderId, folderDisplayName, folderTypeCode = 'PIPELINE' } = req.body;
@@ -164,14 +166,14 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       );
       return r.rows[0];
     });
-    log.info('folder.create', 'Folder created', { folderId: row.folder_id, projectId, parentFolderId: parentFolderId ?? null, userId });
+    log.info('folders.create', 'Folder created', { folderId: row.folder_id, projectId, parentFolderId: parentFolderId ?? null, userId });
     res.status(201).json({ success: true, data: mapFolder(row) });
-  } catch (err) { log.warn('folder.create', 'Folder creation failed', { error: (err as Error).message }); next(err); }
+  } catch (err) { log.warn('folders.create', 'Folder creation failed', { error: (err as Error).message }); next(err); }
 });
 
 // ─── Rename folder ────────────────────────────────────────────────────────────
 
-router.put('/:id/rename', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id/rename', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { folderDisplayName } = req.body;
@@ -183,14 +185,14 @@ router.put('/:id/rename', async (req: Request, res: Response, next: NextFunction
         [req.params.id, folderDisplayName.trim()],
       );
     });
-    log.info('folder.rename', 'Folder renamed', { folderId: req.params.id, newName: folderDisplayName.trim(), userId });
+    log.info('folders.rename', 'Folder renamed', { folderId: req.params.id, newName: folderDisplayName.trim(), userId });
     res.json({ success: true });
-  } catch (err) { log.warn('folder.rename', 'Folder rename failed', { folderId: req.params.id, error: (err as Error).message }); next(err); }
+  } catch (err) { log.warn('folders.rename', 'Folder rename failed', { folderId: req.params.id, error: (err as Error).message }); next(err); }
 });
 
 // ─── Delete folder (cascades children via FK) ─────────────────────────────────
 
-router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', requirePermission('PIPELINE_DELETE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const deleted = await db.transaction(async client => {
@@ -201,9 +203,9 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
       return true;
     });
     if (!deleted) return res.status(404).json({ success: false, userMessage: 'Folder not found' });
-    log.info('folder.delete', 'Folder deleted', { folderId: req.params.id, userId });
+    log.info('folders.delete', 'Folder deleted', { folderId: req.params.id, userId });
     res.json({ success: true });
-  } catch (err) { log.warn('folder.delete', 'Folder delete failed', { folderId: req.params.id, error: (err as Error).message }); next(err); }
+  } catch (err) { log.warn('folders.delete', 'Folder delete failed', { folderId: req.params.id, error: (err as Error).message }); next(err); }
 });
 
 function mapFolder(r: any) {

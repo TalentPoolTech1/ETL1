@@ -27,10 +27,30 @@ function getUserId(res: Response): string {
 }
 
 async function setSession(client: any, userId: string) {
-  const key = process.env['APP_ENCRYPTION_KEY'] ?? 'default-key';
+  const key = process.env['APP_ENCRYPTION_KEY'];
+  if (!key) throw new Error('APP_ENCRYPTION_KEY is required');
   await client.query(`SET LOCAL app.user_id = '${userId.replace(/'/g, "''")}'`);
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }
+
+// ─── Environments ─────────────────────────────────────────────────────────────
+
+router.get('/environments', requirePermission('PIPELINE_VIEW'), async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const rows = await db.transaction(async client => {
+      await setSession(client, userId);
+      const r = await client.query(
+        `SELECT env_id, env_display_name, is_prod_env_flag, created_dtm, updated_dtm
+         FROM execution.fn_get_environments()`,
+      );
+      return r.rows;
+    });
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    return next(err);
+  }
+});
 
 // ─── KPIs ──────────────────────────────────────────────────────────────────────
 

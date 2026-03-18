@@ -12,6 +12,9 @@ BEGIN;
 -- READ OPERATIONS — PIPELINE RUNS
 -- ============================================================================
 
+-- Drop functions that have changed return types to allow CREATE OR REPLACE
+DROP FUNCTION IF EXISTS execution.fn_get_pipeline_run_history(UUID, INTEGER);
+
 CREATE OR REPLACE FUNCTION execution.fn_get_pipeline_run_status(p_pipeline_run_id UUID)
 RETURNS TABLE (
     pipeline_run_id UUID, pipeline_display_name TEXT, run_status_code TEXT,
@@ -262,6 +265,104 @@ BEGIN
 END;
 $$;
 COMMENT ON PROCEDURE execution.pr_create_schedule(TEXT, UUID, TEXT, TEXT, UUID, UUID) IS 'Defines a new cron-based schedule for a pipeline or orchestrator.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_entity_schedule(
+    p_entity_type_code TEXT,
+    p_entity_id UUID
+)
+RETURNS TABLE (
+    schedule_id UUID,
+    entity_type_code TEXT,
+    entity_id UUID,
+    cron_expression_text TEXT,
+    timezone_name_text TEXT,
+    env_id UUID,
+    is_schedule_active BOOLEAN,
+    next_run_dtm TIMESTAMPTZ,
+    last_run_dtm TIMESTAMPTZ,
+    created_dtm TIMESTAMPTZ,
+    updated_dtm TIMESTAMPTZ,
+    created_by_user_id UUID
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        s.schedule_id,
+        s.entity_type_code,
+        s.entity_id,
+        s.cron_expression_text,
+        s.timezone_name_text,
+        s.env_id,
+        s.is_schedule_active,
+        s.next_run_dtm,
+        s.last_run_dtm,
+        s.created_dtm,
+        s.updated_dtm,
+        s.created_by_user_id
+    FROM execution.schedules s
+    WHERE s.entity_type_code = p_entity_type_code
+      AND s.entity_id = p_entity_id
+    ORDER BY s.updated_dtm DESC
+    LIMIT 1;
+$$;
+COMMENT ON FUNCTION execution.fn_get_entity_schedule(TEXT, UUID) IS 'Returns the most recently updated schedule for the given entity (PIPELINE or ORCHESTRATOR).';
+;
+
+CREATE OR REPLACE PROCEDURE execution.pr_set_entity_schedule(
+    p_entity_type_code TEXT,
+    p_entity_id UUID,
+    p_cron_expression_text TEXT,
+    p_timezone_name_text TEXT,
+    p_env_id UUID,
+    p_is_schedule_active BOOLEAN,
+    p_updated_by_user_id UUID,
+    OUT p_schedule_id UUID
+)
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_existing_id UUID;
+BEGIN
+    SELECT s.schedule_id
+      INTO v_existing_id
+    FROM execution.schedules s
+    WHERE s.entity_type_code = p_entity_type_code
+      AND s.entity_id = p_entity_id
+    ORDER BY s.updated_dtm DESC
+    LIMIT 1;
+
+    IF v_existing_id IS NULL THEN
+        INSERT INTO execution.schedules
+            (entity_type_code, entity_id, cron_expression_text, timezone_name_text, env_id, is_schedule_active, created_by_user_id)
+        VALUES
+            (p_entity_type_code, p_entity_id, p_cron_expression_text, COALESCE(p_timezone_name_text, 'UTC'), p_env_id, COALESCE(p_is_schedule_active, TRUE), p_updated_by_user_id)
+        RETURNING schedule_id INTO p_schedule_id;
+    ELSE
+        UPDATE execution.schedules SET
+            cron_expression_text = p_cron_expression_text,
+            timezone_name_text = COALESCE(p_timezone_name_text, timezone_name_text),
+            env_id = p_env_id,
+            is_schedule_active = COALESCE(p_is_schedule_active, is_schedule_active),
+            updated_dtm = CURRENT_TIMESTAMP
+        WHERE schedule_id = v_existing_id
+        RETURNING schedule_id INTO p_schedule_id;
+    END IF;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_set_entity_schedule(TEXT, UUID, TEXT, TEXT, UUID, BOOLEAN, UUID) IS 'Creates or updates the latest schedule for an entity. Used by API-driven schedule saves.';
+;
+
+CREATE OR REPLACE PROCEDURE execution.pr_delete_entity_schedule(
+    p_entity_type_code TEXT,
+    p_entity_id UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    DELETE FROM execution.schedules
+    WHERE entity_type_code = p_entity_type_code
+      AND entity_id = p_entity_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_delete_entity_schedule(TEXT, UUID) IS 'Physically deletes all schedules for the given entity.';
 ;
 CREATE OR REPLACE PROCEDURE execution.pr_update_schedule_next_run(
     p_schedule_id UUID, p_next_run_dtm TIMESTAMPTZ, p_last_run_dtm TIMESTAMPTZ DEFAULT NULL

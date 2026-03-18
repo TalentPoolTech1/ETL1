@@ -74,4 +74,21 @@ END;
 $$;
 COMMENT ON PROCEDURE execution.pr_delete_environment(UUID) IS 'Law 4: Physically removes an environment definition. Referenced job_runs are preserved.';
 ;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_environments()
+RETURNS TABLE (
+    env_id UUID,
+    env_display_name TEXT,
+    is_prod_env_flag BOOLEAN,
+    created_dtm TIMESTAMPTZ,
+    updated_dtm TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT env_id, env_display_name, is_prod_env_flag, created_dtm, updated_dtm
+    FROM execution.environments
+    ORDER BY is_prod_env_flag DESC, env_display_name;
+$$;
+COMMENT ON FUNCTION execution.fn_get_environments() IS 'Lists all registered deployment environments. Used by UI environment selector and run-targeting.';
+;
+
 COMMIT;

@@ -2,8 +2,8 @@
  * UserWorkspace — tab content for a User object.
  * Sub-tabs: Profile | Access | Preferences
  */
-import { useState, useEffect } from 'react';
-import { Shield, UserCheck } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Shield, UserCheck, UserX, KeyRound } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { markTabSaved, markTabUnsaved } from '@/store/slices/tabsSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
@@ -111,6 +111,65 @@ function UserStatusBadge({ status }: { status: string }) {
 }
 
 // ─── Profile sub-tab ──────────────────────────────────────────────────────
+
+function ResetPasswordForm({ onDone }: { onDone: () => void }) {
+  const [newPwd, setNewPwd]       = useState('');
+  const [confirmPwd, setConfirm] = useState('');
+  const [current, setCurrent]    = useState('');
+  const [saving, setSaving]      = useState(false);
+  const [error, setError]        = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPwd !== confirmPwd) { setError('Passwords do not match'); return; }
+    if (newPwd.length < 8) { setError('Password must be at least 8 characters'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      await api.changePassword({ currentPassword: current, newPassword: newPwd });
+      onDone();
+    } catch (err: unknown) {
+      setError(
+        (err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage
+        ?? 'Failed to change password',
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={(e) => { void handleSubmit(e); }} className="mt-4 p-4 border border-slate-700 rounded-lg bg-slate-900/50 max-w-sm space-y-3">
+      <div className="text-[12px] font-medium text-slate-300">Change Password</div>
+      {error && <div className="text-[12px] text-red-400">{error}</div>}
+      <div>
+        <label className="block text-[11px] text-slate-500 mb-1">Current password</label>
+        <input type="password" value={current} onChange={e => setCurrent(e.target.value)} required
+          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label className="block text-[11px] text-slate-500 mb-1">New password</label>
+        <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} required
+          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+      </div>
+      <div>
+        <label className="block text-[11px] text-slate-500 mb-1">Confirm new password</label>
+        <input type="password" value={confirmPwd} onChange={e => setConfirm(e.target.value)} required
+          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+      </div>
+      <div className="flex items-center gap-2">
+        <button type="submit" disabled={saving}
+          className="h-8 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium disabled:opacity-50">
+          {saving ? 'Saving…' : 'Update Password'}
+        </button>
+        <button type="button" onClick={onDone}
+          className="h-8 px-3 border border-slate-600 text-slate-300 rounded text-[12px] hover:bg-slate-800">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function ProfileTab({ data, onChange }: { data: FD; onChange: (f: string, v: string) => void }) {
   const F = ({ label, field, ro }: { label: string; field: string; ro?: boolean }) => (
@@ -284,10 +343,13 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
     isPlatformAdmin: false, isUserAdmin: false, hasAuditAccess: false,
     theme: 'dark', dateFormat: 'YYYY-MM-DD', landingPage: 'dashboard',
   });
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError]             = useState<string | null>(null);
+  const [saveError, setSaveError]             = useState<string | null>(null);
+  const [isDirty, setIsDirty]                 = useState(false);
+  const [isSaving, setIsSaving]               = useState(false);
+  const [isDeactivating, setDeactivating]     = useState(false);
+  const [deactivateError, setDeactivateError] = useState<string | null>(null);
+  const [showResetPwd, setShowResetPwd]       = useState(false);
 
   // Load real user data on mount
   useEffect(() => {
@@ -373,7 +435,83 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
         </div>
       )}
 
-      {subTab === 'profile'     && <ProfileTab data={formData} onChange={handleFieldChange} />}
+      {subTab === 'profile'     && (
+        <>
+          <ProfileTab data={formData} onChange={handleFieldChange} />
+          <div className="flex-shrink-0 px-5 pb-5">
+            <div className="max-w-2xl border-t border-slate-800 pt-4">
+              <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Account Actions</div>
+              {deactivateError && (
+                <div className="mb-3 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{deactivateError}</div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowResetPwd(v => !v)}
+                  className="flex items-center gap-1.5 h-8 px-3 border border-slate-600 text-slate-300 rounded text-[12px] hover:bg-slate-800 transition-colors"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {showResetPwd ? 'Cancel Password Change' : 'Change Password'}
+                </button>
+                {String(formData.status ?? 'active') === 'active' ? (
+                  <button
+                    type="button"
+                    disabled={isDeactivating}
+                    onClick={async () => {
+                      const userId = String(formData.userId ?? tab?.objectId ?? '').trim();
+                      if (!userId || !window.confirm('Deactivate this account? The user will no longer be able to log in.')) return;
+                      setDeactivating(true);
+                      setDeactivateError(null);
+                      try {
+                        await api.updateUser(userId, { isActive: false });
+                        handleFieldChange('status', 'inactive');
+                      } catch (err: unknown) {
+                        setDeactivateError(
+                          (err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage
+                          ?? 'Failed to deactivate account',
+                        );
+                      } finally {
+                        setDeactivating(false);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 h-8 px-3 border border-red-800 text-red-400 rounded text-[12px] hover:bg-red-950/30 transition-colors disabled:opacity-50"
+                  >
+                    <UserX className="w-3.5 h-3.5" />
+                    {isDeactivating ? 'Deactivating…' : 'Deactivate Account'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isDeactivating}
+                    onClick={async () => {
+                      const userId = String(formData.userId ?? tab?.objectId ?? '').trim();
+                      if (!userId || !window.confirm('Reactivate this account?')) return;
+                      setDeactivating(true);
+                      setDeactivateError(null);
+                      try {
+                        await api.updateUser(userId, { isActive: true });
+                        handleFieldChange('status', 'active');
+                      } catch (err: unknown) {
+                        setDeactivateError(
+                          (err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage
+                          ?? 'Failed to reactivate account',
+                        );
+                      } finally {
+                        setDeactivating(false);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 h-8 px-3 border border-emerald-800 text-emerald-400 rounded text-[12px] hover:bg-emerald-950/30 transition-colors disabled:opacity-50"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    {isDeactivating ? 'Reactivating…' : 'Reactivate Account'}
+                  </button>
+                )}
+              </div>
+              {showResetPwd && <ResetPasswordForm onDone={() => setShowResetPwd(false)} />}
+            </div>
+          </div>
+        </>
+      )}
       {subTab === 'access'      && <AccessTab data={formData} />}
       {subTab === 'preferences' && <PreferencesTab data={formData} />}
     </div>

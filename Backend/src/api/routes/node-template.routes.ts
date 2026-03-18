@@ -1,12 +1,13 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { nodeTemplateRepository } from '../../db/repositories/node-template.repository';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
+import { requirePermission } from '../middleware/rbac.middleware';
 
 const router = Router();
 router.use(userIdMiddleware);
 
 // GET /api/node-templates
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { category, technology, search } = req.query as Record<string, string>;
     const templates = await nodeTemplateRepository.list({ category, technology, search });
@@ -15,7 +16,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // GET /api/node-templates/:id
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tmpl = await nodeTemplateRepository.findById(req.params['id']!);
     if (!tmpl) { res.status(404).json({ error: 'Template not found' }); return; }
@@ -24,7 +25,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // POST /api/node-templates
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requirePermission('PIPELINE_CREATE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = req.body;
     if (!body.name || !body.configTemplate) {
@@ -37,7 +38,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // PUT /api/node-templates/:id
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const tmpl = await nodeTemplateRepository.update(req.params['id']!, req.body);
     if (!tmpl) { res.status(404).json({ error: 'Template not found' }); return; }
@@ -46,7 +47,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // DELETE /api/node-templates/:id
-router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', requirePermission('PIPELINE_DELETE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const deleted = await nodeTemplateRepository.delete(req.params['id']!);
     if (!deleted) { res.status(404).json({ error: 'Template not found' }); return; }

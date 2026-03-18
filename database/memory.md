@@ -180,6 +180,8 @@ These were reviewed and agreed during schema development. Do not re-introduce.
 - `2026-03-17` — Per-service SKILL.md files created at `Backend/src/<service>/SKILL.md`.
   Any DB change that affects a service must also update that service's SKILL.md Living Decisions.
 - `2026-03-18` — **RBAC Permission Correction:** Resolved `403 Forbidden` on pipeline creation by granting `ADMIN` (7a788fb9) and `DEVELOPER` (d22bca7a) roles to the primary user (`admin@etl1.local`) using the `gov.pr_assign_user_role` procedure. This ensures full functional access across the platform.
+- `2026-03-18` — **Notification Rules CRUD Expansion:** Added UI-support routines in `database/logic/rbac_logic.sql` for managing `gov.notification_rules`: `gov.fn_get_notification_rules_for_entity`, `gov.pr_set_notification_rule_active`, and `gov.pr_delete_notification_rule`. These preserve Law 4 (physical deletes) and rely on existing history triggers (`history.notification_rules_history`).
+- `2026-03-18` — **Environment Listing Function:** Added `execution.fn_get_environments()` in `database/logic/lifecycle_logic.sql` to list registered deployment environments for UI run targeting (select via function, no static lists).
 - `2026-03-17` — **Reference Map — Which service uses which DB tables:**
 
   | Service | Primary Tables |

@@ -28,7 +28,8 @@ function getUserId(res: Response): string {
   return (res.locals['userId'] as string) ?? 'system';
 }
 async function setSession(client: any, userId: string) {
-  const key = process.env['APP_ENCRYPTION_KEY'] ?? 'default-key';
+  const key = process.env['APP_ENCRYPTION_KEY'];
+  if (!key) throw new Error('APP_ENCRYPTION_KEY is required');
   await client.query(`SET LOCAL app.user_id = '${userId.replace(/'/g, "''")}'`);
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }
@@ -172,6 +173,126 @@ router.get('/:id', requirePermission('PIPELINE_VIEW'), async (req: Request, res:
     if (!row) return res.status(404).json({ success: false, userMessage: 'Orchestrator not found' });
     res.json({ success: true, data: row });
   } catch (err) { next(err); }
+});
+
+// ─── List pipelines in orchestrator (design-time map) ─────────────────────────
+
+router.get('/:id/pipelines', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const rows = await db.transaction(async client => {
+      await setSession(client, userId);
+      const r = await client.query(
+        `SELECT
+           pipeline_id,
+           pipeline_display_name,
+           pipeline_desc_text,
+           active_version_id,
+           created_dtm,
+           updated_dtm
+         FROM catalog.fn_get_pipelines_for_orchestrator($1::uuid)`,
+        [req.params.id],
+      );
+      return r.rows;
+    });
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ─── Schedule (cron-based) ────────────────────────────────────────────────────
+
+router.get('/:id/schedule', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const row = await db.transaction(async client => {
+      await setSession(client, userId);
+      const r = await client.query(
+        `SELECT
+           schedule_id,
+           entity_type_code,
+           entity_id,
+           cron_expression_text,
+           timezone_name_text,
+           env_id,
+           is_schedule_active,
+           next_run_dtm,
+           last_run_dtm,
+           created_dtm,
+           updated_dtm,
+           created_by_user_id
+         FROM execution.fn_get_entity_schedule('ORCHESTRATOR', $1::uuid)`,
+        [req.params.id],
+      );
+      return r.rows[0] ?? null;
+    });
+    return res.json({ success: true, data: row });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.put('/:id/schedule', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const { cronExpression, timezone, environment, isActive } = (req.body ?? {}) as {
+      cronExpression?: string;
+      timezone?: string;
+      environment?: string;
+      isActive?: boolean;
+    };
+    if (!cronExpression?.trim()) {
+      return res.status(400).json({ success: false, userMessage: 'cronExpression is required' });
+    }
+
+    const saved = await db.transaction(async client => {
+      await setSession(client, userId);
+      const envId = await resolveEnvironmentId(client, environment);
+      const r = await client.query(
+        `CALL execution.pr_set_entity_schedule('ORCHESTRATOR', $1::uuid, $2, $3, $4::uuid, $5, $6::uuid, null)`,
+        [req.params.id, cronExpression.trim(), (timezone ?? 'UTC').trim(), envId, isActive ?? true, userId],
+      );
+      const scheduleId = r.rows[0]?.p_schedule_id as string | undefined;
+      const getR = await client.query(
+        `SELECT
+           schedule_id,
+           entity_type_code,
+           entity_id,
+           cron_expression_text,
+           timezone_name_text,
+           env_id,
+           is_schedule_active,
+           next_run_dtm,
+           last_run_dtm,
+           created_dtm,
+           updated_dtm,
+           created_by_user_id
+         FROM execution.fn_get_entity_schedule('ORCHESTRATOR', $1::uuid)`,
+        [req.params.id],
+      );
+      return { scheduleId: scheduleId ?? null, row: getR.rows[0] ?? null };
+    });
+
+    log.info('orchestrators.scheduleSave', 'Orchestrator schedule saved', { orchId: req.params.id, userId });
+    return res.json({ success: true, data: saved.row });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.delete('/:id/schedule', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    await db.transaction(async client => {
+      await setSession(client, userId);
+      await client.query(`CALL execution.pr_delete_entity_schedule('ORCHESTRATOR', $1::uuid)`, [req.params.id]);
+    });
+    log.info('orchestrators.scheduleDelete', 'Orchestrator schedule deleted', { orchId: req.params.id, userId });
+    return res.json({ success: true });
+  } catch (err) {
+    return next(err);
+  }
 });
 
 // ─── Create orchestrator — projectId + folderId both optional ─────────────────
@@ -429,11 +550,11 @@ router.get('/:id/audit-logs', requirePermission('AUDIT_VIEW'), async (req: Reque
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT id, timestamp, user_id, action_code
+        `SELECT id, action_dtm, user_id, action_code
          FROM catalog.fn_get_orchestrator_audit_logs($1::uuid, $2, $3)`,
         [req.params.id, limit, offset]);
       return r.rows.map((row: any) => ({
-        id: String(row.id), timestamp: row.timestamp, user: row.user_id ?? 'system',
+        id: String(row.id), timestamp: row.action_dtm, user: row.user_id ?? 'system',
         action: row.action_code === 'U' ? 'ORCHESTRATOR_SAVED' : row.action_code === 'I' ? 'ORCHESTRATOR_CREATED' : 'ORCHESTRATOR_DELETED',
         summary: `Orchestrator ${row.action_code === 'U' ? 'updated' : row.action_code === 'I' ? 'created' : 'deleted'}`,
       }));
