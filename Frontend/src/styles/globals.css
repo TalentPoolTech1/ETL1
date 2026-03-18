@@ -1,5 +1,8 @@
-@import url('https://rsms.me/inter/inter.css');
-@import url('https://cdn.jsdelivr.net/npm/fira-code@6/distr/fira-code.css');
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/fira-code/400.css';
 
 @tailwind base;
 @tailwind components;
@@ -131,23 +134,23 @@ body {
   color: var(--color-text-primary);
 }
 
-/* Scrollbar */
+/* Scrollbar — dark theme */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-surface-light);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 4px;
+  background: #1e2235;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
+  background: #2d3250;
 }
 /* Accessibility utilities */
 .sr-only {

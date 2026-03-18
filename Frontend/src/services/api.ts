@@ -7,35 +7,47 @@ class APIClient {
     this.client = axios.create({
       baseURL,
       timeout: 30000,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
 
-    // Add request interceptor for auth
     this.client.interceptors.request.use(config => {
       const token = localStorage.getItem('authToken');
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+      if (token) config.headers.Authorization = `Bearer ${token}`;
+      const userId = localStorage.getItem('userId');
+      if (userId) config.headers['X-User-Id'] = userId;
       return config;
     });
 
-    // Add response interceptor for error handling
     this.client.interceptors.response.use(
       response => response,
       (error: AxiosError) => {
         if (error.response?.status === 401) {
-          // Handle auth errors
           localStorage.removeItem('authToken');
-          window.location.href = '/login';
+          localStorage.removeItem('userId');
+          window.history.replaceState({}, '', '/');
+          window.location.reload();
         }
         return Promise.reject(error);
       }
     );
   }
 
-  // Projects
+  // ─── Auth ──────────────────────────────────────────────────────────────────
+
+  login(email: string, password: string) {
+    return this.client.post('/auth/login', { email, password });
+  }
+
+  getMe() {
+    return this.client.get('/auth/me');
+  }
+
+  changePassword(data: { currentPassword: string; newPassword: string }) {
+    return this.client.post('/auth/change-password', data);
+  }
+
+  // ─── Projects ──────────────────────────────────────────────────────────────
+
   getProjects() {
     return this.client.get('/projects');
   }
@@ -44,36 +56,177 @@ class APIClient {
     return this.client.get(`/projects/${id}`);
   }
 
-  createProject(data: any) {
+  createProject(data: { projectDisplayName: string; projectDescText?: string }) {
     return this.client.post('/projects', data);
   }
 
-  updateProject(id: string, data: any) {
+  updateProject(id: string, data: { projectDisplayName?: string; projectDescText?: string }) {
     return this.client.put(`/projects/${id}`, data);
   }
 
-  // Pipelines
+  deleteProject(id: string) {
+    return this.client.delete(`/projects/${id}`);
+  }
+
+  // ─── Pipelines ─────────────────────────────────────────────────────────────
+
+  /** Project root-level pipelines (folder_id IS NULL) */
+  getPipelinesForProject(projectId: string) {
+    return this.client.get(`/projects/${projectId}/pipelines`);
+  }
+
+  /** Global pipelines (project_id IS NULL) */
+  getGlobalPipelines() {
+    return this.client.get('/pipelines/global');
+  }
+
   getPipeline(id: string) {
     return this.client.get(`/pipelines/${id}`);
   }
 
-  savePipeline(id: string, data: any) {
+  createPipeline(data: {
+    projectId?: string | null;
+    pipelineDisplayName: string;
+    pipelineDescText?: string;
+    folderId?: string | null;
+  }) {
+    return this.client.post('/pipelines', data);
+  }
+
+  savePipeline(id: string, data: unknown) {
     return this.client.put(`/pipelines/${id}`, data);
   }
 
-  runPipeline(id: string) {
-    return this.client.post(`/pipelines/${id}/run`);
+  getPipelineParameters(id: string) {
+    return this.client.get(`/pipelines/${id}/parameters`);
   }
 
-  getPreview(nodeId: string, options: any = {}) {
+  savePipelineParameters(id: string, parameters: unknown[]) {
+    return this.client.put(`/pipelines/${id}/parameters`, { parameters });
+  }
+
+  runPipeline(id: string, options?: { environment?: string; technology?: string }) {
+    return this.client.post(`/pipelines/${id}/run`, options ?? {});
+  }
+
+  validatePipeline(id: string) {
+    return this.client.post(`/pipelines/${id}/validate`);
+  }
+
+  generateCode(id: string, options?: { technology?: string }) {
+    return this.client.post(`/pipelines/${id}/generate`, options ?? {});
+  }
+
+  deletePipeline(id: string) {
+    return this.client.delete(`/pipelines/${id}`);
+  }
+
+  getPipelineAuditLogs(id: string, params?: { limit?: number; offset?: number }) {
+    return this.client.get(`/pipelines/${id}/audit-logs`, { params });
+  }
+
+  getPipelinePermissions(id: string) {
+    return this.client.get(`/pipelines/${id}/permissions`);
+  }
+
+  updatePipelinePermissions(id: string, data: unknown) {
+    return this.client.put(`/pipelines/${id}/permissions`, data);
+  }
+
+  getPreview(nodeId: string, options: Record<string, unknown> = {}) {
     return this.client.get(`/nodes/${nodeId}/preview`, { params: options });
   }
 
-  getLineage(nodeId: string) {
-    return this.client.get(`/nodes/${nodeId}/lineage`);
+  getLineage(pipelineId: string) {
+    return this.client.get(`/pipelines/${pipelineId}/lineage`);
   }
 
-  // Metadata
+  // ─── Orchestrators ─────────────────────────────────────────────────────────
+
+  /** Project root-level orchestrators (folder_id IS NULL) */
+  getOrchestratorsForProject(projectId: string) {
+    return this.client.get(`/projects/${projectId}/orchestrators`);
+  }
+
+  /** Global orchestrators (project_id IS NULL) */
+  getGlobalOrchestrators() {
+    return this.client.get('/orchestrators/global');
+  }
+
+  getOrchestrator(id: string) {
+    return this.client.get(`/orchestrators/${id}`);
+  }
+
+  createOrchestrator(data: {
+    projectId?: string | null;
+    orchDisplayName: string;
+    orchDescText?: string;
+    folderId?: string | null;
+  }) {
+    return this.client.post('/orchestrators', data);
+  }
+
+  saveOrchestrator(id: string, data: unknown) {
+    return this.client.put(`/orchestrators/${id}`, data);
+  }
+
+  runOrchestrator(id: string, options?: { environment?: string; concurrency?: string }) {
+    return this.client.post(`/orchestrators/${id}/run`, options ?? {});
+  }
+
+  deleteOrchestrator(id: string) {
+    return this.client.delete(`/orchestrators/${id}`);
+  }
+
+  getOrchestratorAuditLogs(id: string, params?: { limit?: number; offset?: number }) {
+    return this.client.get(`/orchestrators/${id}/audit-logs`, { params });
+  }
+
+  getOrchestratorPermissions(id: string) {
+    return this.client.get(`/orchestrators/${id}/permissions`);
+  }
+
+  updateOrchestratorPermissions(id: string, data: unknown) {
+    return this.client.put(`/orchestrators/${id}/permissions`, data);
+  }
+
+  // ─── Folders ───────────────────────────────────────────────────────────────
+
+  getFoldersByProject(projectId: string) {
+    return this.client.get(`/folders/project/${projectId}`);
+  }
+
+  getFolderChildren(folderId: string) {
+    return this.client.get(`/folders/${folderId}/children`);
+  }
+
+  getFolderPipelines(folderId: string) {
+    return this.client.get(`/folders/${folderId}/pipelines`);
+  }
+
+  getFolderOrchestrators(folderId: string) {
+    return this.client.get(`/folders/${folderId}/orchestrators`);
+  }
+
+  createFolder(data: {
+    projectId: string;
+    parentFolderId?: string | null;
+    folderDisplayName: string;
+    folderTypeCode?: string;
+  }) {
+    return this.client.post('/folders', data);
+  }
+
+  renameFolder(id: string, folderDisplayName: string) {
+    return this.client.put(`/folders/${id}/rename`, { folderDisplayName });
+  }
+
+  deleteFolder(id: string) {
+    return this.client.delete(`/folders/${id}`);
+  }
+
+  // ─── Metadata ──────────────────────────────────────────────────────────────
+
   getMetadataTree() {
     return this.client.get('/metadata/tree');
   }
@@ -86,7 +239,8 @@ class APIClient {
     return this.client.get(`/metadata/${datasetId}/profile`);
   }
 
-  // Connections
+  // ─── Connections ───────────────────────────────────────────────────────────
+
   getConnections() {
     return this.client.get('/connections');
   }
@@ -95,11 +249,15 @@ class APIClient {
     return this.client.get('/connections/types');
   }
 
-  createConnection(data: any) {
+  getConnection(id: string) {
+    return this.client.get(`/connections/${id}`);
+  }
+
+  createConnection(data: unknown) {
     return this.client.post('/connections', data);
   }
 
-  updateConnection(id: string, data: any) {
+  updateConnection(id: string, data: unknown) {
     return this.client.put(`/connections/${id}`, data);
   }
 
@@ -111,7 +269,7 @@ class APIClient {
     return this.client.post(`/connections/${id}/test`);
   }
 
-  testConnection(config: any) {
+  testConnection(config: unknown) {
     return this.client.post('/connections/test', config);
   }
 
@@ -135,7 +293,8 @@ class APIClient {
     return this.client.get(`/connections/${connectorId}/tables/${table}`, { params: { database, schema } });
   }
 
-  // Monitor / Executions
+  // ─── Monitor / Executions ──────────────────────────────────────────────────
+
   getMonitorKpis(params: Record<string, string | null | undefined>) {
     return this.client.get('/executions/kpis', { params });
   }
@@ -178,6 +337,48 @@ class APIClient {
 
   cancelOrchestratorRun(runId: string) {
     return this.client.post(`/executions/orchestrator-runs/${runId}/cancel`);
+  }
+
+  // ─── Governance ─────────────────────────────────────────────────────────
+
+  getUsers() {
+    return this.client.get('/governance/users');
+  }
+
+  getUser(id: string) {
+    return this.client.get(`/governance/users/${id}`);
+  }
+
+  updateUser(id: string, data: unknown) {
+    return this.client.put(`/governance/users/${id}`, data);
+  }
+
+  getRoles() {
+    return this.client.get('/governance/roles');
+  }
+
+  getPermissions() {
+    return this.client.get('/governance/permissions');
+  }
+
+  assignUserRole(userId: string, roleId: string) {
+    return this.client.post(`/governance/users/${userId}/roles`, { roleId });
+  }
+
+  revokeUserRole(userId: string, roleId: string) {
+    return this.client.delete(`/governance/users/${userId}/roles/${roleId}`);
+  }
+
+  getProjectMembers(projectId: string) {
+    return this.client.get(`/governance/projects/${projectId}/members`);
+  }
+
+  addProjectMember(projectId: string, data: { userId: string; roleId: string }) {
+    return this.client.post(`/governance/projects/${projectId}/members`, data);
+  }
+
+  removeProjectMember(projectId: string, userId: string) {
+    return this.client.delete(`/governance/projects/${projectId}/members/${userId}`);
   }
 }
 

@@ -489,16 +489,24 @@ COMMENT ON COLUMN execution.environments.updated_dtm        IS 'Timestamp of the
 -- ============================================================================
 
 CREATE TABLE execution.pipeline_runs (
-    pipeline_run_id         UUID  PRIMARY KEY DEFAULT uuid_generate_v4(),
-    pipeline_id             UUID  NOT NULL REFERENCES catalog.pipelines(pipeline_id),
-    version_id              UUID  NOT NULL REFERENCES catalog.pipeline_versions(version_id),
-    env_id                  UUID  REFERENCES execution.environments(env_id),
-    run_status_code         TEXT  NOT NULL DEFAULT 'PENDING',
-    trigger_type_code       TEXT  NOT NULL DEFAULT 'MANUAL',
+    pipeline_run_id         UUID     PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pipeline_id             UUID     NOT NULL REFERENCES catalog.pipelines(pipeline_id),
+    version_id              UUID     NOT NULL REFERENCES catalog.pipeline_versions(version_id),
+    env_id                  UUID     REFERENCES execution.environments(env_id),
+    run_status_code         TEXT     NOT NULL DEFAULT 'PENDING',
+    trigger_type_code       TEXT     NOT NULL DEFAULT 'MANUAL',
     external_engine_job_id  TEXT,
-    triggered_by_user_id    UUID  REFERENCES etl.users(user_id) ON DELETE SET NULL,
+    triggered_by_user_id    UUID     REFERENCES etl.users(user_id) ON DELETE SET NULL,
     start_dtm               TIMESTAMPTZ,
     end_dtm                 TIMESTAMPTZ,
+    run_duration_ms         INTEGER,
+    rows_processed_num      BIGINT,
+    bytes_read_num          BIGINT,
+    bytes_written_num       BIGINT,
+    error_message_text      TEXT,
+    retry_count_num         INTEGER  NOT NULL DEFAULT 0,
+    sla_status_code         TEXT     NOT NULL DEFAULT 'N_A',
+    spark_ui_url_text       TEXT,
     created_dtm             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -513,31 +521,45 @@ COMMENT ON COLUMN execution.pipeline_runs.external_engine_job_id   IS 'Spark App
 COMMENT ON COLUMN execution.pipeline_runs.triggered_by_user_id     IS 'FK to the user for MANUAL triggers; NULL for automated triggers.';
 COMMENT ON COLUMN execution.pipeline_runs.start_dtm                IS 'Timestamp when the Spark job began executing on the cluster.';
 COMMENT ON COLUMN execution.pipeline_runs.end_dtm                  IS 'Timestamp when the run reached a terminal state.';
+COMMENT ON COLUMN execution.pipeline_runs.run_duration_ms          IS 'Elapsed milliseconds from start_dtm to end_dtm; populated on terminal state transition.';
+COMMENT ON COLUMN execution.pipeline_runs.rows_processed_num       IS 'Total rows processed across all nodes in the run; populated by the execution engine.';
+COMMENT ON COLUMN execution.pipeline_runs.bytes_read_num           IS 'Total bytes read from all source datasets in the run.';
+COMMENT ON COLUMN execution.pipeline_runs.bytes_written_num        IS 'Total bytes written to all target datasets in the run.';
+COMMENT ON COLUMN execution.pipeline_runs.error_message_text       IS 'Human-readable error summary when run_status_code is FAILED or KILLED.';
+COMMENT ON COLUMN execution.pipeline_runs.retry_count_num          IS 'Number of retries attempted for this logical run; zero-based.';
+COMMENT ON COLUMN execution.pipeline_runs.sla_status_code          IS 'SLA compliance result: N_A, MET, BREACHED. Populated at run completion.';
+COMMENT ON COLUMN execution.pipeline_runs.spark_ui_url_text        IS 'URL to the Spark History Server entry for this run; populated when Spark job is submitted.';
 COMMENT ON COLUMN execution.pipeline_runs.created_dtm              IS 'Timestamp when the run record was created in PENDING state.';
 
 
 CREATE TABLE execution.orchestrator_runs (
-    orch_run_id             UUID  PRIMARY KEY DEFAULT uuid_generate_v4(),
-    orch_id                 UUID  NOT NULL REFERENCES catalog.orchestrators(orch_id),
-    env_id                  UUID  REFERENCES execution.environments(env_id),
-    run_status_code         TEXT  NOT NULL DEFAULT 'PENDING',
-    trigger_type_code       TEXT  NOT NULL DEFAULT 'MANUAL',
-    triggered_by_user_id    UUID  REFERENCES etl.users(user_id) ON DELETE SET NULL,
+    orch_run_id             UUID     PRIMARY KEY DEFAULT uuid_generate_v4(),
+    orch_id                 UUID     NOT NULL REFERENCES catalog.orchestrators(orch_id),
+    env_id                  UUID     REFERENCES execution.environments(env_id),
+    run_status_code         TEXT     NOT NULL DEFAULT 'PENDING',
+    trigger_type_code       TEXT     NOT NULL DEFAULT 'MANUAL',
+    triggered_by_user_id    UUID     REFERENCES etl.users(user_id) ON DELETE SET NULL,
     start_dtm               TIMESTAMPTZ,
     end_dtm                 TIMESTAMPTZ,
+    run_duration_ms         INTEGER,
+    error_message_text      TEXT,
+    retry_count_num         INTEGER  NOT NULL DEFAULT 0,
     created_dtm             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE  execution.orchestrator_runs                      IS 'One record per orchestrator DAG execution; parent of all its pipeline runs.';
-COMMENT ON COLUMN execution.orchestrator_runs.orch_run_id          IS 'Surrogate primary key; UUID v4.';
-COMMENT ON COLUMN execution.orchestrator_runs.orch_id              IS 'FK to the orchestrator DAG that was executed.';
-COMMENT ON COLUMN execution.orchestrator_runs.env_id               IS 'FK to the environment where the orchestrator ran.';
-COMMENT ON COLUMN execution.orchestrator_runs.run_status_code      IS 'Aggregate DAG execution state: PENDING, RUNNING, SUCCESS, PARTIAL_FAIL, FAILED, KILLED.';
-COMMENT ON COLUMN execution.orchestrator_runs.trigger_type_code    IS 'How this orchestrator was triggered: MANUAL, SCHEDULE, EVENT, API.';
-COMMENT ON COLUMN execution.orchestrator_runs.triggered_by_user_id IS 'FK to the user for MANUAL triggers; NULL for automated triggers.';
-COMMENT ON COLUMN execution.orchestrator_runs.start_dtm            IS 'Timestamp when the first pipeline node began executing.';
-COMMENT ON COLUMN execution.orchestrator_runs.end_dtm              IS 'Timestamp when the last pipeline node reached a terminal state.';
-COMMENT ON COLUMN execution.orchestrator_runs.created_dtm          IS 'Timestamp when the orchestrator run record was created.';
+COMMENT ON TABLE  execution.orchestrator_runs                          IS 'One record per orchestrator DAG execution; parent of all its pipeline runs.';
+COMMENT ON COLUMN execution.orchestrator_runs.orch_run_id              IS 'Surrogate primary key; UUID v4.';
+COMMENT ON COLUMN execution.orchestrator_runs.orch_id                  IS 'FK to the orchestrator DAG that was executed.';
+COMMENT ON COLUMN execution.orchestrator_runs.env_id                   IS 'FK to the environment where the orchestrator ran.';
+COMMENT ON COLUMN execution.orchestrator_runs.run_status_code          IS 'Aggregate DAG execution state: PENDING, RUNNING, SUCCESS, PARTIAL_FAIL, FAILED, KILLED.';
+COMMENT ON COLUMN execution.orchestrator_runs.trigger_type_code        IS 'How this orchestrator was triggered: MANUAL, SCHEDULE, EVENT, API.';
+COMMENT ON COLUMN execution.orchestrator_runs.triggered_by_user_id     IS 'FK to the user for MANUAL triggers; NULL for automated triggers.';
+COMMENT ON COLUMN execution.orchestrator_runs.start_dtm                IS 'Timestamp when the first pipeline node began executing.';
+COMMENT ON COLUMN execution.orchestrator_runs.end_dtm                  IS 'Timestamp when the last pipeline node reached a terminal state.';
+COMMENT ON COLUMN execution.orchestrator_runs.run_duration_ms          IS 'Elapsed milliseconds from start_dtm to end_dtm; populated on terminal state transition.';
+COMMENT ON COLUMN execution.orchestrator_runs.error_message_text       IS 'Aggregated error summary when the orchestrator run fails or is partially failed.';
+COMMENT ON COLUMN execution.orchestrator_runs.retry_count_num          IS 'Number of retries for this orchestrator run; zero-based.';
+COMMENT ON COLUMN execution.orchestrator_runs.created_dtm              IS 'Timestamp when the orchestrator run record was created.';
 
 
 CREATE TABLE execution.orchestrator_pipeline_run_map (
@@ -563,6 +585,9 @@ CREATE TABLE execution.pipeline_node_runs (
     node_status_code     TEXT  NOT NULL,
     start_dtm            TIMESTAMPTZ,
     end_dtm              TIMESTAMPTZ,
+    rows_in_num          BIGINT,
+    rows_out_num         BIGINT,
+    error_message_text   TEXT,
     node_metrics_json    JSONB,
     UNIQUE (pipeline_run_id, node_id_in_ir_text)
 );
@@ -575,7 +600,10 @@ COMMENT ON COLUMN execution.pipeline_node_runs.node_display_name        IS 'Huma
 COMMENT ON COLUMN execution.pipeline_node_runs.node_status_code         IS 'Node execution state: PENDING, RUNNING, SUCCESS, FAILED, SKIPPED.';
 COMMENT ON COLUMN execution.pipeline_node_runs.start_dtm                IS 'Timestamp when this node began processing.';
 COMMENT ON COLUMN execution.pipeline_node_runs.end_dtm                  IS 'Timestamp when this node reached a terminal state.';
-COMMENT ON COLUMN execution.pipeline_node_runs.node_metrics_json        IS 'JSONB telemetry: input_row_count, output_row_count, bytes_read, bytes_written, spill_mb.';
+COMMENT ON COLUMN execution.pipeline_node_runs.rows_in_num              IS 'Input row count for this node; populated at node completion.';
+COMMENT ON COLUMN execution.pipeline_node_runs.rows_out_num             IS 'Output row count produced by this node; populated at node completion.';
+COMMENT ON COLUMN execution.pipeline_node_runs.error_message_text       IS 'Error message when node_status_code is FAILED.';
+COMMENT ON COLUMN execution.pipeline_node_runs.node_metrics_json        IS 'Extended JSONB telemetry: spill_mb, shuffle_bytes, and other engine-specific metrics.';
 
 
 CREATE TABLE execution.pipeline_run_logs (

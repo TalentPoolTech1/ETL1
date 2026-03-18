@@ -18,7 +18,7 @@ interface UIState {
 
 const initialState: UIState = {
   leftRailVisible: true,
-  leftRailWidth: 280,
+  leftRailWidth: 240,
   rightRailVisible: true,
   rightRailWidth: 360,
   bottomPanelVisible: true,

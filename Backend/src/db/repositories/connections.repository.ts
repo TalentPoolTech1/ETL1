@@ -93,8 +93,8 @@ export class ConnectionsRepository {
 
     /** Set mandatory session variables before any DB operation. */
     private async setSession(client: PoolClient, userId: string, encryptionKey: string): Promise<void> {
-        await client.query(`SET LOCAL app.user_id = $1`, [userId]);
-        await client.query(`SET LOCAL app.encryption_key = $1`, [encryptionKey]);
+        await client.query(`SET LOCAL app.user_id = '${userId.replace(/'/g, "''")}'`);
+        await client.query(`SET LOCAL app.encryption_key = '${encryptionKey.replace(/'/g, "''")}'`);
     }
 
     /**

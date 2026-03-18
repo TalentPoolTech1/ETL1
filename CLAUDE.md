@@ -2,6 +2,7 @@
 
 > **Every AI session must read this file first before making any changes.**
 > Read `database/memory.md` before touching any database file.
+> Read the relevant **service SKILL.md** before touching any service file (see Service SKILL.md Map below).
 
 ---
 
@@ -12,6 +13,13 @@
 - No preamble ("I'll now…"), no summaries ("Here's what I did…"), no postamble.
 - No "thinking out loud." Do the work silently.
 - Token budget is for code, not commentary.
+
+### Surgical Fixes (MANDATORY — CRITICAL)
+- **NEVER rewrite an entire file.** Every change must be a targeted `edit_file` on the exact lines that need changing.
+- Identify the minimal diff: if one line is wrong, change one line.
+- Full rewrites are STRICTLY PROHIBITED unless the user explicitly says "rewrite the whole file".
+- Before any edit, take a backup note of what the old value was, then apply the minimum change.
+- If a fix requires changes in multiple files, do each file as its own surgical `edit_file`, not as bulk rewrites.
 
 ### Local-First File Editing (MANDATORY)
 - **ALL file writes go directly to the user's local filesystem** via the `Filesystem:write_file` or `Filesystem:edit_file` tools.
@@ -25,6 +33,51 @@
 
 ---
 
+## 📖 LIVING DOCUMENTATION RULE (MANDATORY)
+
+Every time any of the following occurs, the relevant service SKILL.md (and this file if
+platform-wide) **must be updated in the same session, before the session ends:**
+
+- A new endpoint, route, or API contract is added or changed
+- A user states a requirement, constraint, or preference about a service
+- A critical architectural decision is made (approved or rejected)
+- A bug with a root-cause finding is fixed
+- A known issue is resolved or a new one is discovered
+- A DB column, table, or function is added/renamed/removed that affects a service
+- Any security, logging, or error-handling rule is established or changed
+
+**Where to write:**
+- Platform-wide decisions → append to the **"Living Decisions"** section at the bottom of this file
+- Service-specific decisions → append to the **"Living Decisions"** section of the relevant `SKILL.md`
+- Database decisions → append to `database/memory.md` **Design Critique Resolutions** or a new dated section
+
+**Format for every Living Decisions entry:**
+```
+- YYYY-MM-DD — [Decision / Instruction / Change / Fix]
+```
+
+---
+
+## Service SKILL.md Map
+
+Before touching any service file, read its SKILL.md first.
+
+| Service | SKILL.md Location | Routes File | Status |
+|---|---|---|---|
+| Connections | `Backend/src/connections/SKILL.md` | `api/routes/connections.routes.ts` | ✅ Implemented |
+| Projects | `Backend/src/projects/SKILL.md` | `api/routes/projects.routes.ts` | ✅ Implemented |
+| Pipelines | `Backend/src/pipelines/SKILL.md` | `api/routes/pipeline.routes.ts` | ⚠️ Dual-implementation split — read SKILL.md first |
+| Executions | `Backend/src/executions/SKILL.md` | `api/routes/executions.routes.ts` | ⚠️ SQL injection risk in KPI endpoint |
+| Orchestrators | `Backend/src/orchestrators/SKILL.md` | `api/routes/orchestrators.routes.ts` | ⚠️ Missing list endpoint + DAG map rebuild |
+| Users & Auth | `Backend/src/users/SKILL.md` | `api/routes/auth.routes.ts`, `user.routes.ts` | ✅ Implemented |
+| Code Generation | `Backend/src/codegen/SKILL.md` | `api/routes/codegen.routes.ts` | ✅ Implemented |
+| Governance | `Backend/src/governance/SKILL.md` | *(not yet built)* | ❌ CRITICAL — No API layer |
+| Metadata & Datasets | `Backend/src/metadata/SKILL.md` | `api/routes/node-template.routes.ts` | ❌ Dataset API missing |
+| Shared Infra | `Backend/src/shared/SKILL.md` | Middleware, Logging, Errors | ✅ Implemented |
+| Database | `database/SKILL.md` | SQL schema + logic files | ✅ Implemented |
+
+---
+
 ## Project Overview
 
 **ETL1** is a Cloud-Neutral, No-Code Spark ETL Platform.  
@@ -33,16 +86,45 @@ The backend generates optimised Spark code and submits it to any configured clus
 
 ```
 ETL1/
-├── Frontend/          # UI (React/Next.js — see Frontend/ for conventions)
+├── Frontend/          # UI (React + Vite + Tailwind)
 ├── Backend/           # Node.js API + Spark code generation
 │   └── src/
-│       ├── api/routes/
-│       └── codegen/
-├── database/          # PostgreSQL — THE GOLDEN SOURCE (read memory.md first)
+│       ├── api/
+│       │   ├── routes/        # Express route files (primary implementation)
+│       │   ├── controllers/   # Request handlers
+│       │   ├── services/      # Business logic (connections, projects)
+│       │   └── middleware/    # auth, correlation, RBAC, request-logger, userId
+│       ├── codegen/           # Spark code generation engines
+│       │   └── SKILL.md       # ← Read before touching codegen
+│       ├── connections/
+│       │   └── SKILL.md       # ← Read before touching connections service
+│       ├── projects/
+│       │   └── SKILL.md       # ← Read before touching projects service
+│       ├── pipelines/
+│       │   └── SKILL.md       # ← Read before touching pipelines service
+│       ├── executions/
+│       │   └── SKILL.md       # ← Read before touching executions service
+│       ├── orchestrators/
+│       │   └── SKILL.md       # ← Read before touching orchestrators service
+│       ├── users/
+│       │   └── SKILL.md       # ← Read before touching users/auth service
+│       ├── governance/
+│       │   └── SKILL.md       # ← Read before touching governance service
+│       ├── metadata/
+│       │   └── SKILL.md       # ← Read before touching metadata service
+│       ├── connectors/        # Connector plugin architecture
+│       ├── db/                # DB connection pool + repositories
+│       └── shared/
+│           ├── SKILL.md       # ← Read before touching logging/errors/security
+│           ├── logging/       # LoggerFactory, Winston, CorrelationContext
+│           ├── errors/        # AppError, ErrorClass, catalog/*.errors.ts
+│           └── security/      # encryption.utils.ts
+├── database/          # PostgreSQL — THE GOLDEN SOURCE
 │   ├── memory.md      # ← READ THIS BEFORE ANY DB CHANGE
-│   ├── schema/    # Table DDL files
-│   ├── audit/     # Trigger function + attachments
-│   ├── logic/     # Functions and procedures
+│   ├── SKILL.md       # ← Read before making any DB schema change
+│   ├── schema/        # Table DDL files
+│   ├── audit/         # Trigger function + attachments
+│   ├── logic/         # Functions and procedures
 │   └── master_install.sql
 └── Docs/              # PRD and architecture documents
 ```
@@ -170,8 +252,88 @@ These must all be answerable by the DB without parsing JSON blobs:
 
 ---
 
+## Backend Conventions — Additional Rules
+
+- **TypeScript strict mode.** No `any` except where absolutely unavoidable (document it).
+- **No direct `db.query()` in route handlers.** Route handlers call services; services call repositories.
+  Exception: the inline route handlers in `pipeline.routes.ts`, `executions.routes.ts`,
+  `orchestrators.routes.ts`, `projects.routes.ts` are existing tech debt to be migrated, not a pattern to follow.
+- **Session variables before every DB transaction:**
+  ```typescript
+  await client.query(`SET LOCAL app.user_id = '${userId}'`);
+  await client.query(`SET LOCAL app.encryption_key = '${encKey}'`);
+  ```
+- **Physical deletes only.** No `UPDATE ... SET is_deleted = true`. Law 4.
+- **New service module checklist:**
+  1. Create `Backend/src/<service>/SKILL.md`
+  2. Create `<service>.routes.ts` → `<service>.controller.ts` → `<service>.service.ts` → `<service>.repository.ts`
+  3. Add `const log = LoggerFactory.get('<service>')` at module scope
+  4. Add `<domain>.errors.ts` to `shared/errors/catalog/`
+  5. Register route in `api/server.ts`
+  6. Update **Service SKILL.md Map** table above
+
+---
+
 ## Documentation
 
 - Full PRD + TSD: `Docs/Cloud_Neutral_No_Code_Spark_ETL_Platform_PRD_TSD.md`
 - Architecture: `Docs/NoCode_ETL_Detailed_Architecture_and_Requirements.md`
 - Database rules: `database/memory.md`
+- Database schema skill: `database/SKILL.md`
+- Per-service skills: `Backend/src/<service>/SKILL.md` (see Service SKILL.md Map above)
+
+---
+
+## Living Decisions — Platform-Wide
+
+- `2026-03-18` — **Backend Wiring + Stub Elimination Session:**
+  1. `governance.routes.ts` — NEW. Full CRUD for users, roles, permissions, user-role assignments, project member management. Registered in `server.ts` at `/api/governance`.
+  2. SQL injection fix in `executions.routes.ts` KPI endpoint — `projectId` was interpolated into SQL string; replaced with parameterised `$3::uuid`.
+  3. `api.ts` — Added governance methods: `getUsers`, `getUser`, `getRoles`, `getPermissions`, `assignUserRole`, `revokeUserRole`, `getProjectMembers`, `addProjectMember`, `removeProjectMember`.
+  4. `LeftSidebar.tsx` — `UsersSection` and `RolesSection` now call real API on expand (lazy-load). Refresh button wired. Stubs removed.
+  5. `OrchestratorExecutionHistorySubTab.tsx` — Replaced MOCK_RUNS with real `api.getOrchestratorRuns()` call. Dark theme, pagination, real status badges, opens execution detail tab on double-click. `orchId` prop passed from `OrchestratorWorkspace`.
+
+- `2026-03-18` — **v2 Execution & Scheduling Session:** Implemented nocode_etl_ui_requirements_v2.md.
+  1. ExecutionHistorySubTab rewritten — full v2 column set (Exec ID, Status, Start, End, Duration, Run By, Trigger, Rows In/Out/Failed, Data Vol, Env, Version, Retries), multi-field filter panel (date range, status, trigger type, user, duration, rows), CSV export, dark theme.
+  2. ExecutionDetailTab rewritten — dark theme, 5 sub-tabs (Summary, Steps, Logs, Code, Metrics), LogViewer with search + level filter + copy + download, Code tab with syntax highlight + copy + download.
+  3. PipelineCodeSubTab — NEW. Generate PySpark/Scala/SQL via API, syntax highlighted viewer, copy + download.
+  4. PipelineMetricsSubTab — NEW. Success rate, avg/min/max duration, status breakdown bar, duration trend chart. Loads from last 30 runs API.
+  5. PipelineAlertsSubTab — NEW. Alert rule CRUD with event types (EXECUTION_FAILED, SLA_BREACHED, etc.) and channels (email, Slack, webhook, PagerDuty), silence window, enable/disable toggle.
+  6. OrchestratorScheduleSubTab rewritten — 4 schedule types (Cron, Interval, Event, Manual), Name field, retry policy (fixed/exponential), failure handling (stop/continue/rollback/skip), blackout windows, holiday calendar.
+  7. PipelineWorkspace expanded to 12 sub-tabs: Designer, Properties, Parameters, Validation, Executions, Metrics, Code, Alerts, History, Dependencies, Permissions, Activity.
+  8. PipelineSubTab type extended with metrics, code, alerts, logs.
+
+- `2026-03-18` — **UI Architecture Session:** Implemented full tab-based NoCode ETL workspace per nocode_etl_ui_requirements.md.
+  Key decisions:
+  1. All objects open as typed tabs — project, folder, connection, metadata, user, role added as tab types to `Tab` interface.
+  2. `TabBar` rewritten with type icons, dirty italic+asterisk rendering, right-click context menu (close/close-others/close-all/pin/restore-last-closed), horizontal scroll on wheel.
+  3. `tabsSlice` extended with: closeOthers, closeAll, pinTab, unpinTab, restoreLastClosed, updateTab.
+  4. `Tab` interface extended with `hierarchyPath` (full breadcrumb string) and `isPinned`.
+  5. New shared components: `ObjectHeader` (hierarchy breadcrumb, status badges, dirty indicators), `ObjectHistoryGrid` (sortable/filterable audit grid), `ObjectPermissionsGrid` (inherited vs direct permissions).
+  6. New workspaces created: ProjectWorkspace (6 tabs), FolderWorkspace (5 tabs), ConnectionWorkspace (7 tabs), MetadataBrowserWorkspace (6 tabs), UserWorkspace (6 tabs), RoleWorkspace (6 tabs).
+  7. PipelineWorkspace expanded from 7 to 9 sub-tabs per spec: added Properties, Parameters, Validation, Dependencies, Activity.
+  8. OrchestratorWorkspace expanded from 6 to 9 sub-tabs per spec: added Properties, Schedule, Parameters, History, Dependencies, Activity.
+  9. `LeftSidebar` updated: project nodes now open Project tab on click, connections open ConnectionWorkspace, Users/Roles sections added.
+  10. `Header` rewritten with context-aware toolbar (Save, SaveAll, Undo, Redo, Validate, Run, Publish), environment selector dropdown, dirty-count badge.
+  11. `ResizableAppShell` — right and bottom panels only render when content is passed AND `*Visible` flag is true.
+  12. All new components use dark theme (`bg-[#0d0f1a]`, `border-slate-800`) consistent with existing dark design.
+  13. HierarchyPath format: `Root → Parent → ... → ObjectName` using `→` separator.
+
+> Append platform-wide decisions, user instructions, and critical rulings here.
+> Service-specific decisions go in the relevant service SKILL.md instead.
+
+- `2026-03-17` — **User Instruction:** All file writes go directly to the user's local
+  filesystem via `Filesystem:write_file` / `Filesystem:edit_file`. Never write to Claude's
+  container (`/home/claude`, `/mnt/...`). Never use `bash_tool` or `create_file` for project files.
+- `2026-03-17` — **Service SKILL.md files created** for all 10 service domains.
+  Each SKILL.md contains: purpose, file map, API surface, DB tables, business rules,
+  known issues/tech debt, and a living decisions log.
+- `2026-03-17` — **Living Documentation Rule established:** Every session that makes a
+  change MUST append to the relevant SKILL.md Living Decisions section before ending.
+- `2026-03-17` — **Critical Tech Debt Identified:**
+  1. `pipeline.repository.ts` uses unqualified `pipelines` table with banned columns — must be eliminated.
+  2. Governance service has NO API layer — `GovernanceView.tsx` renders nothing real.
+  3. Metadata/Dataset API is missing — `MetadataTree.tsx` uses mock data.
+  4. KPI endpoint in `executions.routes.ts` has SQL injection risk (string interpolation for projectFilter).
+  5. RBAC is frontend-only — `rbac.middleware.ts` is not applied to any route.
+  6. `GET /api/orchestrators` (list) endpoint does not exist.

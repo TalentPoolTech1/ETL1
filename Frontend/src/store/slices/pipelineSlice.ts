@@ -34,6 +34,13 @@ const pipelineSlice = createSlice({
       );
       state.unsavedChanges = false;
     },
+
+    updateActivePipeline: (state, action: PayloadAction<Partial<Pipeline>>) => {
+      if (state.activePipeline) {
+        state.activePipeline = { ...state.activePipeline, ...action.payload };
+        state.unsavedChanges = true;
+      }
+    },
     
     addNode: (state, action: PayloadAction<Node>) => {
       state.nodes[action.payload.id] = action.payload;
@@ -96,6 +103,7 @@ const pipelineSlice = createSlice({
 
 export const {
   setPipeline,
+  updateActivePipeline,
   addNode,
   updateNode,
   deleteNode,

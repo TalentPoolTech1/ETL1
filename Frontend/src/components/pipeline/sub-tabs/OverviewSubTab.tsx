@@ -1,41 +1,82 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { updateNode } from '@/store/slices/pipelineSlice';
+import { openTab } from '@/store/slices/tabsSlice';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
-import { Input } from '@/components/common/Input';
+import api from '@/services/api';
+import type { PipelineRunSummary, RunStatus } from '@/types';
 
-const RUN_STATUS_COLOR: Record<string, string> = {
-  success: 'bg-success-100 text-success-800',
-  failed:  'bg-danger-100  text-danger-800',
-  running: 'bg-primary-100 text-primary-800',
-  pending: 'bg-neutral-100 text-neutral-600',
+const STATUS_COLOR: Record<RunStatus, string> = {
+  PENDING:              'bg-neutral-100 text-neutral-600',
+  QUEUED:               'bg-blue-100 text-blue-700',
+  RUNNING:              'bg-blue-100 text-blue-800',
+  SUCCESS:              'bg-green-100 text-green-700',
+  FAILED:               'bg-red-100 text-red-700',
+  CANCELLED:            'bg-orange-100 text-orange-700',
+  SKIPPED:              'bg-neutral-100 text-neutral-500',
+  RETRYING:             'bg-yellow-100 text-yellow-700',
+  TIMED_OUT:            'bg-red-200 text-red-900',
+  PARTIALLY_COMPLETED:  'bg-amber-100 text-amber-700',
 };
 
-// Placeholder recent-runs row
-interface RunRow { id: string; start: string; duration: string; status: string; triggeredBy: string; }
+function fmtDuration(ms: number | null): string {
+  if (ms === null) return '—';
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+}
 
-const MOCK_RUNS: RunRow[] = [
-  { id: 'run-001', start: '2026-03-02 14:22', duration: '3m 12s', status: 'success',  triggeredBy: 'schedule' },
-  { id: 'run-002', start: '2026-03-02 10:05', duration: '2m 58s', status: 'failed',   triggeredBy: 'manual'   },
-  { id: 'run-003', start: '2026-03-01 22:00', duration: '3m 04s', status: 'success',  triggeredBy: 'schedule' },
-  { id: 'run-004', start: '2026-03-01 18:30', duration: '1m 44s', status: 'success',  triggeredBy: 'api'      },
-  { id: 'run-005', start: '2026-03-01 10:00', duration: '—',      status: 'pending',  triggeredBy: 'manual'   },
-];
+function fmtDatetime(iso: string | null): string {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString();
+}
 
-export function OverviewSubTab() {
+interface Props { pipelineId: string; }
+
+export function OverviewSubTab({ pipelineId }: Props) {
+  const dispatch = useAppDispatch();
   const pipeline = useAppSelector(s => s.pipeline.activePipeline);
-  const nodes    = useAppSelector(s => s.pipeline.nodes);
+  const nodes = useAppSelector(s => s.pipeline.nodes);
+
+  const [runs, setRuns] = useState<PipelineRunSummary[]>([]);
+  const [loadingRuns, setLoadingRuns] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [draftName, setDraftName] = useState(pipeline?.name ?? '');
-  const [draftDesc, setDraftDesc] = useState(pipeline?.description ?? '');
+  const [draftName, setDraftName] = useState('');
+  const [draftDesc, setDraftDesc] = useState('');
+
+  const loadRuns = useCallback(async () => {
+    if (!pipelineId) return;
+    setLoadingRuns(true);
+    try {
+      const res = await api.getPipelineRuns({ pipelineId, pageSize: 5 });
+      const data = res.data.data ?? res.data;
+      setRuns(data.items ?? data ?? []);
+    } catch {
+      /* silently degrade — pipeline may have no runs yet */
+    } finally {
+      setLoadingRuns(false);
+    }
+  }, [pipelineId]);
+
+  useEffect(() => { loadRuns(); }, [loadRuns]);
+
+  const handleRun = async () => {
+    if (!pipelineId) return;
+    try {
+      await api.runPipeline(pipelineId);
+      setTimeout(loadRuns, 1500);
+    } catch (err: unknown) {
+      alert((err as any)?.response?.data?.userMessage ?? 'Failed to trigger run');
+    }
+  };
 
   if (!pipeline) {
-    return <div className="flex-1 flex items-center justify-center text-neutral-400 text-sm">No pipeline loaded.</div>;
+    return <div className="flex-1 flex items-center justify-center text-neutral-400 text-sm">Loading pipeline…</div>;
   }
 
-  const successRate = Math.round((MOCK_RUNS.filter(r => r.status === 'success').length / MOCK_RUNS.length) * 100);
-  const nodeCount   = Object.keys(nodes).length;
+  const nodeCount = Object.keys(nodes).length;
+  const successCount = runs.filter(r => r.runStatus === 'SUCCESS').length;
+  const successRate = runs.length ? Math.round((successCount / runs.length) * 100) : '—';
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -44,19 +85,10 @@ export function OverviewSubTab() {
         <div className="flex-1 min-w-0">
           {editing ? (
             <div className="space-y-2">
-              <Input
-                value={draftName}
-                onChange={e => setDraftName(e.target.value)}
-                placeholder="Pipeline name"
-                className="text-xl font-semibold"
-              />
-              <textarea
-                value={draftDesc}
-                onChange={e => setDraftDesc(e.target.value)}
-                placeholder="Description"
-                rows={2}
-                className="w-full px-3 py-2 border border-neutral-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
+              <input value={draftName} onChange={e => setDraftName(e.target.value)}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-md text-xl font-semibold focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              <textarea value={draftDesc} onChange={e => setDraftDesc(e.target.value)}
+                rows={2} className="w-full px-3 py-2 border border-neutral-300 rounded-md text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500" />
               <div className="flex gap-2">
                 <Button size="sm" onClick={() => setEditing(false)}>Save</Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
@@ -74,10 +106,9 @@ export function OverviewSubTab() {
           )}
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <Button size="sm">▶ Run</Button>
+          <Button size="sm" onClick={handleRun}>▶ Run</Button>
           <Button size="sm" variant="ghost">Schedule</Button>
           <Button size="sm" variant="ghost">Clone</Button>
-          <Button size="sm" variant="ghost">Export</Button>
         </div>
       </div>
 
@@ -86,7 +117,7 @@ export function OverviewSubTab() {
         {[
           { label: 'Nodes',        value: nodeCount },
           { label: 'Success rate', value: `${successRate}%` },
-          { label: 'Last run',     value: MOCK_RUNS[0]?.start ?? '—' },
+          { label: 'Last run',     value: runs[0] ? fmtDatetime(runs[0].startDtm) : '—' },
           { label: 'Version',      value: `v${pipeline.version}` },
         ].map(stat => (
           <div key={stat.label} className="bg-neutral-50 border border-neutral-200 rounded-lg p-4">
@@ -109,17 +140,32 @@ export function OverviewSubTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {MOCK_RUNS.map(run => (
-                <tr key={run.id} className="hover:bg-neutral-50 transition-colors">
-                  <td className="px-4 py-2 font-mono text-xs text-neutral-600">{run.id}</td>
-                  <td className="px-4 py-2 text-neutral-600">{run.start}</td>
-                  <td className="px-4 py-2 text-neutral-600">{run.duration}</td>
+              {loadingRuns && (
+                <tr><td colSpan={5} className="px-4 py-4 text-center text-neutral-400 text-xs">Loading…</td></tr>
+              )}
+              {!loadingRuns && runs.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-neutral-400 text-sm">No runs yet.</td></tr>
+              )}
+              {runs.map(run => (
+                <tr key={run.pipelineRunId}
+                  className="hover:bg-neutral-50 cursor-pointer"
+                  onClick={() => dispatch(openTab({
+                    id: `execution-${run.pipelineRunId}`,
+                    type: 'execution',
+                    objectId: run.pipelineRunId,
+                    objectName: `Run: ${run.pipelineName}`,
+                    unsaved: false, isDirty: false, executionKind: 'pipeline',
+                  }))}
+                >
+                  <td className="px-4 py-2 font-mono text-xs text-primary-600">{run.pipelineRunId.slice(0, 8)}…</td>
+                  <td className="px-4 py-2 text-neutral-600">{fmtDatetime(run.startDtm)}</td>
+                  <td className="px-4 py-2 text-neutral-600">{fmtDuration(run.durationMs)}</td>
                   <td className="px-4 py-2">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${RUN_STATUS_COLOR[run.status] ?? ''}`}>
-                      {run.status}
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLOR[run.runStatus]}`}>
+                      {run.runStatus}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-neutral-500 capitalize">{run.triggeredBy}</td>
+                  <td className="px-4 py-2 text-neutral-500 capitalize">{run.triggerType}</td>
                 </tr>
               ))}
             </tbody>

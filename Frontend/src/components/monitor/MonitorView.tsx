@@ -13,6 +13,7 @@ import {
   PipelineRunSummary, OrchestratorRunSummary, MonitorKpis,
 } from '@/types';
 import api from '@/services/api';
+import { clearSelection as _clearSel } from '@/store/slices/monitorSlice';
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
@@ -503,9 +504,27 @@ export function MonitorView() {
       {selectedRunIds.length > 0 && (
         <div className="mx-4 mb-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md flex items-center gap-3 text-xs">
           <span className="font-medium text-blue-700">{selectedRunIds.length} selected</span>
-          <button className="text-blue-600 hover:underline">Retry</button>
-          <button className="text-blue-600 hover:underline">Cancel</button>
-          <button className="text-blue-600 hover:underline">Export CSV</button>
+          <button className="text-blue-600 hover:underline" onClick={async () => {
+            await Promise.allSettled(selectedRunIds.map(id => api.retryPipelineRun(id)));
+            dispatch(clearSelection());
+            loadData();
+          }}>Retry</button>
+          <button className="text-blue-600 hover:underline" onClick={async () => {
+            await Promise.allSettled(selectedRunIds.map(id => api.cancelPipelineRun(id)));
+            dispatch(clearSelection());
+            loadData();
+          }}>Cancel</button>
+          <button className="text-blue-600 hover:underline" onClick={() => {
+            const csv = ['Run ID,Name,Status,Trigger,Started,Duration',
+              ...pipelineRuns.filter(r => selectedRunIds.includes(r.pipelineRunId)).map(r =>
+                [r.pipelineRunId, r.pipelineName, r.runStatus, r.triggerType, r.startDtm ?? '', r.durationMs ?? ''].join(',')
+              )
+            ].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = 'runs.csv'; a.click();
+            URL.revokeObjectURL(url);
+          }}>Export CSV</button>
           <button className="text-neutral-500 hover:underline ml-auto" onClick={() => dispatch(clearSelection())}>Clear</button>
         </div>
       )}

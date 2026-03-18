@@ -38,6 +38,7 @@ export function ResizeHandle({
     const handleMouseMove = (e: MouseEvent) => {
       const currentPos = position === 'bottom' ? e.clientY : e.clientX;
       const delta = currentPos - startPosRef.current;
+      startPosRef.current = currentPos; // track incrementally so delta stays small
       onResize(delta);
     };
 
@@ -54,25 +55,22 @@ export function ResizeHandle({
     };
   }, [isDragging, position, onResize]);
 
-  if (position === 'left') {
+  if (position === 'left' || position === 'right') {
     return (
       <div
         onMouseDown={handleMouseDown}
-        className={`w-1 bg-neutral-200 hover:bg-primary-400 cursor-col-resize transition-colors ${isDragging ? 'bg-primary-400' : ''}`}
-      />
-    );
-  } else if (position === 'right') {
-    return (
-      <div
-        onMouseDown={handleMouseDown}
-        className={`w-1 bg-neutral-200 hover:bg-primary-400 cursor-col-resize transition-colors ${isDragging ? 'bg-primary-400' : ''}`}
+        className={`w-px cursor-col-resize transition-colors flex-shrink-0 ${
+          isDragging ? 'bg-blue-500' : 'bg-slate-800 hover:bg-blue-600'
+        }`}
       />
     );
   } else {
     return (
       <div
         onMouseDown={handleMouseDown}
-        className={`h-1 bg-neutral-200 hover:bg-primary-400 cursor-row-resize transition-colors ${isDragging ? 'bg-primary-400' : ''}`}
+        className={`h-px cursor-row-resize transition-colors flex-shrink-0 ${
+          isDragging ? 'bg-blue-500' : 'bg-slate-800 hover:bg-blue-600'
+        }`}
       />
     );
   }
@@ -106,7 +104,7 @@ export function ResizableAppShell({
   const handleLeftResize = useCallback(
     (delta: number) => {
       const newWidth = leftRailWidth + delta;
-      if (newWidth >= 200 && newWidth <= 500) {
+      if (newWidth >= 160 && newWidth <= 520) {
         dispatch(setLeftRailWidth(newWidth));
       }
     },
@@ -135,15 +133,15 @@ export function ResizableAppShell({
 
   if (focusMode) {
     return (
-      <div className="flex flex-col h-screen bg-white">
-        <div className="h-14 border-b border-neutral-200">{header}</div>
+      <div className="flex flex-col h-screen bg-[#0d0f1a]">
+        <div className="flex-shrink-0">{header}</div>
         <div className="flex-1 overflow-hidden">{mainArea}</div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col h-screen bg-[#0d0f1a]">
       {/* Header */}
       <div className="flex-shrink-0">{header}</div>
 
@@ -152,14 +150,14 @@ export function ResizableAppShell({
         {/* Left Sidebar */}
         {leftRailVisible && (
           <>
-            <div style={{ width: `${leftRailWidth}px` }} className="flex flex-col border-r border-neutral-200 overflow-hidden">
+            <div style={{ width: `${leftRailWidth}px` }} className="flex flex-col overflow-hidden flex-shrink-0">
               {leftSidebar}
             </div>
             <ResizeHandle
               position="left"
               onResize={handleLeftResize}
-              minSize={200}
-              maxSize={500}
+              minSize={180}
+              maxSize={480}
             />
           </>
         )}
@@ -168,7 +166,7 @@ export function ResizableAppShell({
         <div className="flex-1 flex flex-col overflow-hidden">{mainArea}</div>
 
         {/* Right Sidebar */}
-        {rightRailVisible && (
+        {rightRailVisible && rightSidebar && (
           <>
             <ResizeHandle
               position="right"
@@ -176,7 +174,7 @@ export function ResizableAppShell({
               minSize={300}
               maxSize={600}
             />
-            <div style={{ width: `${rightRailWidth}px` }} className="flex flex-col border-l border-neutral-200 overflow-hidden">
+            <div style={{ width: `${rightRailWidth}px` }} className="flex flex-col border-l border-slate-800 overflow-hidden">
               {rightSidebar}
             </div>
           </>
@@ -184,7 +182,7 @@ export function ResizableAppShell({
       </div>
 
       {/* Bottom Panel - Resizable */}
-      {bottomPanelVisible && (
+      {bottomPanelVisible && bottomPanel && (
         <>
           <ResizeHandle
             position="bottom"
@@ -192,22 +190,20 @@ export function ResizableAppShell({
             minSize={150}
             maxSize={700}
           />
-          <div style={{ height: `${bottomPanelHeight}px` }} className="flex flex-col border-t border-neutral-200 overflow-hidden">
+          <div style={{ height: `${bottomPanelHeight}px` }} className="flex flex-col border-t border-slate-800 overflow-hidden">
             {bottomPanel}
           </div>
         </>
       )}
 
       {/* Status bar */}
-      <div className="h-5 bg-primary-600 flex items-center px-3 gap-4 text-xs text-primary-100 flex-shrink-0">
-        <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full inline-block" />
-          <span>Connected</span>
-        </div>
-        <span className="text-primary-300">|</span>
+      <div className="h-5 bg-[#070910] border-t border-slate-800/60 flex items-center px-3 gap-3 text-[11px] text-slate-600 flex-shrink-0">
+        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block" />
+        <span className="text-slate-500">Connected</span>
+        <span className="text-slate-800">·</span>
         <span>ETL1 Platform v1.0</span>
         <div className="flex-1" />
-        <span className="text-primary-300">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+        <span>{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
       </div>
     </div>
   );

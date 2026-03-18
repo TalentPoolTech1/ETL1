@@ -1,0 +1,26 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+/**
+ * ObjectPermissionsGrid — reusable permissions management grid.
+ * Shows user/role grants, inheritance source, and effective access.
+ */
+import React, { useState } from 'react';
+import { Plus, Trash2, Shield, Users, UserCheck } from 'lucide-react';
+const ACCESS_COLORS = {
+    admin: 'bg-red-900/40 text-red-300 border-red-700',
+    editor: 'bg-blue-900/40 text-blue-300 border-blue-700',
+    viewer: 'bg-slate-700 text-slate-300 border-slate-600',
+    execute: 'bg-purple-900/40 text-purple-300 border-purple-700',
+    owner: 'bg-amber-900/40 text-amber-300 border-amber-700',
+};
+function PrincipalIcon({ type }) {
+    const cls = 'w-3.5 h-3.5';
+    if (type === 'role')
+        return _jsx(Shield, { className: `${cls} text-orange-400` });
+    if (type === 'group')
+        return _jsx(Users, { className: `${cls} text-violet-400` });
+    return _jsx(UserCheck, { className: `${cls} text-sky-400` });
+}
+export function ObjectPermissionsGrid({ rows, loading, readOnly, onAdd, onRemove }) {
+    const [expandedId, setExpandedId] = useState(null);
+    return (_jsxs("div", { className: "flex flex-col h-full overflow-hidden", children: [_jsxs("div", { className: "flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 flex-shrink-0", children: [_jsx("span", { className: "text-[12px] text-slate-400 font-medium", children: "Access Control" }), _jsxs("span", { className: "text-[11px] text-slate-600 ml-1", children: ["\u00B7 ", rows.length, " entries"] }), !readOnly && onAdd && (_jsxs("button", { onClick: onAdd, className: "ml-auto flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors", children: [_jsx(Plus, { className: "w-3 h-3" }), " Add Permission"] }))] }), _jsx("div", { className: "flex-1 overflow-auto min-h-0", children: loading ? (_jsx("div", { className: "flex items-center justify-center h-32 text-sm text-slate-500", children: "Loading permissions\u2026" })) : rows.length === 0 ? (_jsx("div", { className: "flex items-center justify-center h-32 text-sm text-slate-600", children: "No permissions configured" })) : (_jsxs("table", { className: "w-full border-collapse text-[12px]", children: [_jsx("thead", { className: "sticky top-0 bg-[#0a0c15] z-10", children: _jsxs("tr", { className: "text-left text-[11px] text-slate-500 border-b border-slate-800", children: [_jsx("th", { className: "px-3 py-2 font-medium", children: "Principal" }), _jsx("th", { className: "px-3 py-2 font-medium", children: "Type" }), _jsx("th", { className: "px-3 py-2 font-medium", children: "Access Level" }), _jsx("th", { className: "px-3 py-2 font-medium", children: "Source" }), _jsx("th", { className: "px-3 py-2 font-medium", children: "Granted By" }), _jsx("th", { className: "px-3 py-2 font-medium", children: "Granted On" }), !readOnly && _jsx("th", { className: "px-3 py-2 font-medium w-8" })] }) }), _jsx("tbody", { children: rows.map(row => (_jsxs(React.Fragment, { children: [_jsxs("tr", { className: "border-b border-slate-800/50 hover:bg-slate-800/30 cursor-pointer", onClick: () => setExpandedId(expandedId === row.id ? null : row.id), children: [_jsx("td", { className: "px-3 py-1.5", children: _jsxs("div", { className: "flex items-center gap-1.5", children: [_jsx(PrincipalIcon, { type: row.principalType }), _jsx("span", { className: "text-slate-200", children: row.principalName })] }) }), _jsx("td", { className: "px-3 py-1.5 text-slate-500 capitalize", children: row.principalType }), _jsx("td", { className: "px-3 py-1.5", children: _jsx("span", { className: `px-2 py-0.5 rounded border text-[11px] font-medium ${ACCESS_COLORS[row.accessLevel.toLowerCase()] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`, children: row.accessLevel }) }), _jsx("td", { className: "px-3 py-1.5", children: row.isInherited ? (_jsxs("span", { className: "text-slate-500 italic text-[11px]", title: row.inheritedFrom, children: ["Inherited ", row.inheritedFrom ? `from ${row.inheritedFrom}` : ''] })) : (_jsx("span", { className: "text-slate-300 text-[11px]", children: "Direct" })) }), _jsx("td", { className: "px-3 py-1.5 text-slate-400", children: row.grantedBy }), _jsx("td", { className: "px-3 py-1.5 text-slate-500", children: row.grantedOn }), !readOnly && (_jsx("td", { className: "px-3 py-1.5", children: !row.isInherited && onRemove && (_jsx("button", { onClick: e => { e.stopPropagation(); onRemove(row.id); }, className: "w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:text-red-400 hover:bg-red-900/30 transition-colors", children: _jsx(Trash2, { className: "w-3 h-3" }) })) }))] }), expandedId === row.id && row.permissions && row.permissions.length > 0 && (_jsx("tr", { className: "bg-slate-900/40", children: _jsxs("td", { colSpan: readOnly ? 6 : 7, className: "px-6 py-2", children: [_jsx("div", { className: "text-[11px] text-slate-500 mb-1 font-medium", children: "Effective Permissions:" }), _jsx("div", { className: "flex flex-wrap gap-1", children: row.permissions.map(p => (_jsx("span", { className: "px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-300", children: p }, p))) })] }) }))] }, row.id))) })] })) })] }));
+}

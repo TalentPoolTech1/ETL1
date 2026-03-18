@@ -144,6 +144,17 @@ export const usrErrors = {
     });
   },
 
+  unauthorized(internalDetail: string, opts?: { cause?: Error }): AppError {
+    return new AppError({
+      code:            'USR-015',
+      errorClass:      ErrorClass.AUTHENTICATION,
+      userMessage:     'Authentication required. Please provide a valid token.',
+      internalMessage: internalDetail,
+      action:          'users.authenticate',
+      cause:           opts?.cause as Error | undefined,
+    });
+  },
+
   unexpected(cause: Error): AppError {
     return new AppError({
       code:            'USR-014',

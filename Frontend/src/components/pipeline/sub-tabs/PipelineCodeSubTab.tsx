@@ -1,0 +1,129 @@
+/**
+ * Pipeline > Code sub-tab — Generated SQL / PySpark code viewer
+ */
+import React, { useState, useCallback } from 'react';
+import { Copy, Download, RefreshCw, CheckCircle2, Code2, ChevronDown } from 'lucide-react';
+import api from '@/services/api';
+
+type CodeLang = 'pyspark' | 'scala' | 'sql';
+
+interface GeneratedCode {
+  language: CodeLang;
+  code: string;
+  generatedAt: string;
+  version: string;
+}
+
+function CodeBlock({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const download = () => {
+    const ext = language === 'sql' ? 'sql' : language === 'scala' ? 'scala' : 'py';
+    const blob = new Blob([code], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `pipeline_code.${ext}`;
+    a.click();
+  };
+
+  // Minimal syntax highlighting via regex replacements
+  const highlighted = code
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/(#[^\n]*)/g, '<span class="text-slate-500">$1</span>')
+    .replace(/\b(def|class|import|from|return|if|else|elif|for|while|with|as|in|not|and|or|True|False|None|SELECT|FROM|WHERE|JOIN|ON|GROUP BY|ORDER BY|HAVING|LIMIT|INSERT|UPDATE|DELETE|CREATE|DROP|WITH|UNION|ALL|DISTINCT)\b/g,
+      '<span class="text-violet-400">$1</span>')
+    .replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, '<span class="text-emerald-400">$1</span>')
+    .replace(/\b(\d+\.?\d*)\b/g, '<span class="text-amber-400">$1</span>');
+
+  return (
+    <div className="flex flex-col flex-1 overflow-hidden border border-slate-800 rounded-lg">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#0a0c15] border-b border-slate-800 flex-shrink-0">
+        <span className="text-[11px] text-slate-500 font-mono uppercase">{language}</span>
+        <div className="flex items-center gap-1">
+          <button onClick={copy}
+            className="flex items-center gap-1 h-6 px-2 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors">
+            {copied ? <><CheckCircle2 className="w-3 h-3 text-emerald-400" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
+          </button>
+          <button onClick={download}
+            className="flex items-center gap-1 h-6 px-2 text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 rounded transition-colors">
+            <Download className="w-3 h-3" /> Download
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 overflow-auto p-4 bg-[#0a0c15]">
+        <pre className="text-[12px] font-mono text-slate-300 whitespace-pre leading-relaxed"
+          dangerouslySetInnerHTML={{ __html: highlighted }} />
+      </div>
+    </div>
+  );
+}
+
+export function PipelineCodeSubTab({ pipelineId }: { pipelineId: string }) {
+  const [target, setTarget]         = useState<CodeLang>('pyspark');
+  const [generated, setGenerated]   = useState<GeneratedCode | null>(null);
+  const [isGenerating, setGenerating] = useState(false);
+  const [error, setError]           = useState<string | null>(null);
+
+  const generate = useCallback(async () => {
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await api.generateCode(pipelineId, { technology: target });
+      const d = res.data?.data ?? res.data;
+      const content = d.artifact?.files?.[0]?.content ?? d.generatedCode ?? d.code ?? '# No code returned';
+      setGenerated({
+        language: target,
+        code: content,
+        generatedAt: new Date().toLocaleString(),
+        version: d.version ?? '—',
+      });
+    } catch (err: unknown) {
+      setError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Code generation failed');
+    } finally { setGenerating(false); }
+  }, [pipelineId, target]);
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden p-4 gap-3 bg-[#0d0f1a]">
+      {/* Controls */}
+      <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <label className="text-[11px] text-slate-500">Target</label>
+          <select value={target} onChange={e => setTarget(e.target.value as CodeLang)}
+            className="h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500">
+            <option value="pyspark">PySpark 3.5</option>
+            <option value="scala">Scala Spark 3.5</option>
+            <option value="sql">Spark SQL</option>
+          </select>
+        </div>
+        <button onClick={generate} disabled={isGenerating}
+          className="flex items-center gap-1.5 h-7 px-3 bg-violet-700 hover:bg-violet-600 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-60">
+          {isGenerating ? <><RefreshCw className="w-3 h-3 animate-spin" /> Generating…</> : <><Code2 className="w-3 h-3" /> Generate Code</>}
+        </button>
+        {generated && (
+          <span className="text-[11px] text-slate-600">Generated {generated.generatedAt} · v{generated.version}</span>
+        )}
+      </div>
+
+      {/* Code output */}
+      {error && (
+        <div className="text-[12px] text-red-400 bg-red-900/20 border border-red-800 rounded px-3 py-2 flex-shrink-0">{error}</div>
+      )}
+
+      {!generated && !error && (
+        <div className="flex flex-col items-center justify-center flex-1 text-slate-600">
+          <Code2 className="w-10 h-10 mb-3 opacity-30" />
+          <p className="text-sm">Click "Generate Code" to produce the Spark code for this pipeline.</p>
+          <p className="text-[11px] mt-1">Code is generated from the current designer canvas. Unsaved changes are not included.</p>
+        </div>
+      )}
+
+      {generated && <CodeBlock code={generated.code} language={generated.language} />}
+    </div>
+  );
+}

@@ -6,6 +6,9 @@
 > Any future database change MUST be made **in-place** in the existing SQL file and executed using a **PostgreSQL client** (`psql` or similar).
 > **Never create a new file** for a schema change. The files listed below are the
 > **single golden source of truth** at all times. What is in these files = what is in production.
+>
+> **Also read `CLAUDE.md` at project root and the relevant service SKILL.md before any change.**
+> For schema changes that affect a service, append to that service's SKILL.md Living Decisions section too.
 
 ---
 
@@ -164,6 +167,34 @@ These were reviewed and agreed during schema development. Do not re-introduce.
 |---|---|---|
 | `orchestrator_pipeline_map` | `catalog` | Design-time M2M: orchestrator → pipeline membership. Rebuilt on DAG save. |
 | `run_lineage` | `execution` | Per-run runtime column-level lineage with actual row counts. |
+
+---
+
+## Living Decisions — Database (Dated)
+
+> Append every database-specific decision, user ruling, or critical finding here.
+> Format: `YYYY-MM-DD — [Decision / Instruction / Change / Fix]`
+
+- `2026-03-01` — All execution plane tables renamed. See table above (execution.job_runs → pipeline_runs, etc.).
+- `2026-03-01` — `catalog.orchestrator_pipeline_map` and `execution.run_lineage` tables added (Session 2).
+- `2026-03-17` — Per-service SKILL.md files created at `Backend/src/<service>/SKILL.md`.
+  Any DB change that affects a service must also update that service's SKILL.md Living Decisions.
+- `2026-03-17` — **Reference Map — Which service uses which DB tables:**
+
+  | Service | Primary Tables |
+  |---|---|
+  | connections | `catalog.connectors`, `catalog.connector_health` |
+  | projects | `etl.projects`, `etl.folders` |
+  | pipelines | `catalog.pipelines`, `catalog.pipeline_versions`, `catalog.pipeline_contents` |
+  | executions | `execution.pipeline_runs`, `execution.pipeline_node_runs`, `execution.pipeline_run_logs`, `execution.pipeline_run_metrics`, `execution.orchestrator_runs`, `execution.orchestrator_pipeline_run_map`, `execution.run_lineage` |
+  | orchestrators | `catalog.orchestrators`, `catalog.orchestrator_pipeline_map` |
+  | users | `etl.users`, `etl.user_attributes` |
+  | governance | `gov.permissions`, `gov.roles`, `gov.role_permissions`, `gov.user_roles`, `gov.project_user_roles`, `gov.secrets`, `gov.dq_rules`, `gov.dq_results`, `gov.glossary_terms`, `gov.data_contracts` |
+  | metadata | `catalog.datasets`, `catalog.dataset_columns`, `catalog.asset_tags`, `meta.type_mapping_registry`, `meta.transform_library`, `meta.global_variable_registry` |
+  | codegen | *(stateless — no DB tables)* |
+  | shared | *(infrastructure only)* |
+
+---
 
 ## Rejected Design — `catalog.pipeline` Proposed Column Violations
 

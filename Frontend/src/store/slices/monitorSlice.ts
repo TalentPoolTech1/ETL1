@@ -1,8 +1,9 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import {
   MonitorFilters, MonitorKpis, PipelineRunSummary, OrchestratorRunSummary, MonitorScope,
   RunStatus, TriggerType,
 } from '@/types';
+import api from '@/services/api';
 
 interface MonitorState {
   filters: MonitorFilters;
@@ -10,6 +11,7 @@ interface MonitorState {
   autoRefreshIntervalMs: number;
   lastRefreshedAt: string | null;
   isLoading: boolean;
+  loading: boolean;
   kpis: MonitorKpis | null;
   pipelineRuns: PipelineRunSummary[];
   orchestratorRuns: OrchestratorRunSummary[];
@@ -38,6 +40,7 @@ const initialState: MonitorState = {
   autoRefreshIntervalMs: 30000,
   lastRefreshedAt: null,
   isLoading: false,
+  loading: false,
   kpis: null,
   pipelineRuns: [],
   orchestratorRuns: [],
@@ -47,6 +50,25 @@ const initialState: MonitorState = {
   pageSize: 50,
   totalCount: 0,
 };
+
+// ─── Async thunks ──────────────────────────────────────────────────────────────
+
+export const fetchKpis = createAsyncThunk('monitor/fetchKpis', async () => {
+  const res = await api.getMonitorKpis({});
+  const d = res.data?.data ?? res.data;
+  return {
+    totalToday:         d.total_today         ?? d.totalToday         ?? 0,
+    runningNow:         d.running_now          ?? d.runningNow         ?? 0,
+    successRateToday:   d.success_rate_today   ?? d.successRateToday   ?? 0,
+    failedToday:        d.failed_today         ?? d.failedToday        ?? 0,
+    avgDurationMsToday: d.avg_duration_ms_today ?? d.avgDurationMsToday ?? null,
+    slaBreachesToday:   d.sla_breaches_today   ?? d.slaBreachesToday   ?? 0,
+    dataVolumeGbToday:  d.data_volume_gb_today  ?? d.dataVolumeGbToday  ?? 0,
+    activePipelines:    d.active_pipelines      ?? d.activePipelines    ?? 0,
+  } as MonitorKpis & { activePipelines: number };
+});
+
+// ─── Slice ─────────────────────────────────────────────────────────────────────
 
 const monitorSlice = createSlice({
   name: 'monitor',
@@ -173,6 +195,21 @@ const monitorSlice = createSlice({
     markRefreshed(state) {
       state.lastRefreshedAt = new Date().toISOString();
     },
+  },
+
+  extraReducers: builder => {
+    builder
+      .addCase(fetchKpis.pending, state => {
+        state.loading = true;
+      })
+      .addCase(fetchKpis.fulfilled, (state, action) => {
+        state.loading = false;
+        state.kpis = action.payload as MonitorKpis;
+        state.lastRefreshedAt = new Date().toISOString();
+      })
+      .addCase(fetchKpis.rejected, state => {
+        state.loading = false;
+      });
   },
 });
 

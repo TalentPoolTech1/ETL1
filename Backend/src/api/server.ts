@@ -4,6 +4,13 @@ import { codegenRouter }      from './routes/codegen.routes';
 import { pipelineRouter }     from './routes/pipeline.routes';
 import { nodeTemplateRouter } from './routes/node-template.routes';
 import connectionsRouter       from './routes/connections.routes';
+import { projectsRouter }     from './routes/projects.routes';
+import { orchestratorsRouter } from './routes/orchestrators.routes';
+import { executionsRouter }   from './routes/executions.routes';
+import { authRouter }         from './routes/auth.routes';
+import { governanceRouter }   from './routes/governance.routes';
+import { foldersRouter }      from './routes/folders.routes';
+import { authGuard }          from './middleware/auth.middleware';
 import { pipelineBodyGuard }  from './middleware/middleware';
 import { correlationMiddleware }    from './middleware/correlation.middleware';
 import { requestLoggerMiddleware }  from './middleware/request-logger.middleware';
@@ -32,7 +39,8 @@ export function createApp(): express.Application {
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', process.env['CORS_ORIGIN'] ?? '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-User-Id,X-Request-Id,X-Correlation-Id');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-User-Id,X-Mock-User-ID,X-Request-Id,X-Correlation-Id');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     if (req.method === 'OPTIONS') { res.sendStatus(204); return; }
     next();
   });
@@ -49,11 +57,22 @@ export function createApp(): express.Application {
     });
   });
 
+  // ─── Auth Routes (unprotected) ───────────────────────────────────────────────
+  app.use('/api/auth', authRouter);
+
+  // ─── Auth Guard — protects all /api/* routes below ────────────────────────
+  app.use('/api', authGuard);
+
   // ─── API Routes ──────────────────────────────────────────────────────────────
   app.use('/api/connections',    connectionsRouter);
   app.use('/api/codegen',        pipelineBodyGuard, codegenRouter);
-  app.use('/api/pipelines',      pipelineBodyGuard, pipelineRouter);
+  app.use('/api/pipelines',      pipelineRouter);
   app.use('/api/node-templates', nodeTemplateRouter);
+  app.use('/api/projects',       projectsRouter);
+  app.use('/api/orchestrators',  orchestratorsRouter);
+  app.use('/api/executions',     executionsRouter);
+  app.use('/api/governance',     governanceRouter);
+  app.use('/api/folders',        foldersRouter);
 
   // ─── API Info ────────────────────────────────────────────────────────────────
   app.get('/api', (_req, res) => {

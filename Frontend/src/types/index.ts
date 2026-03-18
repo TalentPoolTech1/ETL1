@@ -29,7 +29,7 @@ export interface Node {
   y: number;
   width: number;
   height: number;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
   inputs: Port[];
   outputs: Port[];
   version: number;
@@ -49,33 +49,123 @@ export interface Edge {
   targetPort: string;
 }
 
+// ─── Tab types ────────────────────────────────────────────────────────────────
+
+export type TabType =
+  | 'pipeline'
+  | 'orchestrator'
+  | 'monitor'
+  | 'execution'
+  | 'project'
+  | 'folder'
+  | 'connection'
+  | 'connections'
+  | 'metadata'
+  | 'user'
+  | 'role'
+  | 'table'
+  | 'sql'
+  | 'dashboard'
+  | 'lineage'
+  | 'governance'
+  | 'settings';
+
 export interface Tab {
   id: string;
-  type: 'pipeline' | 'orchestrator' | 'monitor' | 'execution' | 'table' | 'sql' | 'dashboard';
+  type: TabType;
   objectId: string;
   objectName: string;
   unsaved: boolean;
   isDirty: boolean;
+  /** Full ancestor path, e.g. "Projects → ProjectA → Folder1 → Pipeline_X" */
+  hierarchyPath?: string;
+  /** Whether tab is pinned (survives close-all) */
+  isPinned?: boolean;
   /** For execution tabs: 'pipeline' | 'orchestrator' */
   executionKind?: 'pipeline' | 'orchestrator';
 }
 
+// ─── Sub-tab types ────────────────────────────────────────────────────────────
+
 export type PipelineSubTab =
   | 'editor'
-  | 'overview'
-  | 'execution-history'
-  | 'lineage'
+  | 'properties'
+  | 'parameters'
+  | 'validation'
+  | 'history'
+  | 'executions'
+  | 'metrics'
+  | 'code'
+  | 'alerts'
+  | 'logs'
+  | 'dependencies'
   | 'permissions'
-  | 'audit-logs'
-  | 'execution';
+  | 'activity';
+
+// PipelineSubTab covers all ids used across old + new sub-tabs
+export type PipelineSubTabLegacy = PipelineSubTab | 'overview' | 'execution-history' | 'lineage' | 'audit-logs' | 'execution';
 
 export type OrchestratorSubTab =
   | 'editor'
+  | 'properties'
+  | 'schedule'
+  | 'parameters'
+  | 'history'
+  | 'runs'
+  | 'dependencies'
+  | 'permissions'
+  | 'activity'
   | 'overview'
   | 'execution-history'
-  | 'permissions'
   | 'audit-logs'
   | 'execution';
+
+export type ProjectSubTab =
+  | 'overview'
+  | 'properties'
+  | 'history'
+  | 'permissions'
+  | 'activity';
+
+export type FolderSubTab =
+  | 'overview'
+  | 'properties'
+  | 'contents'
+  | 'history'
+  | 'permissions';
+
+export type ConnectionSubTab =
+  | 'properties'
+  | 'authentication'
+  | 'connectivity'
+  | 'usage'
+  | 'history'
+  | 'permissions'
+  | 'security';
+
+export type MetadataSubTab =
+  | 'overview'
+  | 'structure'
+  | 'profiling'
+  | 'lineage'
+  | 'history'
+  | 'permissions';
+
+export type UserSubTab =
+  | 'profile'
+  | 'access'
+  | 'activity'
+  | 'audit'
+  | 'sessions'
+  | 'preferences';
+
+export type RoleSubTab =
+  | 'properties'
+  | 'members'
+  | 'permissions'
+  | 'scope'
+  | 'history'
+  | 'audit';
 
 export interface TreeNode {
   id: string;
@@ -83,12 +173,12 @@ export interface TreeNode {
   type: 'technology' | 'connection' | 'schema' | 'table' | 'column';
   icon?: string;
   children?: TreeNode[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   isExpanded?: boolean;
 }
 
 export interface DataPreviewRow {
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface DataPreview {
@@ -166,6 +256,7 @@ export interface MonitorKpis {
   avgDurationMsToday: number | null;
   slaBreachesToday: number;
   dataVolumeGbToday: number;
+  activePipelines: number;
 }
 
 export interface MonitorFilters {
@@ -179,3 +270,16 @@ export interface MonitorFilters {
   objectType: 'all' | 'pipeline' | 'orchestrator';
   myJobsOnly: boolean;
 }
+
+// ─── Object status ─────────────────────────────────────────────────────────
+
+export type ObjectStatus =
+  | 'draft'
+  | 'published'
+  | 'running'
+  | 'failed'
+  | 'success'
+  | 'warning'
+  | 'disabled'
+  | 'locked'
+  | 'archived';

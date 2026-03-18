@@ -12,7 +12,8 @@
       "Bash(npm install dotenv)",
       "Bash(timeout 30 npm run dev)",
       "Bash(npm install lucide-react)",
-      "Bash(timeout 25 npm run dev)"
+      "Bash(timeout 25 npm run dev)",
+      "Bash(PATH=\"/home/venkateswarlu/.nvm/versions/node/v24.14.0/bin:$PATH\" npm install --prefix /home/venkateswarlu/Documents/ETL1/Backend)"
     ]
   }
 }
