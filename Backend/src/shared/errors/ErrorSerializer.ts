@@ -44,17 +44,17 @@ export function serializeError(err: unknown): SerializedError {
     stack:   err.stack,
   };
 
-  if (pg['code'])       result['pgCode']       = pg['code'];
-  if (pg['detail'])     result['pgDetail']      = pg['detail'];
-  if (pg['table'])      result['pgTable']       = pg['table'];
-  if (pg['schema'])     result['pgSchema']      = pg['schema'];
-  if (pg['constraint']) result['pgConstraint']  = pg['constraint'];
+  if (typeof pg['code'] === 'string')       result['pgCode'] = pg['code'];
+  if (typeof pg['detail'] === 'string')     result['pgDetail'] = pg['detail'];
+  if (typeof pg['table'] === 'string')      result['pgTable'] = pg['table'];
+  if (typeof pg['schema'] === 'string')     result['pgSchema'] = pg['schema'];
+  if (typeof pg['constraint'] === 'string') result['pgConstraint'] = pg['constraint'];
 
   // Copy any extra enumerable own properties, with redaction
   for (const key of Object.keys(err)) {
     if (!(key in result)) {
-      result[key] = redactValue(key, (err as Record<string, unknown>)[key]);
-    }
+        result[key] = redactValue(key, (err as unknown as Record<string, unknown>)[key]);
+      }
   }
 
   return result;

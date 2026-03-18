@@ -167,7 +167,8 @@ export type TransformationType =
   | 'fillna' | 'dropna' | 'lookup' | 'custom_sql'
   | 'custom_udf' | 'data_quality' | 'mask'
   | 'sample' | 'cache' | 'repartition'
-  | 'multi_transform_sequence';
+  | 'multi_transform_sequence'
+  | 'scd_type1' | 'scd_type2' | 'surrogate_key';
 
 export interface FilterConfig {
   condition: string;
@@ -356,6 +357,28 @@ export interface FlattenConfig {
   columns?: string[];
 }
 
+export interface ScdType1Config {
+  mergeKeys: string[];
+  updateColumns: string[];
+}
+
+export interface ScdType2Config {
+  businessKeys: string[];
+  trackingColumns: string[];
+  effectiveDateColumn: string;
+  endDateColumn: string;
+  currentFlagColumn: string;
+  endDateDefaultValue?: string;
+  surrogateKeyColumn?: string;
+}
+
+export interface SurrogateKeyConfig {
+  outputColumn: string;
+  strategy: 'monotonically_increasing' | 'uuid' | 'row_number';
+  partitionBy?: string[];
+  orderBy?: OrderBySpec[];
+}
+
 // ─── Multi-Transform Sequence Config ──────────────────────────────────────────
 // Mirrors the Frontend IR (Frontend/src/transformations/ir.ts).
 // Stored in PipelineNode.config when transformationType === 'multi_transform_sequence'.
@@ -393,7 +416,8 @@ export type TransformationConfig =
   | FillnaConfig | DropnaConfig | DataQualityConfig | RepartitionConfig
   | CacheConfig | CustomSqlConfig | CustomUdfConfig | MaskConfig
   | LookupConfig | SampleConfig | PivotConfig | UnpivotConfig
-  | ExplodeConfig | FlattenConfig | MultiTransformNodeConfig;
+  | ExplodeConfig | FlattenConfig | MultiTransformNodeConfig
+  | ScdType1Config | ScdType2Config | SurrogateKeyConfig;
 
 // ─── Sink Configurations ───────────────────────────────────────────────────────
 

@@ -1,7 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { nodeTemplateRepository } from '../../db/repositories/node-template.repository';
+import { userIdMiddleware } from '../middleware/user-id.middleware';
 
 const router = Router();
+router.use(userIdMiddleware);
 
 // GET /api/node-templates
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
@@ -28,7 +30,8 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     if (!body.name || !body.configTemplate) {
       res.status(400).json({ error: '"name" and "configTemplate" are required' }); return;
     }
-    const tmpl = await nodeTemplateRepository.create({ ...body, createdBy: req.headers['x-user-id'] as string });
+    const createdBy = (res.locals['userId'] as string) ?? 'system';
+    const tmpl = await nodeTemplateRepository.create({ ...body, createdBy });
     res.status(201).json({ success: true, template: tmpl });
   } catch (err) { next(err); }
 });

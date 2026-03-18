@@ -3,7 +3,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 class APIClient {
   private client: AxiosInstance;
 
-  constructor(baseURL: string = import.meta.env.VITE_API_URL || 'http://localhost:3000/api') {
+  constructor(baseURL: string = import.meta.env.VITE_API_URL || 'http://localhost:3001/api') {
     this.client = axios.create({
       baseURL,
       timeout: 30000,
@@ -114,7 +114,7 @@ class APIClient {
   }
 
   generateCode(id: string, options?: { technology?: string }) {
-    return this.client.post(`/pipelines/${id}/generate`, options ?? {});
+    return this.client.post(`/pipelines/${id}/generate`, { options: options ?? {} });
   }
 
   deletePipeline(id: string) {
@@ -198,6 +198,10 @@ class APIClient {
 
   getFolderChildren(folderId: string) {
     return this.client.get(`/folders/${folderId}/children`);
+  }
+
+  getFolder(id: string) {
+    return this.client.get(`/folders/${id}`);
   }
 
   getFolderPipelines(folderId: string) {
@@ -347,10 +351,6 @@ class APIClient {
 
   getUser(id: string) {
     return this.client.get(`/governance/users/${id}`);
-  }
-
-  updateUser(id: string, data: unknown) {
-    return this.client.put(`/governance/users/${id}`, data);
   }
 
   getRoles() {

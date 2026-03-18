@@ -3,7 +3,7 @@ import { codegenService } from '../../codegen/codegen.service';
 import { pipelineRepository } from '../../db/repositories/pipeline.repository';
 import { artifactRepository } from '../../db/repositories/artifact.repository';
 import { PipelineDefinition } from '../../codegen/core/types/pipeline.types';
-import { GenerationOptions } from '../../codegen/core/interfaces/engine.interfaces';
+import { GenerationOptions, GeneratedArtifact } from '../../codegen/core/interfaces/engine.interfaces';
 import { v4 as uuidv4 } from 'uuid';
 
 // ─── Pipeline Controller ──────────────────────────────────────────────────────
@@ -36,12 +36,15 @@ export class PipelineController {
   async list(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { technology, search, limit, offset, orderBy, orderDir } = req.query as Record<string, string>;
+      const allowedOrderColumns = new Set(['name', 'created_at', 'updated_at']);
+      const safeOrderBy = allowedOrderColumns.has(orderBy) ? orderBy : 'updated_at';
+      const safeOrderDir = orderDir?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
       const result = await pipelineRepository.list({
         technology, search,
         limit: limit ? parseInt(limit, 10) : 50,
         offset: offset ? parseInt(offset, 10) : 0,
-        orderBy: (orderBy as any) ?? 'updated_at',
-        orderDir: (orderDir?.toUpperCase() as 'ASC' | 'DESC') ?? 'DESC',
+        orderBy: safeOrderBy as 'name' | 'created_at' | 'updated_at',
+        orderDir: safeOrderDir,
       });
       res.json({ success: true, ...result });
     } catch (err) {

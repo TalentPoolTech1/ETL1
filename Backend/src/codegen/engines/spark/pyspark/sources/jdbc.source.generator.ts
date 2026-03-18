@@ -17,7 +17,7 @@ export class PySparkJdbcSourceGenerator implements INodeGenerator {
     const cfg = node.config as JdbcSourceConfig;
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     // Resolve credentials
     const { userExpr, passExpr } = this.resolveCredentials(cfg, context);

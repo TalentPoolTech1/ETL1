@@ -32,6 +32,19 @@ async function setSession(client: any, userId: string) {
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }
 
+async function resolveEnvironmentId(client: any, environment?: string): Promise<string | null> {
+  const envName = environment?.trim();
+  if (!envName) return null;
+  const r = await client.query(
+    `SELECT env_id
+     FROM execution.environments
+     WHERE lower(env_display_name) = lower($1)
+     LIMIT 1`,
+    [envName],
+  );
+  return (r.rows[0]?.env_id as string | undefined) ?? null;
+}
+
 // ─── Global orchestrators (project_id IS NULL) — before /:id ─────────────────
 
 router.get('/global', async (req: Request, res: Response, next: NextFunction) => {
@@ -50,6 +63,38 @@ router.get('/global', async (req: Request, res: Response, next: NextFunction) =>
     });
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
+});
+
+// ─── List orchestrators (optionally filtered by projectId) ───────────────────
+
+router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const projectId = req.query['projectId'] as string | undefined;
+    const rows = await db.transaction(async client => {
+      await setSession(client, userId);
+      if (projectId) {
+        const r = await client.query(
+          `SELECT orch_id, project_id, folder_id, orch_display_name, orch_desc_text, created_dtm, updated_dtm
+           FROM catalog.orchestrators
+           WHERE project_id = $1::uuid
+           ORDER BY orch_display_name`,
+          [projectId],
+        );
+        return r.rows;
+      }
+
+      const r = await client.query(
+        `SELECT orch_id, project_id, folder_id, orch_display_name, orch_desc_text, created_dtm, updated_dtm
+         FROM catalog.orchestrators
+         ORDER BY orch_display_name`,
+      );
+      return r.rows;
+    });
+    return res.json({ success: true, data: rows });
+  } catch (err) {
+    return next(err);
+  }
 });
 
 // ─── Get orchestrator ──────────────────────────────────────────────────────────
@@ -129,10 +174,14 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
-    await db.transaction(async client => {
+    const deleted = await db.transaction(async client => {
       await setSession(client, userId);
-      await client.query(`DELETE FROM catalog.orchestrators WHERE orch_id = $1`, [req.params.id]);
+      const exists = await client.query(`SELECT 1 FROM catalog.orchestrators WHERE orch_id = $1::uuid`, [req.params.id]);
+      if (!exists.rowCount) return false;
+      await client.query(`CALL catalog.pr_delete_orchestrator($1::uuid)`, [req.params.id]);
+      return true;
     });
+    if (!deleted) return res.status(404).json({ success: false, userMessage: 'Orchestrator not found' });
     log.info('orchestrator.delete', 'Orchestrator deleted', { orchId: req.params.id, userId });
     res.json({ success: true });
   } catch (err) { log.warn('orchestrator.delete', 'Orchestrator delete failed', { orchId: req.params.id, error: (err as Error).message }); next(err); }
@@ -143,19 +192,36 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
 router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
+    const { environment, concurrency } = (req.body ?? {}) as { environment?: string; concurrency?: string };
     const row = await db.transaction(async client => {
       await setSession(client, userId);
       const orchRow = await client.query(
         `SELECT orch_id FROM catalog.orchestrators WHERE orch_id = $1`, [req.params.id]);
       if (!orchRow.rows[0]) throw new Error('Orchestrator not found');
+      const envId = await resolveEnvironmentId(client, environment);
       const r = await client.query(
-        `INSERT INTO execution.orchestrator_runs (orch_id, run_status_code, trigger_type_code, triggered_by_user_id)
-         VALUES ($1::uuid, 'PENDING', 'MANUAL', $2::uuid) RETURNING orch_run_id`,
-        [req.params.id, userId]);
-      return r.rows[0];
+        `CALL execution.pr_initialize_orchestrator_run($1::uuid, $2::uuid, $3::uuid, null, $4)`,
+        [req.params.id, envId, userId, 'MANUAL'],
+      );
+      return { orch_run_id: r.rows[0].p_orch_run_id as string, environmentApplied: Boolean(envId) };
     });
-    log.info('orchestrator.run', 'Orchestrator run triggered', { orchId: req.params.id, runId: row.orch_run_id, userId });
-    res.status(202).json({ success: true, data: { orchRunId: row.orch_run_id } });
+    log.info('orchestrator.run', 'Orchestrator run triggered', {
+      orchId: req.params.id,
+      runId: row.orch_run_id,
+      userId,
+      environment: environment ?? null,
+      concurrency: concurrency ?? null,
+      environmentApplied: row.environmentApplied,
+    });
+    res.status(202).json({
+      success: true,
+      data: {
+        orchRunId: row.orch_run_id,
+        environment: environment ?? null,
+        concurrency: concurrency ?? null,
+        environmentApplied: row.environmentApplied,
+      },
+    });
   } catch (err) { log.warn('orchestrator.run', 'Orchestrator run trigger failed', { orchId: req.params.id, error: (err as Error).message }); next(err); }
 });
 
@@ -188,7 +254,7 @@ router.get('/:id/audit-logs', async (req: Request, res: Response, next: NextFunc
       }));
     });
     res.json({ success: true, data: rows });
-  } catch { res.json({ success: true, data: [] }); }
+  } catch (err) { next(err); }
 });
 
 export { router as orchestratorsRouter };

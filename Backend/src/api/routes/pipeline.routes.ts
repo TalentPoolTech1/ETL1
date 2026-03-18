@@ -18,6 +18,19 @@ async function setSession(client: any, userId: string) {
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }
 
+async function resolveEnvironmentId(client: any, environment?: string): Promise<string | null> {
+  const envName = environment?.trim();
+  if (!envName) return null;
+  const r = await client.query(
+    `SELECT env_id
+     FROM execution.environments
+     WHERE lower(env_display_name) = lower($1)
+     LIMIT 1`,
+    [envName],
+  );
+  return (r.rows[0]?.env_id as string | undefined) ?? null;
+}
+
 // ─── Global pipelines (project_id IS NULL) — must come before /:id ──────────
 
 router.get('/global', async (req: Request, res: Response, next: NextFunction) => {
@@ -133,7 +146,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
     });
     log.info('pipeline.save', isRename ? 'Pipeline renamed' : 'Pipeline version committed', { pipelineId: id, userId });
     return res.json({ success: true });
-  } catch (err) { log.warn('pipeline.save', 'Pipeline save failed', { pipelineId: id, error: (err as Error).message }); return next(err); }
+  } catch (err) { log.warn('pipeline.save', 'Pipeline save failed', { pipelineId: req.params['id'], error: (err as Error).message }); return next(err); }
 });
 
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
@@ -165,19 +178,57 @@ router.get('/:id/executions', (req,res,next) => ctrl.getExecutions(req,res,next)
 router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
+    const { environment, technology } = (req.body ?? {}) as { environment?: string; technology?: string };
     const row = await db.transaction(async client => {
       await setSession(client, userId);
       const pRow = await client.query(
         `SELECT pipeline_id,active_version_id FROM catalog.pipelines WHERE pipeline_id=$1`, [req.params['id']]);
       if (!pRow.rows[0]) throw new Error('Pipeline not found');
+      const envId = await resolveEnvironmentId(client, environment);
       const r = await client.query(
-        `INSERT INTO execution.pipeline_runs (pipeline_id,version_id,run_status_code,trigger_type_code,triggered_by_user_id)
-         VALUES ($1::uuid,$2,'PENDING','MANUAL',$3::uuid) RETURNING pipeline_run_id`,
-        [pRow.rows[0].pipeline_id, pRow.rows[0].active_version_id, userId]);
-      return r.rows[0];
+        `CALL execution.pr_initialize_pipeline_run($1::uuid, $2::uuid, $3::uuid, $4::uuid, null, $5)`,
+        [pRow.rows[0].pipeline_id, pRow.rows[0].active_version_id, envId, userId, 'MANUAL'],
+      );
+      const pipelineRunId = r.rows[0].p_pipeline_run_id as string;
+
+      if (environment?.trim()) {
+        await client.query(
+          `INSERT INTO execution.run_parameters (pipeline_run_id, param_key_name, param_value_text)
+           VALUES ($1::uuid, $2, $3)
+           ON CONFLICT (pipeline_run_id, param_key_name) DO UPDATE
+           SET param_value_text = EXCLUDED.param_value_text`,
+          [pipelineRunId, '__environment', environment.trim()],
+        );
+      }
+      if (technology?.trim()) {
+        await client.query(
+          `INSERT INTO execution.run_parameters (pipeline_run_id, param_key_name, param_value_text)
+           VALUES ($1::uuid, $2, $3)
+           ON CONFLICT (pipeline_run_id, param_key_name) DO UPDATE
+           SET param_value_text = EXCLUDED.param_value_text`,
+          [pipelineRunId, '__technology', technology.trim()],
+        );
+      }
+
+      return { pipeline_run_id: pipelineRunId, environmentApplied: Boolean(envId) };
     });
-    log.info('pipeline.run', 'Pipeline run triggered', { pipelineId: req.params['id'], runId: row.pipeline_run_id, userId });
-    return res.status(202).json({success:true,data:{pipelineRunId:row.pipeline_run_id}});
+    log.info('pipeline.run', 'Pipeline run triggered', {
+      pipelineId: req.params['id'],
+      runId: row.pipeline_run_id,
+      userId,
+      environment: environment ?? null,
+      technology: technology ?? null,
+      environmentApplied: row.environmentApplied,
+    });
+    return res.status(202).json({
+      success: true,
+      data: {
+        pipelineRunId: row.pipeline_run_id,
+        environment: environment ?? null,
+        technology: technology ?? null,
+        environmentApplied: row.environmentApplied,
+      },
+    });
   } catch (err) { log.warn('pipeline.run', 'Run trigger failed', { pipelineId: req.params['id'], error: (err as Error).message }); return next(err); }
 });
 
@@ -270,7 +321,7 @@ router.get('/:id/audit-logs', async (req: Request, res: Response, next: NextFunc
       }));
     });
     res.json({success:true,data:rows});
-  } catch { res.json({success:true,data:[]}); }
+  } catch (err) { return next(err); }
 });
 
 export { router as pipelineRouter };

@@ -17,7 +17,7 @@ export class PySparkDeltaSourceGenerator implements INodeGenerator {
     const cfg = node.config as DeltaSourceConfig;
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (context.options.includeComments) {
       b.line(`# Source: ${node.name} (Delta Lake)`);
@@ -126,7 +126,7 @@ export class PySparkIcebergSourceGenerator implements INodeGenerator {
     const cfg = node.config as IcebergSourceConfig;
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (context.options.includeComments) {
       b.line(`# Source: ${node.name} (Apache Iceberg)`);

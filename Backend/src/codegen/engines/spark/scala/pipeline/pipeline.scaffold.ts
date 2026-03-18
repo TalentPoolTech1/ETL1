@@ -120,11 +120,11 @@ export class ScalaPipelineScaffold {
           b4.line(`case Success(_) =>`);
           b4.indent(b5 => {
             b5.line(`val duration = (System.currentTimeMillis() - startTime) / 1000.0`);
-            b5.line(`logger.info(s"Pipeline '${pipeline.name}' completed in $${duration}s")`);
+            b5.line(`logger.info(s"Pipeline '${pipeline.name}' completed in $$duration s")`);
           });
           b4.line(`case Failure(ex) =>`);
           b4.indent(b5 => {
-            b5.line(`logger.error(s"Pipeline '${pipeline.name}' FAILED: $${ex.getMessage}", ex)`);
+            b5.line(`logger.error(s"Pipeline '${pipeline.name}' FAILED: \${ex.getMessage}", ex)`);
             b5.line(`System.exit(1)`);
           });
         });

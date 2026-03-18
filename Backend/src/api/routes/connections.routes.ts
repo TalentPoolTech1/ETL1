@@ -52,6 +52,7 @@ router.get('/types', (_req, res) => {
 // ---------------------------------------------------------------------------
 router.post('/',    (req, res, next) => ctrl.create(req, res, next));
 router.get('/',     (req, res, next) => ctrl.list(req, res, next));
+router.post('/test', (req, res, next) => ctrl.testConnectionConfig(req, res, next));
 router.get('/:id',  (req, res, next) => ctrl.getById(req, res, next));
 router.put('/:id',  (req, res, next) => ctrl.update(req, res, next));
 router.delete('/:id', (req, res, next) => ctrl.delete(req, res, next));

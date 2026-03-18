@@ -3,9 +3,8 @@
  * Sub-tabs: Profile | Access | Activity | Audit | Sessions | Preferences
  */
 import React, { useState, useEffect } from 'react';
-import { Shield, UserCheck, Ban, Key, Save, Monitor } from 'lucide-react';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { markTabUnsaved, markTabSaved } from '@/store/slices/tabsSlice';
+import { Shield, UserCheck, Monitor } from 'lucide-react';
+import { useAppSelector } from '@/store/hooks';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
 import { ObjectHistoryGrid } from '@/components/shared/ObjectHistoryGrid';
@@ -80,20 +79,20 @@ function ProfileTab({ data, onChange }: { data: FD; onChange: (f: string, v: str
         <F label="User ID" field="userId" ro />
         <div className="grid grid-cols-2 gap-4">
           <F label="Username" field="username" ro />
-          <F label="Display Name" field="displayName" />
+          <F label="Display Name" field="displayName" ro />
         </div>
-        <F label="Email" field="email" />
+        <F label="Email" field="email" ro />
         <div className="grid grid-cols-2 gap-4">
           <F label="User Type" field="userType" ro />
-          <F label="Default Role" field="defaultRole" />
+          <F label="Default Role" field="defaultRole" ro />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <F label="Locale" field="locale" />
-          <F label="Time Zone" field="timezone" />
+          <F label="Locale" field="locale" ro />
+          <F label="Time Zone" field="timezone" ro />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <F label="MFA Status" field="mfaStatus" ro />
-          <F label="Default Project" field="defaultProject" />
+          <F label="Default Project" field="defaultProject" ro />
         </div>
         <div className="border-t border-slate-800 pt-4 grid grid-cols-2 gap-4">
           <F label="Created By" field="createdBy" ro />
@@ -163,22 +162,22 @@ function SessionsTab() {
 
 // ─── Preferences sub-tab ─────────────────────────────────────────────────
 
-function PreferencesTab({ data, onChange }: { data: FD; onChange: (f: string, v: string) => void }) {
+function PreferencesTab({ data }: { data: FD }) {
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-lg space-y-4">
         <div>
           <label className="block text-[11px] text-slate-500 mb-1">Theme</label>
-          <select value={String(data.theme ?? 'dark')} onChange={e => onChange('theme', e.target.value)}
-            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full">
+          <select value={String(data.theme ?? 'dark')} disabled
+            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full disabled:opacity-70">
             <option value="dark">Dark</option>
             <option value="light">Light</option>
           </select>
         </div>
         <div>
           <label className="block text-[11px] text-slate-500 mb-1">Date Format</label>
-          <select value={String(data.dateFormat ?? 'YYYY-MM-DD')} onChange={e => onChange('dateFormat', e.target.value)}
-            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full">
+          <select value={String(data.dateFormat ?? 'YYYY-MM-DD')} disabled
+            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full disabled:opacity-70">
             <option value="YYYY-MM-DD">YYYY-MM-DD</option>
             <option value="DD/MM/YYYY">DD/MM/YYYY</option>
             <option value="MM/DD/YYYY">MM/DD/YYYY</option>
@@ -186,8 +185,8 @@ function PreferencesTab({ data, onChange }: { data: FD; onChange: (f: string, v:
         </div>
         <div>
           <label className="block text-[11px] text-slate-500 mb-1">Default Landing Page</label>
-          <select value={String(data.landingPage ?? 'dashboard')} onChange={e => onChange('landingPage', e.target.value)}
-            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full">
+          <select value={String(data.landingPage ?? 'dashboard')} disabled
+            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full disabled:opacity-70">
             <option value="dashboard">Dashboard</option>
             <option value="projects">Projects</option>
             <option value="monitor">Monitor</option>
@@ -201,7 +200,6 @@ function PreferencesTab({ data, onChange }: { data: FD; onChange: (f: string, v:
 // ─── Main workspace ───────────────────────────────────────────────────────
 
 export function UserWorkspace({ tabId }: { tabId: string }) {
-  const dispatch  = useAppDispatch();
   const tab       = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
   const subTab    = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'profile') as UserSubTab;
   const userName  = tab?.objectName ?? 'User';
@@ -223,8 +221,6 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
     isPlatformAdmin: false, isUserAdmin: false, hasAuditAccess: false,
     theme: 'dark', dateFormat: 'YYYY-MM-DD', landingPage: 'dashboard',
   });
-  const [isDirty, setIsDirty]   = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
 
   // Load real user data on mount
   useEffect(() => {
@@ -236,21 +232,21 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
         if (!d) return;
         setFormData(prev => ({
           ...prev,
-          userId:         d.user_id          ?? d.userId          ?? prev.userId,
-          username:       d.user_login_name  ?? d.username        ?? prev.username,
-          displayName:    d.user_full_name   ?? d.displayName     ?? prev.displayName,
-          email:          d.user_email       ?? d.email           ?? prev.email,
-          status:         d.is_active_flag === false ? 'inactive' : 'active',
+          userId:         d.userId          ?? d.user_id          ?? prev.userId,
+          username:       d.username        ?? d.user_login_name  ?? d.email ?? prev.username,
+          displayName:    d.displayName     ?? d.user_full_name   ?? prev.displayName,
+          email:          d.email           ?? d.user_email       ?? prev.email,
+          status:         (d.isActive ?? d.is_active_flag) === false ? 'inactive' : 'active',
           userType:       d.user_type_code   ?? d.userType        ?? prev.userType,
           defaultRole:    d.default_role_name ?? d.defaultRole     ?? prev.defaultRole,
-          locale:         d.locale_code      ?? d.locale          ?? prev.locale,
-          timezone:       d.timezone_code    ?? d.timezone        ?? prev.timezone,
+          locale:         d.locale           ?? d.locale_code      ?? prev.locale,
+          timezone:       d.timezone         ?? d.timezone_code    ?? prev.timezone,
           mfaStatus:      d.mfa_enabled_flag ? 'Enabled' : 'Disabled',
           createdBy:      d.created_by_name  ?? '—',
-          createdOn:      d.created_dtm      ?? '—',
-          lastLogin:      d.last_login_dtm   ?? '—',
-          updatedOn:      d.updated_dtm      ?? '—',
-          roles:          d.roles            ?? prev.roles,
+          createdOn:      d.createdOn        ?? d.created_dtm      ?? '—',
+          lastLogin:      d.lastLogin        ?? d.last_login_dtm   ?? '—',
+          updatedOn:      d.updatedOn        ?? d.updated_dtm      ?? '—',
+          roles:          Array.isArray(d.roles) ? d.roles.map((r: any) => r?.roleName ?? r?.role_name ?? r).filter(Boolean) : prev.roles,
           isPlatformAdmin: d.is_platform_admin ?? false,
           isUserAdmin:     d.is_user_admin     ?? false,
           hasAuditAccess:  d.has_audit_access  ?? false,
@@ -259,69 +255,23 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
       .catch(() => { /* user may not exist yet — keep defaults */ });
   }, [tab?.objectId]);
 
-  const handleChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setIsDirty(true);
-    dispatch(markTabUnsaved(tabId));
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      const userId = tab?.objectId;
-      if (userId) {
-        await api.updateUser(userId, {
-          displayName: formData.displayName,
-          email:       formData.email,
-          locale:      formData.locale,
-          timezone:    formData.timezone,
-          defaultRole: formData.defaultRole,
-          theme:       formData.theme,
-          dateFormat:  formData.dateFormat,
-          landingPage: formData.landingPage,
-        });
-      }
-      setIsDirty(false);
-      dispatch(markTabSaved(tabId));
-    } catch (err: unknown) {
-      alert((err as any)?.response?.data?.userMessage ?? 'Failed to save user profile');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0d0f1a]">
       <ObjectHeader
         type="user"
         name={String(formData.displayName ?? userName)}
         hierarchyPath={tab?.hierarchyPath ?? `Users → ${userName}`}
-        isDirty={isDirty}
-        actions={
-          <div className="flex items-center gap-1.5">
-            <button className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 rounded text-[12px] transition-colors">
-              <Key className="w-3.5 h-3.5" /> Reset Password
-            </button>
-            <button className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 rounded text-[12px] transition-colors">
-              <Ban className="w-3.5 h-3.5 text-orange-400" /> Deactivate
-            </button>
-            {isDirty && (
-              <button onClick={handleSave} disabled={isSaving}
-                className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50">
-                <Save className="w-3.5 h-3.5" />{isSaving ? 'Saving…' : 'Save'}
-              </button>
-            )}
-          </div>
-        }
+        isDirty={false}
+        actions={undefined}
       />
       <SubTabBar tabId={tabId} tabs={SUB_TABS} defaultTab="profile" />
 
-      {subTab === 'profile'     && <ProfileTab data={formData} onChange={handleChange} />}
+      {subTab === 'profile'     && <ProfileTab data={formData} onChange={() => {}} />}
       {subTab === 'access'      && <AccessTab data={formData} />}
       {subTab === 'activity'    && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} emptyMessage="No activity records." /></div>}
       {subTab === 'audit'       && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} emptyMessage="No audit records." /></div>}
       {subTab === 'sessions'    && <SessionsTab />}
-      {subTab === 'preferences' && <PreferencesTab data={formData} onChange={handleChange} />}
+      {subTab === 'preferences' && <PreferencesTab data={formData} />}
     </div>
   );
 }

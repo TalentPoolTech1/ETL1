@@ -992,7 +992,7 @@ export function LeftSidebar() {
             label="Global Pipelines" icon={Workflow} iconColor="text-sky-400"
             isExpanded={globalPipelinesExpanded}
             onToggle={() => setGlobalPipelinesExpanded(v => !v)}
-            onAdd={() => { /* TODO */ }}
+            onAdd={() => dispatch(openCreatePipeline({ projectId: null, folderId: null }))}
             addTitle="New global pipeline"
           />
           {globalPipelinesExpanded && (
@@ -1020,7 +1020,7 @@ export function LeftSidebar() {
             label="Global Orchestrators" icon={GitMerge} iconColor="text-purple-400"
             isExpanded={globalOrchsExpanded}
             onToggle={() => setGlobalOrchsExpanded(v => !v)}
-            onAdd={() => { /* TODO */ }}
+            onAdd={() => dispatch(openCreateOrchestrator({ projectId: null, folderId: null }))}
             addTitle="New global orchestrator"
           />
           {globalOrchsExpanded && (

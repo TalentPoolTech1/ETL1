@@ -15,6 +15,7 @@ export type ServiceName =
   | 'orchestrators'
   | 'codegen'
   | 'governance'
+  | 'projects'
   | 'folders'
   | 'api'
   | 'db';

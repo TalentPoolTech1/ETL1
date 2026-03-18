@@ -16,8 +16,8 @@ export class PySparkFileSourceGenerator implements INodeGenerator {
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as FileSourceConfig;
     const varName = toVarName(node.name);
-    const imports = [PYSPARK_IMPORTS.FUNCTIONS];
-    const warnings = [];
+    const imports: string[] = [PYSPARK_IMPORTS.FUNCTIONS];
+    const warnings: any[] = [];
     const b = new CodeBuilder();
 
     if (context.options.includeComments) {

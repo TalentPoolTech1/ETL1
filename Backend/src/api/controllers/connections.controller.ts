@@ -140,6 +140,23 @@ export class ConnectionsController {
         }
     }
 
+    /** POST /api/connections/test */
+    async testConnectionConfig(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const body = req.body ?? {};
+            const connectorTypeCode = body.connectorTypeCode ?? body.connector_type_code;
+            if (!connectorTypeCode) throw connErrors.typeRequired();
+            const result = await connectionsService.testUnsavedConnector({
+                connectorTypeCode,
+                config: body.config ?? {},
+                secrets: body.secrets ?? {},
+            });
+            res.json({ success: true, data: result });
+        } catch (err) {
+            next(err);
+        }
+    }
+
     /** GET /api/connections/:id/health */
     async getHealth(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {

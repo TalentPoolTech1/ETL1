@@ -2,6 +2,9 @@
 // These types are shared between the backend API and the React frontend.
 // Import from this file in the frontend to stay in sync with the API contract.
 
+import type { PipelineDefinition, TechnologyType } from '../../codegen/core/types/pipeline.types';
+import type { GeneratedArtifact, GenerationOptions } from '../../codegen/core/interfaces/engine.interfaces';
+
 export type { PipelineDefinition, PipelineNode, NodeType, TechnologyType, SparkVersion } from '../../codegen/core/types/pipeline.types';
 export type { GeneratedArtifact, ValidationResult, GenerationOptions, CodeFile } from '../../codegen/core/interfaces/engine.interfaces';
 
@@ -39,6 +42,33 @@ export interface PipelineSummary {
 export interface PipelineListResponse {
   rows: PipelineSummary[];
   total: number;
+}
+
+export interface ProjectHierarchyNode {
+  id: string;
+  name: string;
+  type: 'PROJECT' | 'FOLDER' | 'PIPELINE' | 'ORCHESTRATOR';
+  children?: ProjectHierarchyNode[];
+}
+
+export interface PipelineRun {
+  runId: string;
+  pipelineId: string;
+  versionId?: string | null;
+  status: string;
+  triggerType: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  createdAt: string;
+}
+
+export interface NodeRun {
+  nodeRunId: string;
+  pipelineRunId: string;
+  nodeId: string;
+  status: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
 }
 
 export interface GenerateRequest {
@@ -121,6 +151,3 @@ export const TECHNOLOGY_INFO: TechnologyInfo[] = [
     features: ['Delta Lake', 'Iceberg', 'Kafka', 'JDBC'],
   },
 ];
-
-import type { TechnologyType as TT } from '../codegen/core/types/pipeline.types';
-type TechnologyType = TT;

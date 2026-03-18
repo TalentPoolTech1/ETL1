@@ -2,15 +2,17 @@
  * FolderWorkspace — tab content for a Folder/Directory object.
  * Sub-tabs: Overview | Properties | Contents | History | Permissions
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FolderPlus, Workflow, GitMerge, Save, Plus } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { markTabUnsaved, markTabSaved, openTab } from '@/store/slices/tabsSlice';
+import { openCreateFolder, openCreatePipeline, openCreateOrchestrator } from '@/store/slices/projectsSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
 import { ObjectHistoryGrid } from '@/components/shared/ObjectHistoryGrid';
 import { ObjectPermissionsGrid } from '@/components/shared/ObjectPermissionsGrid';
 import type { FolderSubTab } from '@/types';
+import api from '@/services/api';
 
 const SUB_TABS = [
   { id: 'overview',    label: 'Overview',    shortcut: '1' },
@@ -82,25 +84,116 @@ function PropertiesTab({ data, onChange }: { data: FormData; onChange: (f: strin
   );
 }
 
-function ContentsTab({ tabId }: { tabId: string }) {
+function ContentsTab({ folderId, projectId }: { folderId: string; projectId: string | null }) {
   const dispatch = useAppDispatch();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [children, setChildren] = useState<Array<{ folderId: string; folderDisplayName: string }>>([]);
+  const [pipelines, setPipelines] = useState<Array<{ pipelineId: string; pipelineDisplayName: string }>>([]);
+  const [orchestrators, setOrchestrators] = useState<Array<{ orchId: string; orchDisplayName: string }>>([]);
+
+  useEffect(() => {
+    if (!folderId) return;
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      api.getFolderChildren(folderId),
+      api.getFolderPipelines(folderId),
+      api.getFolderOrchestrators(folderId),
+    ])
+      .then(([childRes, pipelineRes, orchRes]) => {
+        const childRows = ((childRes.data?.data ?? childRes.data) as any[]) ?? [];
+        const pipelineRows = ((pipelineRes.data?.data ?? pipelineRes.data) as any[]) ?? [];
+        const orchRows = ((orchRes.data?.data ?? orchRes.data) as any[]) ?? [];
+
+        setChildren(childRows.map(r => ({
+          folderId: r.folder_id ?? r.folderId,
+          folderDisplayName: r.folder_display_name ?? r.folderDisplayName ?? 'Unnamed Folder',
+        })));
+        setPipelines(pipelineRows.map(r => ({
+          pipelineId: r.pipeline_id ?? r.pipelineId,
+          pipelineDisplayName: r.pipeline_display_name ?? r.pipelineDisplayName ?? 'Unnamed Pipeline',
+        })));
+        setOrchestrators(orchRows.map(r => ({
+          orchId: r.orch_id ?? r.orchId,
+          orchDisplayName: r.orch_display_name ?? r.orchDisplayName ?? 'Unnamed Orchestrator',
+        })));
+      })
+      .catch(() => {
+        setError('Failed to load folder contents.');
+      })
+      .finally(() => setLoading(false));
+  }, [folderId]);
+
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="flex items-center gap-2 mb-4">
-        <button className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded text-[12px] text-slate-300 transition-colors">
+        <button
+          onClick={() => {
+            if (!projectId) return;
+            dispatch(openCreateFolder({ projectId, parentFolderId: folderId }));
+          }}
+          disabled={!projectId}
+          className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded text-[12px] text-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
           <FolderPlus className="w-3.5 h-3.5" /> New Sub-folder
         </button>
-        <button className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded text-[12px] text-slate-300 transition-colors">
+        <button
+          onClick={() => dispatch(openCreatePipeline({ projectId, folderId }))}
+          className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded text-[12px] text-slate-300 transition-colors"
+        >
           <Workflow className="w-3.5 h-3.5 text-sky-400" /> New Pipeline
         </button>
-        <button className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded text-[12px] text-slate-300 transition-colors">
+        <button
+          onClick={() => dispatch(openCreateOrchestrator({ projectId, folderId }))}
+          className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded text-[12px] text-slate-300 transition-colors"
+        >
           <GitMerge className="w-3.5 h-3.5 text-purple-400" /> New Orchestrator
         </button>
       </div>
-      <div className="flex flex-col items-center justify-center h-40 text-slate-600">
-        <Plus className="w-8 h-8 mb-2" />
-        <p className="text-sm">Folder contents will appear here once loaded.</p>
-      </div>
+      {loading && <div className="text-[12px] text-slate-500">Loading folder contents…</div>}
+      {error && <div className="text-[12px] text-red-400 mb-3">{error}</div>}
+      {!loading && !error && children.length === 0 && pipelines.length === 0 && orchestrators.length === 0 && (
+        <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+          <Plus className="w-8 h-8 mb-2" />
+          <p className="text-sm">This folder is empty.</p>
+        </div>
+      )}
+      {!loading && !error && (children.length > 0 || pipelines.length > 0 || orchestrators.length > 0) && (
+        <div className="space-y-2">
+          {children.map(c => (
+            <button
+              key={c.folderId}
+              onClick={() => dispatch(openTab({ id: `folder-${c.folderId}`, type: 'folder', objectId: c.folderId, objectName: c.folderDisplayName, unsaved: false, isDirty: false }))}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-800 bg-slate-900/40 hover:bg-slate-800/70 text-left text-[12px] text-slate-300"
+            >
+              <FolderPlus className="w-3.5 h-3.5 text-amber-400" />
+              {c.folderDisplayName}
+            </button>
+          ))}
+          {pipelines.map(p => (
+            <button
+              key={p.pipelineId}
+              onClick={() => dispatch(openTab({ id: `pipeline-${p.pipelineId}`, type: 'pipeline', objectId: p.pipelineId, objectName: p.pipelineDisplayName, unsaved: false, isDirty: false }))}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-800 bg-slate-900/40 hover:bg-slate-800/70 text-left text-[12px] text-slate-300"
+            >
+              <Workflow className="w-3.5 h-3.5 text-sky-400" />
+              {p.pipelineDisplayName}
+            </button>
+          ))}
+          {orchestrators.map(o => (
+            <button
+              key={o.orchId}
+              onClick={() => dispatch(openTab({ id: `orchestrator-${o.orchId}`, type: 'orchestrator', objectId: o.orchId, objectName: o.orchDisplayName, unsaved: false, isDirty: false }))}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded border border-slate-800 bg-slate-900/40 hover:bg-slate-800/70 text-left text-[12px] text-slate-300"
+            >
+              <GitMerge className="w-3.5 h-3.5 text-purple-400" />
+              {o.orchDisplayName}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -109,6 +202,7 @@ export function FolderWorkspace({ tabId }: { tabId: string }) {
   const dispatch   = useAppDispatch();
   const tab        = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
   const subTab     = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'overview') as FolderSubTab;
+  const folderId   = tab?.objectId ?? '';
   const folderName = tab?.objectName ?? 'Folder';
 
   const [formData, setFormData] = useState<FormData>({
@@ -122,6 +216,28 @@ export function FolderWorkspace({ tabId }: { tabId: string }) {
   });
   const [isDirty, setIsDirty]   = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!folderId) return;
+    api.getFolder(folderId)
+      .then(res => {
+        const row = (res.data?.data ?? res.data) as any;
+        if (!row) return;
+        setFormData(prev => ({
+          ...prev,
+          folderId: row.folder_id ?? row.folderId ?? folderId,
+          projectId: row.project_id ?? row.projectId ?? prev.projectId ?? null,
+          parentFolderId: row.parent_folder_id ?? row.parentFolderId ?? null,
+          name: row.folder_display_name ?? row.folderDisplayName ?? prev.name,
+          createdOn: row.created_dtm ?? row.createdDtm ?? prev.createdOn,
+          updatedOn: row.updated_dtm ?? row.updatedDtm ?? prev.updatedOn,
+        }));
+      })
+      .catch(() => {
+        setSaveError('Failed to load folder details.');
+      });
+  }, [folderId]);
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -130,11 +246,19 @@ export function FolderWorkspace({ tabId }: { tabId: string }) {
   };
 
   const handleSave = async () => {
+    const newName = String(formData.name ?? '').trim();
+    if (!folderId || !newName) return;
     setIsSaving(true);
-    await new Promise(r => setTimeout(r, 300));
-    setIsDirty(false);
-    dispatch(markTabSaved(tabId));
-    setIsSaving(false);
+    setSaveError(null);
+    try {
+      await api.renameFolder(folderId, newName);
+      setIsDirty(false);
+      dispatch(markTabSaved(tabId));
+    } catch {
+      setSaveError('Failed to save folder changes.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -153,9 +277,10 @@ export function FolderWorkspace({ tabId }: { tabId: string }) {
         ) : undefined}
       />
       <SubTabBar tabId={tabId} tabs={SUB_TABS} defaultTab="overview" />
+      {saveError && <div className="px-5 py-2 text-[12px] text-red-400 border-b border-red-900/30 bg-red-950/20">{saveError}</div>}
       {subTab === 'overview'    && <OverviewTab data={formData} />}
       {subTab === 'properties'  && <PropertiesTab data={formData} onChange={handleChange} />}
-      {subTab === 'contents'    && <ContentsTab tabId={tabId} />}
+      {subTab === 'contents'    && <ContentsTab folderId={folderId} projectId={(formData.projectId as string | null) ?? null} />}
       {subTab === 'history'     && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} /></div>}
       {subTab === 'permissions' && <div className="flex-1 overflow-hidden"><ObjectPermissionsGrid rows={[]} /></div>}
     </div>

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   Bell, HelpCircle, Search, Zap, ChevronDown,
-  Save, Play, CheckCircle2, Upload, Undo2, Redo2,
+  Save, Play, CheckCircle2, Undo2, Redo2,
   Loader2, AlertTriangle,
 } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -85,7 +85,6 @@ function ToolbarActions() {
   const activePipeline = useAppSelector(s => s.pipeline.activePipeline);
   const unsaved        = useAppSelector(s => s.pipeline.unsavedChanges);
   // ↓ count (number) — stable reference, no memoization needed
-  const dirtyTabCount  = useAppSelector(s => s.tabs.allTabs.filter(t => t.isDirty || t.unsaved).length);
 
   const [isSaving, setIsSaving]       = useState(false);
   const [isRunning, setIsRunning]     = useState(false);
@@ -99,10 +98,18 @@ function ToolbarActions() {
     setIsSaving(true);
     try {
       if (type === 'pipeline' && activePipeline) {
-        await api.savePipeline(activePipeline.id, activePipeline);
+        await api.savePipeline(activePipeline.id, {
+          pipelineDisplayName: activePipeline.name,
+          pipelineDescText: activePipeline.description,
+          nodes: activePipeline.nodes,
+          edges: activePipeline.edges,
+          changeSummary: 'Saved from Header toolbar',
+        });
       }
       dispatch(markTabSaved(activeTab.id));
-    } catch { /* workspace handles its own errors */ }
+    } catch (err: unknown) {
+      alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Save failed');
+    }
     finally { setIsSaving(false); }
   }, [activeTab, activePipeline, isSaving, type, dispatch]);
 
@@ -127,7 +134,6 @@ function ToolbarActions() {
 
   const canRun      = type === 'pipeline' || type === 'orchestrator';
   const canValidate = type === 'pipeline' || type === 'orchestrator';
-  const canPublish  = type === 'pipeline' || type === 'orchestrator';
   const hasDirty    = !!(unsaved || activeTab?.isDirty || activeTab?.unsaved);
 
   return (
@@ -145,11 +151,6 @@ function ToolbarActions() {
         disabled={!activeTab}
         variant={hasDirty ? 'warning' : 'ghost'} />
 
-      {dirtyTabCount > 1 && (
-        <TBtn icon={Save} label={`Save All (${dirtyTabCount})`} title="Save all dirty tabs"
-          onClick={handleSave} variant="warning" />
-      )}
-
       <div className="w-px h-5 bg-slate-700 mx-1 flex-shrink-0" />
 
       {canValidate && (
@@ -162,9 +163,6 @@ function ToolbarActions() {
           onClick={handleRun} loading={isRunning} variant="success" />
       )}
 
-      {canPublish && (
-        <TBtn icon={Upload} label="Publish" title="Publish / Promote" variant="primary" />
-      )}
     </div>
   );
 }
@@ -204,12 +202,16 @@ export function Header() {
         </div>
       )}
 
-      {/* Global search */}
+      {/* Global search placeholder */}
       <div className="flex-1 max-w-[220px] min-w-0 relative mx-1">
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none" />
-        <input type="search" placeholder="Search objects…"
-          className="w-full h-6 pl-6 pr-10 bg-slate-800/60 border border-slate-700/60 rounded text-[11px] text-slate-300 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 focus:bg-slate-800 transition-all" />
-        <kbd className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-600 font-mono bg-slate-800 border border-slate-700 rounded px-1 pointer-events-none">⌘K</kbd>
+        <button
+          type="button"
+          className="w-full h-6 pl-6 pr-2 bg-slate-800/60 border border-slate-700/60 rounded text-[11px] text-left text-slate-500 hover:text-slate-300 transition-colors"
+          title="Global search is not yet available. Use Command Palette (Ctrl/Cmd+K)."
+        >
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none" />
+          Global search coming soon (use Ctrl/Cmd+K)
+        </button>
       </div>
 
       <div className="flex-1" />

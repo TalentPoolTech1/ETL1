@@ -1,6 +1,6 @@
 import axios from 'axios';
 class APIClient {
-    constructor(baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api') {
+    constructor(baseURL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api') {
         Object.defineProperty(this, "client", {
             enumerable: true,
             configurable: true,
@@ -88,7 +88,7 @@ class APIClient {
         return this.client.post(`/pipelines/${id}/validate`);
     }
     generateCode(id, options) {
-        return this.client.post(`/pipelines/${id}/generate`, options ?? {});
+        return this.client.post(`/pipelines/${id}/generate`, { options: options ?? {} });
     }
     deletePipeline(id) {
         return this.client.delete(`/pipelines/${id}`);

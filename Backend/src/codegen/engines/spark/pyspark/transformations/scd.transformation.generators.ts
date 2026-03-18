@@ -301,7 +301,7 @@ export class PySparkSurrogateKeyGenerator implements INodeGenerator {
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
     const warnings: GenerationWarning[] = [];
-    const imports = [PYSPARK_IMPORTS.FUNCTIONS];
+    const imports: string[] = [PYSPARK_IMPORTS.FUNCTIONS];
 
     if (context.options.includeComments) {
       b.line(`# Surrogate Key: ${node.name} (strategy: ${cfg.strategy})`);

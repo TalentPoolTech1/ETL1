@@ -24,6 +24,8 @@ export function GovernanceView() {
 
   const [users, setUsers] = useState<{ name: string; email: string; role: string; status: string }[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [showActiveOnly, setShowActiveOnly] = useState(false);
 
   useEffect(() => {
     if (activeTab !== 'users') return;
@@ -32,16 +34,25 @@ export function GovernanceView() {
       .then(res => {
         const data = res.data?.data ?? res.data;
         const mapped = (Array.isArray(data) ? data : []).map((u: any) => ({
-          name:   u.user_full_name ?? u.username ?? u.name ?? 'Unknown',
-          email:  u.user_email     ?? u.email    ?? '',
-          role:   u.role_name      ?? u.role     ?? 'Viewer',
-          status: u.is_active_flag === false ? 'Inactive' : 'Active',
+          name:   u.displayName    ?? u.user_full_name ?? u.username ?? u.name ?? 'Unknown',
+          email:  u.email          ?? u.user_email     ?? '',
+          role:   (Array.isArray(u.roles) ? u.roles.map((r: any) => r.roleName ?? r.role_name ?? r).filter(Boolean) : [u.role_name ?? u.role]).find(Boolean) ?? 'Viewer',
+          status: (u.isActive ?? u.is_active_flag) === false ? 'Inactive' : 'Active',
         }));
         setUsers(mapped);
       })
       .catch(() => setUsers([]))
       .finally(() => setLoadingUsers(false));
   }, [activeTab]);
+
+  const visibleUsers = users.filter(user => {
+    const matchesSearch =
+      !searchText ||
+      user.name.toLowerCase().includes(searchText.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchText.toLowerCase());
+    const matchesStatus = !showActiveOnly || user.status === 'Active';
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="flex-1 flex flex-col h-full bg-neutral-50 overflow-hidden">
@@ -94,13 +105,15 @@ export function GovernanceView() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                     <input 
                       type="text" 
+                      value={searchText}
+                      onChange={e => setSearchText(e.target.value)}
                       placeholder="Search users..." 
                       className="w-full pl-10 pr-4 py-2 bg-white border border-neutral-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                     />
                   </div>
-                  <button className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-600 border border-neutral-200 rounded-lg hover:bg-white hover:shadow-sm transition-all">
+                  <button onClick={() => setShowActiveOnly(v => !v)} className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-600 border border-neutral-200 rounded-lg hover:bg-white hover:shadow-sm transition-all">
                     <Filter className="w-4 h-4" />
-                    <span>Filter</span>
+                    <span>{showActiveOnly ? 'Active Only' : 'Filter'}</span>
                   </button>
                 </div>
 
@@ -118,10 +131,10 @@ export function GovernanceView() {
                     <tbody className="divide-y divide-neutral-100">
                       {loadingUsers ? (
                         <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-neutral-400">Loading users…</td></tr>
-                      ) : users.length === 0 ? (
+                      ) : visibleUsers.length === 0 ? (
                         <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-neutral-400">No users found.</td></tr>
-                      ) : users.map(user => (
-                        <tr key={user.email} className="hover:bg-neutral-50">
+                      ) : visibleUsers.map(user => (
+                        <tr key={`${user.email}-${user.name}`} className="hover:bg-neutral-50">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-8 h-8 rounded-full bg-neutral-200 flex items-center justify-center text-xs font-medium text-neutral-600">
@@ -145,7 +158,7 @@ export function GovernanceView() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button className="p-1 hover:bg-neutral-100 rounded">
+                            <button title="User row actions are not available yet" className="p-1 hover:bg-neutral-100 rounded">
                               <MoreVertical className="w-4 h-4 text-neutral-400" />
                             </button>
                           </td>

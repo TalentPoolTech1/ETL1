@@ -22,18 +22,27 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
   const [params, setParams] = useState<Param[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirtyLocal, setIsDirtyLocal] = useState(false);
 
-  useEffect(() => {
+  const loadParameters = () => {
     setIsLoading(true);
+    setLoadError(null);
     api.getPipelineParameters(pipelineId)
       .then(res => {
         setParams(res.data.data ?? []);
         setIsDirtyLocal(false);
       })
-      .catch(err => console.error('Failed to load parameters:', err))
+      .catch((err: unknown) => {
+        setParams([]);
+        setLoadError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load parameters');
+      })
       .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    loadParameters();
   }, [pipelineId]);
 
   const markDirty = () => {
@@ -78,11 +87,24 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
   if (params.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-slate-600 p-5">
+        {loadError && (
+          <div className="mb-3 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">
+            {loadError}
+          </div>
+        )}
         <p className="text-sm mb-3">No parameters defined for this pipeline.</p>
-        <button onClick={addParam}
-          className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors">
-          <Plus className="w-3 h-3" /> Add Parameter
-        </button>
+        <div className="flex items-center gap-2">
+          {loadError && (
+            <button onClick={loadParameters}
+              className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 text-white rounded text-[12px] font-medium transition-colors">
+              Retry Load
+            </button>
+          )}
+          <button onClick={addParam}
+            className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors">
+            <Plus className="w-3 h-3" /> Add Parameter
+          </button>
+        </div>
       </div>
     );
   }
@@ -91,6 +113,9 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
         <span className="text-[12px] text-slate-400 font-medium">{params.length} parameter{params.length !== 1 ? 's' : ''}</span>
+        {loadError && (
+          <span className="ml-3 text-[11px] text-red-300">{loadError}</span>
+        )}
         
         <div className="ml-auto flex items-center gap-2">
           {isDirtyLocal && (

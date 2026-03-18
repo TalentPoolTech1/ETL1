@@ -239,10 +239,14 @@ router.put('/:id/rename', async (req: Request, res: Response, next: NextFunction
 router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
-    await db.transaction(async client => {
+    const deleted = await db.transaction(async client => {
       await setSession(client, userId);
-      await client.query(`DELETE FROM etl.folders WHERE folder_id = $1`, [req.params.id]);
+      const exists = await client.query(`SELECT 1 FROM etl.folders WHERE folder_id = $1::uuid`, [req.params.id]);
+      if (!exists.rowCount) return false;
+      await client.query(`CALL etl.pr_delete_folder($1::uuid)`, [req.params.id]);
+      return true;
     });
+    if (!deleted) return res.status(404).json({ success: false, userMessage: 'Folder not found' });
     log.info('folder.delete', 'Folder deleted', { folderId: req.params.id, userId });
     res.json({ success: true });
   } catch (err) { log.warn('folder.delete', 'Folder delete failed', { folderId: req.params.id, error: (err as Error).message }); next(err); }

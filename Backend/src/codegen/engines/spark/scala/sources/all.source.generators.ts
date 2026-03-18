@@ -14,9 +14,9 @@ export class ScalaJdbcSourceGenerator implements INodeGenerator {
 
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as JdbcSourceConfig;
-    const valName = toScalaVal(node.name);
+    const varName = toScalaVal(node.name);
     const b = new ScalaCodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (context.options.includeComments) b.comment(`Source: ${node.name} (JDBC)`);
 
@@ -28,10 +28,10 @@ export class ScalaJdbcSourceGenerator implements INodeGenerator {
       : cfg.password ? scalaString(cfg.password) : `sys.env.getOrElse("DB_PASSWORD", "")`;
 
     const dbtable = cfg.query
-      ? `(${cfg.query.replace(/\s+/g, ' ').trim()}) AS q_${valName}`
+      ? `(${cfg.query.replace(/\s+/g, ' ').trim()}) AS q_${varName}`
       : cfg.table ?? '';
 
-    b.line(`val ${valName} = spark.read`);
+    b.line(`val ${varName} = spark.read`);
     b.indent(b2 => {
       b2.line(`.format("jdbc")`);
       b2.line(`.option("url", ${scalaString(cfg.url)})`);
@@ -50,7 +50,7 @@ export class ScalaJdbcSourceGenerator implements INodeGenerator {
       b2.line(`.load()`);
     });
 
-    return { valName, code: b.build(), imports: [], warnings };
+    return { varName, code: b.build(), imports: [], warnings };
   }
 }
 
@@ -63,21 +63,21 @@ export class ScalaFileSourceGenerator implements INodeGenerator {
 
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as FileSourceConfig;
-    const valName = toScalaVal(node.name);
+    const varName = toScalaVal(node.name);
     const b = new ScalaCodeBuilder();
 
     if (context.options.includeComments) b.comment(`Source: ${node.name} (${cfg.format.toUpperCase()})`);
 
     if (cfg.schema && !cfg.inferSchema) {
-      b.raw(this.buildSchema(`schema${valName.charAt(0).toUpperCase() + valName.slice(1)}`, cfg.schema));
+      b.raw(this.buildSchema(`schema${varName.charAt(0).toUpperCase() + varName.slice(1)}`, cfg.schema));
       b.blank();
     }
 
-    b.line(`val ${valName} = spark.read`);
+    b.line(`val ${varName} = spark.read`);
     b.indent(b2 => {
       b2.line(`.format(${scalaString(cfg.format)})`);
       if (cfg.schema && !cfg.inferSchema) {
-        const schemaVar = `schema${valName.charAt(0).toUpperCase() + valName.slice(1)}`;
+        const schemaVar = `schema${varName.charAt(0).toUpperCase() + varName.slice(1)}`;
         b2.line(`.schema(${schemaVar})`);
       } else if (cfg.inferSchema) {
         b2.line(`.option("inferSchema", "true")`);
@@ -93,7 +93,7 @@ export class ScalaFileSourceGenerator implements INodeGenerator {
       b2.line(`.load(${scalaString(cfg.path)})`);
     });
 
-    return { valName, code: b.build(), imports: [], warnings: [] };
+    return { varName, code: b.build(), imports: [], warnings: [] };
   }
 
   private buildSchema(varName: string, schema: Schema): string {
@@ -119,13 +119,13 @@ export class ScalaKafkaSourceGenerator implements INodeGenerator {
 
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as KafkaSourceConfig;
-    const valName = toScalaVal(node.name);
+    const varName = toScalaVal(node.name);
     const b = new ScalaCodeBuilder();
 
     if (context.options.includeComments) b.comment(`Source: ${node.name} (Kafka${cfg.streaming ? ' Streaming' : ''})`);
 
     const readApi = cfg.streaming ? 'spark.readStream' : 'spark.read';
-    b.line(`val ${valName}Raw = ${readApi}`);
+    b.line(`val ${varName}Raw = ${readApi}`);
     b.indent(b2 => {
       b2.line(`.format("kafka")`);
       b2.line(`.option("kafka.bootstrap.servers", ${scalaString(cfg.bootstrapServers)})`);
@@ -136,7 +136,7 @@ export class ScalaKafkaSourceGenerator implements INodeGenerator {
       b2.line(`.load()`);
     });
     b.blank();
-    b.line(`val ${valName} = ${valName}Raw.select(`);
+    b.line(`val ${varName} = ${varName}Raw.select(`);
     b.indent(b2 => {
       b2.line(`col("key").cast("string").as("_kafka_key"),`);
       b2.line(`col("value").cast("string").as("_value"),`);
@@ -144,7 +144,7 @@ export class ScalaKafkaSourceGenerator implements INodeGenerator {
     });
     b.line(')');
 
-    return { valName, code: b.build(), imports: ['import org.apache.spark.sql.functions._'], warnings: [] };
+    return { varName, code: b.build(), imports: ['import org.apache.spark.sql.functions._'], warnings: [] };
   }
 }
 
@@ -157,13 +157,13 @@ export class ScalaDeltaSourceGenerator implements INodeGenerator {
 
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as DeltaSourceConfig;
-    const valName = toScalaVal(node.name);
+    const varName = toScalaVal(node.name);
     const b = new ScalaCodeBuilder();
 
     if (context.options.includeComments) b.comment(`Source: ${node.name} (Delta Lake)`);
 
     if (cfg.version !== undefined || cfg.timestamp) {
-      b.line(`val ${valName} = spark.read.format("delta")`);
+      b.line(`val ${varName} = spark.read.format("delta")`);
       b.indent(b2 => {
         if (cfg.version !== undefined) b2.line(`.option("versionAsOf", ${cfg.version})`);
         if (cfg.timestamp) b2.line(`.option("timestampAsOf", ${scalaString(cfg.timestamp)})`);
@@ -171,14 +171,14 @@ export class ScalaDeltaSourceGenerator implements INodeGenerator {
         else if (cfg.tableName) b2.line(`.table(${scalaString(cfg.tableName)})`);
       });
     } else if (cfg.tableName) {
-      b.line(`val ${valName} = spark.table(${scalaString(cfg.tableName)})`);
+      b.line(`val ${varName} = spark.table(${scalaString(cfg.tableName)})`);
     } else if (cfg.path) {
-      b.line(`val ${valName} = spark.read.format("delta").load(${scalaString(cfg.path)})`);
+      b.line(`val ${varName} = spark.read.format("delta").load(${scalaString(cfg.path)})`);
     } else {
       b.line(`// ERROR: Delta source "${node.name}" needs path or tableName`);
     }
 
-    return { valName, code: b.build(), imports: [], warnings: [] };
+    return { varName, code: b.build(), imports: [], warnings: [] };
   }
 }
 
@@ -191,19 +191,19 @@ export class ScalaHiveSourceGenerator implements INodeGenerator {
 
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as HiveSourceConfig;
-    const valName = toScalaVal(node.name);
+    const varName = toScalaVal(node.name);
     const table = `${cfg.database}.${cfg.table}`;
     const b = new ScalaCodeBuilder();
 
     if (context.options.includeComments) b.comment(`Source: ${node.name} (Hive)`);
 
     if (cfg.partitionFilter) {
-      b.line(`val ${valName} = spark.table(${scalaString(table)}).filter(${scalaString(cfg.partitionFilter)})`);
+      b.line(`val ${varName} = spark.table(${scalaString(table)}).filter(${scalaString(cfg.partitionFilter)})`);
     } else {
-      b.line(`val ${valName} = spark.table(${scalaString(table)})`);
+      b.line(`val ${varName} = spark.table(${scalaString(table)})`);
     }
 
-    return { valName, code: b.build(), imports: [], warnings: [] };
+    return { varName, code: b.build(), imports: [], warnings: [] };
   }
 }
 
@@ -216,20 +216,20 @@ export class ScalaIcebergSourceGenerator implements INodeGenerator {
 
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as IcebergSourceConfig;
-    const valName = toScalaVal(node.name);
+    const varName = toScalaVal(node.name);
     const tableRef = `${cfg.catalog}.${cfg.namespace}.${cfg.table}`;
     const b = new ScalaCodeBuilder();
 
     if (context.options.includeComments) b.comment(`Source: ${node.name} (Iceberg)`);
 
     if (cfg.snapshotId) {
-      b.line(`val ${valName} = spark.read.option("snapshot-id", ${cfg.snapshotId}).table(${scalaString(tableRef)})`);
+      b.line(`val ${varName} = spark.read.option("snapshot-id", ${cfg.snapshotId}).table(${scalaString(tableRef)})`);
     } else if (cfg.asOfTimestamp) {
-      b.line(`val ${valName} = spark.read.option("as-of-timestamp", ${scalaString(cfg.asOfTimestamp)}).table(${scalaString(tableRef)})`);
+      b.line(`val ${varName} = spark.read.option("as-of-timestamp", ${scalaString(cfg.asOfTimestamp)}).table(${scalaString(tableRef)})`);
     } else {
-      b.line(`val ${valName} = spark.table(${scalaString(tableRef)})`);
+      b.line(`val ${varName} = spark.table(${scalaString(tableRef)})`);
     }
 
-    return { valName, code: b.build(), imports: [], warnings: [] };
+    return { varName, code: b.build(), imports: [], warnings: [] };
   }
 }

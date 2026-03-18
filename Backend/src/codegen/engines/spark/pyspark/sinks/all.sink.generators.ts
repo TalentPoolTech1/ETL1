@@ -147,7 +147,7 @@ export class PySparkDeltaSinkGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name, 'sink');
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (context.options.includeComments) {
       b.line(`# Sink: ${node.name} (Delta Lake)`);

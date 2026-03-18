@@ -23,7 +23,7 @@ export class PySparkSampleGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (cfg.fraction <= 0 || cfg.fraction > 1) {
       warnings.push({ nodeId: node.id, code: 'SAMPLE_INVALID_FRACTION', message: `Sample fraction ${cfg.fraction} must be between 0 and 1.`, severity: 'error' as const });
@@ -62,7 +62,7 @@ export class PySparkLookupGenerator implements INodeGenerator {
     const lookupVar = context.resolvedNodes.get(cfg.lookupDatasetNodeId)?.varName;
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (!lookupVar) {
       warnings.push({ nodeId: node.id, code: 'LOOKUP_MISSING_DATASET', message: `Lookup dataset node "${cfg.lookupDatasetNodeId}" not resolved. Ensure it is upstream.`, severity: 'error' as const });
@@ -128,8 +128,8 @@ export class PySparkCustomUdfGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const imports = [PYSPARK_IMPORTS.FUNCTIONS, PYSPARK_IMPORTS.TYPES];
-    const warnings = [];
+    const imports: string[] = [PYSPARK_IMPORTS.FUNCTIONS, PYSPARK_IMPORTS.TYPES];
+    const warnings: any[] = [];
 
     if (context.options.includeComments) b.line(`# Transform: ${node.name} (Custom UDF: ${cfg.functionName})`);
 

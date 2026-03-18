@@ -204,7 +204,7 @@ export class PySparkDeriveGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const imports = [PYSPARK_IMPORTS.FUNCTIONS];
+    const imports: string[] = [PYSPARK_IMPORTS.FUNCTIONS];
 
     if (context.options.includeComments) b.line(`# Transform: ${node.name} (Derive Columns)`);
 

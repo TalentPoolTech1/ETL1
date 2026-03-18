@@ -359,16 +359,35 @@ router.post('/pipeline-runs/:runId/retry', async (req: Request, res: Response, n
 router.post('/pipeline-runs/:runId/cancel', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
-    await db.transaction(async client => {
+    const result = await db.transaction(async client => {
       await setSession(client, userId);
-      await client.query(
-        `UPDATE execution.pipeline_runs
-         SET run_status_code = 'CANCELLED', end_dtm = CURRENT_TIMESTAMP
-         WHERE pipeline_run_id = $1 AND run_status_code IN ('PENDING','QUEUED','RUNNING')`,
+      const existing = await client.query(
+        `SELECT run_status_code FROM execution.pipeline_runs WHERE pipeline_run_id = $1::uuid`,
         [req.params.runId]
       );
+      if (!existing.rowCount) return { ok: false as const, status: 404 as const };
+
+      const runStatus = existing.rows[0].run_status_code as string;
+      if (!['PENDING', 'QUEUED', 'RUNNING'].includes(runStatus)) {
+        return { ok: false as const, status: 409 as const, runStatus };
+      }
+
+      await client.query(
+        `CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`,
+        [req.params.runId, 'CANCELLED'],
+      );
+      return { ok: true as const };
     });
-    res.json({ success: true });
+    if (!result.ok) {
+      if (result.status === 404) {
+        return res.status(404).json({ success: false, userMessage: 'Pipeline run not found' });
+      }
+      return res.status(409).json({
+        success: false,
+        userMessage: `Pipeline run cannot be cancelled from status ${result.runStatus}`,
+      });
+    }
+    return res.json({ success: true });
   } catch (err) { next(err); }
 });
 
@@ -524,16 +543,36 @@ router.post('/orchestrator-runs/:runId/retry', async (req: Request, res: Respons
 router.post('/orchestrator-runs/:runId/cancel', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
-    await db.transaction(async client => {
+    const result = await db.transaction(async client => {
       await setSession(client, userId);
-      await client.query(
-        `UPDATE execution.orchestrator_runs
-         SET run_status_code = 'CANCELLED', end_dtm = CURRENT_TIMESTAMP
-         WHERE orch_run_id = $1 AND run_status_code IN ('PENDING','QUEUED','RUNNING')`,
+      const existing = await client.query(
+        `SELECT run_status_code
+         FROM execution.fn_get_orchestrator_run_status($1::uuid)`,
         [req.params.runId]
       );
+      if (!existing.rowCount) return { ok: false as const, status: 404 as const };
+
+      const runStatus = existing.rows[0].run_status_code as string;
+      if (!['PENDING', 'QUEUED', 'RUNNING'].includes(runStatus)) {
+        return { ok: false as const, status: 409 as const, runStatus };
+      }
+
+      await client.query(
+        `CALL execution.pr_finalize_orchestrator_run($1::uuid, $2)`,
+        [req.params.runId, 'CANCELLED'],
+      );
+      return { ok: true as const };
     });
-    res.json({ success: true });
+    if (!result.ok) {
+      if (result.status === 404) {
+        return res.status(404).json({ success: false, userMessage: 'Orchestrator run not found' });
+      }
+      return res.status(409).json({
+        success: false,
+        userMessage: `Orchestrator run cannot be cancelled from status ${result.runStatus}`,
+      });
+    }
+    return res.json({ success: true });
   } catch (err) { next(err); }
 });
 

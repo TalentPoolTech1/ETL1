@@ -86,7 +86,7 @@ export class ScalaDeltaSinkGenerator implements INodeGenerator {
     const cfg = node.config as DeltaSinkConfig;
     const v = toScalaVal(node.name, 'Sink'); const inp = inputVal(node, ctx);
     const b = new ScalaCodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
     if (ctx.options.includeComments) b.comment(`Sink: ${node.name} (Delta Lake)`);
 
     if (cfg.mode === 'merge') {

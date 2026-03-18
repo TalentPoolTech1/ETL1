@@ -1,4 +1,4 @@
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
 import { LoggerFactory } from '../shared/logging';
 
 const log = LoggerFactory.get('db');
@@ -61,14 +61,14 @@ class Database {
     return this.pool!;
   }
 
-  async query<T = Record<string, unknown>>(
+  async query<T extends QueryResultRow = QueryResultRow>(
     sql: string,
     params?: unknown[]
   ): Promise<QueryResult<T>> {
     return this.getPool().query<T>(sql, params);
   }
 
-  async queryOne<T = Record<string, unknown>>(
+  async queryOne<T extends QueryResultRow = QueryResultRow>(
     sql: string,
     params?: unknown[]
   ): Promise<T | null> {
@@ -76,7 +76,7 @@ class Database {
     return result.rows[0] ?? null;
   }
 
-  async queryMany<T = Record<string, unknown>>(
+  async queryMany<T extends QueryResultRow = QueryResultRow>(
     sql: string,
     params?: unknown[]
   ): Promise<T[]> {

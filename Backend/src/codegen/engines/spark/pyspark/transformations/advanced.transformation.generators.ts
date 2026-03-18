@@ -26,7 +26,7 @@ export class PySparkJoinGenerator implements INodeGenerator {
     const rightVar = context.resolvedNodes.get(cfg.rightInput)?.varName ?? 'MISSING_RIGHT';
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (context.options.includeComments) {
       b.line(`# Transform: ${node.name} (${cfg.type.toUpperCase()} JOIN)`);
@@ -112,7 +112,7 @@ export class PySparkUnionGenerator implements INodeGenerator {
     const cfg = node.config as { byName?: boolean; all?: boolean };
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
-    const warnings = [];
+    const warnings: any[] = [];
 
     if (node.inputs.length < 2) {
       warnings.push({ nodeId: node.id, code: 'UNION_TOO_FEW_INPUTS', message: 'Union requires at least 2 inputs.', severity: 'error' as const });

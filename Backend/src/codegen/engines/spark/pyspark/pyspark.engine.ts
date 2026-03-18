@@ -156,7 +156,7 @@ export class PySparkEngine implements ICodeEngine {
       pipeline,
       technology: 'pyspark',
       resolvedNodes: new Map(),
-      imports: new Set([PYSPARK_IMPORTS.SPARK_SESSION, PYSPARK_IMPORTS.FUNCTIONS, PYSPARK_IMPORTS.TYPES]),
+      imports: new Set<string>([PYSPARK_IMPORTS.SPARK_SESSION, PYSPARK_IMPORTS.FUNCTIONS, PYSPARK_IMPORTS.TYPES]),
       sparkConfigLines: [],
       warnings: [...validation.warnings],
       variables: pipeline.variables ?? {},

@@ -86,7 +86,13 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
     if (!activePipeline || isSaving) return;
     setIsSaving(true);
     try {
-      await api.savePipeline(activePipeline.id, activePipeline);
+      await api.savePipeline(activePipeline.id, {
+        pipelineDisplayName: activePipeline.name,
+        pipelineDescText: activePipeline.description,
+        nodes: activePipeline.nodes,
+        edges: activePipeline.edges,
+        changeSummary: 'Saved from Pipeline workspace',
+      });
       dispatch(markSaved());
       dispatch(markTabSaved(tabId));
     } catch (err: unknown) {

@@ -10,6 +10,7 @@ import { executionsRouter }   from './routes/executions.routes';
 import { authRouter }         from './routes/auth.routes';
 import { governanceRouter }   from './routes/governance.routes';
 import { foldersRouter }      from './routes/folders.routes';
+import { nodesRouter }        from './routes/nodes.routes';
 import { authGuard }          from './middleware/auth.middleware';
 import { pipelineBodyGuard }  from './middleware/middleware';
 import { correlationMiddleware }    from './middleware/correlation.middleware';
@@ -73,6 +74,7 @@ export function createApp(): express.Application {
   app.use('/api/executions',     executionsRouter);
   app.use('/api/governance',     governanceRouter);
   app.use('/api/folders',        foldersRouter);
+  app.use('/api/nodes',          nodesRouter);
 
   // ─── API Info ────────────────────────────────────────────────────────────────
   app.get('/api', (_req, res) => {

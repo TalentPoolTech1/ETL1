@@ -22,6 +22,36 @@ const SUB_TABS = [
 ] satisfies { id: ProjectSubTab; label: string; shortcut: string }[];
 
 type FormData = Record<string, unknown>;
+type ProjectApiDto = {
+  project_id?: string;
+  projectId?: string;
+  project_display_name?: string;
+  projectDisplayName?: string;
+  project_desc_text?: string | null;
+  projectDescText?: string | null;
+  created_dtm?: string;
+  createdOn?: string;
+  updated_dtm?: string;
+  updatedOn?: string;
+};
+
+function mapApiProjectToForm(prev: FormData, d: ProjectApiDto): FormData {
+  return {
+    ...prev,
+    projectId: d.project_id ?? d.projectId ?? prev.projectId,
+    name: d.project_display_name ?? d.projectDisplayName ?? prev.name,
+    description: d.project_desc_text ?? d.projectDescText ?? prev.description ?? '',
+    createdOn: d.created_dtm ?? d.createdOn ?? prev.createdOn,
+    updatedOn: d.updated_dtm ?? d.updatedOn ?? prev.updatedOn,
+  };
+}
+
+function toProjectUpdatePayload(formData: FormData): { projectDisplayName: string; projectDescText: string } {
+  return {
+    projectDisplayName: String(formData.name ?? '').trim(),
+    projectDescText: String(formData.description ?? ''),
+  };
+}
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
@@ -114,11 +144,11 @@ function PropertiesTab({ data, onChange }: { data: FormData; onChange: (f: strin
         <Field label="Project Name *" field="name" />
         <Field label="Description" field="description" ta />
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Default Environment" field="defaultEnvironment" />
-          <Field label="Owner" field="owner" />
+          <Field label="Default Environment" field="defaultEnvironment" ro />
+          <Field label="Owner" field="owner" ro />
         </div>
-        <Field label="Tags (comma separated)" field="tags" />
-        <Field label="Labels" field="labels" />
+        <Field label="Tags (read-only)" field="tags" ro />
+        <Field label="Labels (read-only)" field="labels" ro />
         <div className="border-t border-slate-800 pt-4 grid grid-cols-2 gap-4">
           <Field label="Created By" field="createdBy" ro />
           <Field label="Created On" field="createdOn" ro />
@@ -163,21 +193,28 @@ export function ProjectWorkspace({ tabId }: { tabId: string }) {
     version: '1',
     lockState: 'Unlocked',
     defaultEnvironment: 'Development',
-    tags: [],
+    tags: '',
     createdBy: '—', createdOn: '—', updatedBy: '—', updatedOn: '—',
     lastOpenedBy: '—', lastOpenedOn: '—',
     folderCount: 0, pipelineCount: 0, orchestratorCount: 0, connectionCount: 0, memberCount: 0,
   });
   const [isDirty, setIsDirty]   = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (api as any).getProject?.(projectId)?.then((res: { data: unknown }) => {
-      const d = (res.data as { data?: FormData })?.data ?? (res.data as FormData);
-      if (d) setFormData(prev => ({ ...prev, ...d }));
-    }).catch(() => {/* silently ignore */});
+    setLoadError(null);
+    api.getProject(projectId)
+      .then(res => {
+        const d = (res.data?.data ?? res.data) as ProjectApiDto | undefined;
+        if (!d) return;
+        setFormData(prev => mapApiProjectToForm(prev, d));
+      })
+      .catch((err: unknown) => {
+        setLoadError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load project');
+      });
   }, [projectId]);
 
   const handleChange = (field: string, value: string) => {
@@ -188,12 +225,19 @@ export function ProjectWorkspace({ tabId }: { tabId: string }) {
 
   const handleSave = async () => {
     setIsSaving(true);
+    setSaveError(null);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (api as any).updateProject?.(projectId, formData);
+      const payload = toProjectUpdatePayload(formData);
+      const res = await api.updateProject(projectId, payload);
+      const d = (res.data?.data ?? res.data) as ProjectApiDto | undefined;
+      if (d) {
+        setFormData(prev => mapApiProjectToForm(prev, d));
+      }
       setIsDirty(false);
       dispatch(markTabSaved(tabId));
-    } catch { /* noop */ }
+    } catch (err: unknown) {
+      setSaveError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to save project');
+    }
     finally { setIsSaving(false); }
   };
 
@@ -217,6 +261,12 @@ export function ProjectWorkspace({ tabId }: { tabId: string }) {
         ) : undefined}
       />
       <SubTabBar tabId={tabId} tabs={SUB_TABS} defaultTab="overview" />
+
+      {(loadError || saveError) && (
+        <div className="mx-5 mt-4 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">
+          {saveError ?? loadError}
+        </div>
+      )}
 
       {subTab === 'overview'    && <OverviewTab data={formData} />}
       {subTab === 'properties'  && <PropertiesTab data={formData} onChange={handleChange} />}

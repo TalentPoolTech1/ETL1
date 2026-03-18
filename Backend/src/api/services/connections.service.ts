@@ -80,6 +80,12 @@ export interface TestConnectorInput {
     userId: string;
 }
 
+export interface TestUnsavedConnectorInput {
+    connectorTypeCode: string;
+    config: ConnectorConfig;
+    secrets?: ConnectorSecrets;
+}
+
 export interface HealthResult {
     healthStatusCode: string;
     checkLatencyMs: number | null;
@@ -283,7 +289,7 @@ export class ConnectionsService {
 
             connectionsRepository.recordTestResult(
                 input.connectorId, testResult.success, testResult.latencyMs,
-                testResult.steps, errorText, input.userId, getEncryptionKey(),
+                errorText, input.userId, getEncryptionKey(),
             ).catch(err => {
                 log.warn('connections.test.record', 'Failed to record test result', {
                     connectorId: input.connectorId, err: String(err),
@@ -310,6 +316,42 @@ export class ConnectionsService {
             }
             if (error.message?.includes('SSL') || error.message?.includes('certificate')) {
                 throw connErrors.sslCertVerifyFailed(input.connectorId, error);
+            }
+            throw connErrors.unexpected(error);
+        }
+    }
+
+    async testUnsavedConnector(input: TestUnsavedConnectorInput): Promise<TestResult> {
+        const connectorTypeCode = input.connectorTypeCode?.trim();
+        if (!connectorTypeCode) throw connErrors.typeRequired();
+        this.validateConnectorType(connectorTypeCode);
+
+        const plugin = ConnectorRegistry.get(connectorTypeCode)!;
+        const config = input.config ?? {};
+        const secrets = input.secrets ?? {};
+        this.validateConfig(plugin, config, secrets);
+
+        log.info('connections.test.unsaved', 'Testing unsaved connector config', { connectorTypeCode });
+
+        const startMs = Date.now();
+        try {
+            const testResult = await plugin.test(config, secrets);
+            testResult.latencyMs = Date.now() - startMs;
+            return testResult;
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            const error = err as Error;
+            if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ENOTFOUND')) {
+                throw connErrors.hostUnreachable('unsaved', error);
+            }
+            if (error.message?.includes('authentication') || error.message?.includes('password')) {
+                throw connErrors.authFailed('unsaved', error);
+            }
+            if (error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+                throw connErrors.testTimeout('unsaved', 30, error);
+            }
+            if (error.message?.includes('SSL') || error.message?.includes('certificate')) {
+                throw connErrors.sslCertVerifyFailed('unsaved', error);
             }
             throw connErrors.unexpected(error);
         }
@@ -442,7 +484,7 @@ export class ConnectionsService {
             connectorTypeCode: row.connector_type_code,
             connSslMode: row.conn_ssl_mode,
             connMaxPoolSizeNum: row.conn_max_pool_size_num,
-            healthStatusCode: 'UNKNOWN',
+            healthStatusCode: row.health_status_code ?? 'UNKNOWN',
             createdByFullName: row.created_by_name,
             updatedDtm: row.updated_dtm,
         };

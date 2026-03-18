@@ -42,6 +42,6 @@ export async function authGuard(req: Request, res: Response, next: NextFunction)
     (req as any).user = { userId };
     next();
   } catch (err) {
-    next(AppErrors.usr.unauthorized('Invalid or expired token', { cause: err }));
+    next(AppErrors.usr.unauthorized('Invalid or expired token', { cause: err instanceof Error ? err : undefined }));
   }
 }
