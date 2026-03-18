@@ -1,7 +1,7 @@
 /**
  * PipelineWorkspace
- * 9 sub-tabs per spec: Designer | Properties | Parameters | Validation |
- *                      History  | Executions | Dependencies | Permissions | Activity
+ * Active sub-tabs: Designer | Properties | Parameters | Validation |
+ *                  Executions | Metrics | Permissions | Code
  */
 import React, { useEffect, useCallback, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -9,18 +9,14 @@ import { setPipeline, markSaved } from '@/store/slices/pipelineSlice';
 import { markTabUnsaved, markTabSaved } from '@/store/slices/tabsSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
-import { ObjectHistoryGrid } from '@/components/shared/ObjectHistoryGrid';
 import { PipelineCanvas }             from '@/components/canvas/PipelineCanvas';
 import { PipelinePropertiesSubTab }   from './sub-tabs/PipelinePropertiesSubTab';
 import { PipelineParametersSubTab }   from './sub-tabs/PipelineParametersSubTab';
 import { PipelineValidationSubTab }   from './sub-tabs/PipelineValidationSubTab';
-import { PipelineDependenciesSubTab } from './sub-tabs/PipelineDependenciesSubTab';
-import { PipelineActivitySubTab }     from './sub-tabs/PipelineActivitySubTab';
 import { PipelineCodeSubTab }         from './sub-tabs/PipelineCodeSubTab';
 import { PipelineMetricsSubTab }      from './sub-tabs/PipelineMetricsSubTab';
-import { PipelineAlertsSubTab }       from './sub-tabs/PipelineAlertsSubTab';
-import { ExecutionHistorySubTab }     from './sub-tabs/ExecutionHistorySubTab';
 import { PermissionsSubTab }          from './sub-tabs/PermissionsSubTab';
+import { ExecutionHistorySubTab }     from './sub-tabs/ExecutionHistorySubTab';
 import type { PipelineSubTab } from '@/types';
 import api from '@/services/api';
 
@@ -31,19 +27,16 @@ const PIPELINE_SUB_TABS = [
   { id: 'validation',   label: 'Validation',   shortcut: '4' },
   { id: 'executions',   label: 'Executions',   shortcut: '5' },
   { id: 'metrics',      label: 'Metrics',      shortcut: '6' },
-  { id: 'code',         label: 'Code',         shortcut: '7' },
-  { id: 'alerts',       label: 'Alerts',       shortcut: '8' },
-  { id: 'history',      label: 'History',      shortcut: '9' },
-  { id: 'dependencies', label: 'Dependencies', shortcut: '' },
-  { id: 'permissions',  label: 'Permissions',  shortcut: '' },
-  { id: 'activity',     label: 'Activity',     shortcut: '' },
+  { id: 'permissions',  label: 'Permissions',  shortcut: '7' },
+  { id: 'code',         label: 'Code',         shortcut: '8' },
 ] as { id: PipelineSubTab; label: string; shortcut: string }[];
 
 interface PipelineWorkspaceProps { tabId: string; }
 
 export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
   const dispatch       = useAppDispatch();
-  const activeSubTab   = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'editor') as PipelineSubTab;
+  const selectedSubTab = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'editor') as PipelineSubTab;
+  const activeSubTab = PIPELINE_SUB_TABS.some(t => t.id === selectedSubTab) ? selectedSubTab : 'editor';
   const unsavedChanges = useAppSelector(s => s.pipeline.unsavedChanges);
   const activePipeline = useAppSelector(s => s.pipeline.activePipeline);
   const tab            = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
@@ -151,12 +144,8 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
       {activeSubTab === 'validation'   && <PipelineValidationSubTab pipelineId={pipelineId} />}
       {activeSubTab === 'executions'   && <ExecutionHistorySubTab pipelineId={pipelineId} />}
       {activeSubTab === 'metrics'       && <PipelineMetricsSubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'code'          && <PipelineCodeSubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'alerts'        && <PipelineAlertsSubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'history'       && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} /></div>}
-      {activeSubTab === 'dependencies'  && <PipelineDependenciesSubTab pipelineId={pipelineId} />}
       {activeSubTab === 'permissions'   && <PermissionsSubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'activity'      && <PipelineActivitySubTab pipelineId={pipelineId} />}
+      {activeSubTab === 'code'          && <PipelineCodeSubTab pipelineId={pipelineId} />}
     </div>
   );
 }

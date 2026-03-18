@@ -319,7 +319,10 @@ These must all be answerable by the DB without parsing JSON blobs:
   12. All new components use dark theme (`bg-[#0d0f1a]`, `border-slate-800`) consistent with existing dark design.
   13. HierarchyPath format: `Root → Parent → ... → ObjectName` using `→` separator.
 
-> Append platform-wide decisions, user instructions, and critical rulings here.
+- `2026-03-18` — **Enterprise UI Overhaul & RBAC Access Fix:**
+  1. `Header.tsx` — Reduced height to 32px (h-8), logo to 20px (w-5 h-5), and `TBtn` to 22px high-density layout. Simplified spacer logic to prevent search bar overlap.
+  2. `LeftSidebar.tsx` — Boosted icon opacity and label contrast. Brightened default text from `slate-400` to `slate-300` and bolstered hover states.
+  3. RBAC Fix — Resolved `403 Forbidden` on pipeline creation by granting `ADMIN` and `DEVELOPER` roles to the default user (`admin@etl1.local`) using `gov.pr_assign_user_role` procedure.
 > Service-specific decisions go in the relevant service SKILL.md instead.
 
 - `2026-03-17` — **User Instruction:** All file writes go directly to the user's local

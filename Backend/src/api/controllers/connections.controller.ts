@@ -25,12 +25,21 @@ export class ConnectionsController {
 
     // ─── CRUD ─────────────────────────────────────────────────────────────────
 
-    /** GET /api/connections */
-    async list(_req: Request, res: Response, next: NextFunction): Promise<void> {
+    /** GET /api/connections  (supports ?techCode=X&limit=50&after=<uuid>) */
+    async list(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const userId = this.getUserId(res);
-            const connectors = await connectionsService.listConnectors(userId);
-            res.json({ success: true, data: connectors });
+            const techCode = req.query['techCode'] as string | undefined;
+            const limit    = Math.min(parseInt(String(req.query['limit'] ?? '50'), 10), 200);
+            const afterId  = req.query['after'] as string | undefined;
+
+            let result;
+            if (techCode) {
+                result = await connectionsService.listConnectorsByTech(userId, techCode, limit, afterId);
+            } else {
+                result = await connectionsService.listConnectors(userId);
+            }
+            res.json({ success: true, data: result.items, nextCursor: result.nextCursor });
         } catch (err) {
             next(err);
         }
@@ -72,6 +81,7 @@ export class ConnectionsController {
                 maxPoolSize: body.maxPoolSize,
                 idleTimeoutSec: body.idleTimeoutSec,
                 userId,
+                technologyId: typeof body.technologyId === 'string' ? body.technologyId : undefined,
             };
 
             const result = await connectionsService.createConnector(input);
@@ -164,6 +174,61 @@ export class ConnectionsController {
             if (!id) throw connErrors.notFound('missing');
             const health = await connectionsService.getHealth(id);
             res.json({ success: true, data: health });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    /** GET /api/connections/:id/usage */
+    async getUsage(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            if (!id) throw connErrors.notFound('missing');
+            const userId = this.getUserId(res);
+            const usage = await connectionsService.getUsage(id, userId);
+            res.json({ success: true, data: usage });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    /** GET /api/connections/:id/history */
+    async getHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            if (!id) throw connErrors.notFound('missing');
+            const userId = this.getUserId(res);
+            const limit = parseInt(String(req.query['limit'] ?? '100'), 10);
+            const offset = parseInt(String(req.query['offset'] ?? '0'), 10);
+            const history = await connectionsService.getHistory(id, userId, limit, offset);
+            res.json({ success: true, data: history });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    /** GET /api/connections/:id/permissions */
+    async getPermissions(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            if (!id) throw connErrors.notFound('missing');
+            const userId = this.getUserId(res);
+            const grants = await connectionsService.getPermissions(id, userId);
+            res.json({ success: true, data: grants });
+        } catch (err) {
+            next(err);
+        }
+    }
+
+    /** PUT /api/connections/:id/permissions */
+    async updatePermissions(req: Request, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { id } = req.params;
+            if (!id) throw connErrors.notFound('missing');
+            const userId = this.getUserId(res);
+            const grants = Array.isArray(req.body?.grants) ? req.body.grants : [];
+            const updated = await connectionsService.updatePermissions(id, userId, grants);
+            res.json({ success: true, data: updated });
         } catch (err) {
             next(err);
         }

@@ -20,9 +20,9 @@ import {
   SegmentEligibility,
   ExecutionPoint,
   EligibilityAnalysis,
-} from './PushdownEligibilityEngine';
-import { ExecutionPointStateManager, ExecutionPointSwitchImpact } from './ExecutionPointState';
-import { TransformSequence } from '../../../transformations/ir';
+} from '@/transformations/pushdown/PushdownEligibilityEngine';
+import { ExecutionPointStateManager, ExecutionPointSwitchImpact } from '@/transformations/pushdown/ExecutionPointState';
+import { TransformSequence } from '@/transformations/ir';
 
 interface ExecutionPointPanelProps {
   analysis: EligibilityAnalysis;

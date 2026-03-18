@@ -1,24 +1,20 @@
 /**
  * ProjectWorkspace — tab content for a Project object.
- * Sub-tabs: Overview | Properties | Contents | History | Permissions | Activity
+ * Sub-tabs: Overview | Properties | Permissions
  */
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Save } from 'lucide-react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { markTabUnsaved, markTabSaved } from '@/store/slices/tabsSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
-import { ObjectHistoryGrid } from '@/components/shared/ObjectHistoryGrid';
-import { ObjectPermissionsGrid } from '@/components/shared/ObjectPermissionsGrid';
 import type { ProjectSubTab } from '@/types';
 import api from '@/services/api';
 
 const SUB_TABS = [
   { id: 'overview',    label: 'Overview',    shortcut: '1' },
   { id: 'properties',  label: 'Properties',  shortcut: '2' },
-  { id: 'history',     label: 'History',     shortcut: '3' },
-  { id: 'permissions', label: 'Permissions', shortcut: '4' },
-  { id: 'activity',    label: 'Activity',    shortcut: '5' },
+  { id: 'permissions', label: 'Permissions', shortcut: '3' },
 ] satisfies { id: ProjectSubTab; label: string; shortcut: string }[];
 
 type FormData = Record<string, unknown>;
@@ -33,6 +29,37 @@ type ProjectApiDto = {
   createdOn?: string;
   updated_dtm?: string;
   updatedOn?: string;
+};
+
+type ProjectMemberDto = {
+  userId?: string;
+  user_id?: string;
+  displayName?: string;
+  user_full_name?: string;
+  email?: string;
+  email_address?: string;
+  roleId?: string;
+  role_id?: string;
+  roleName?: string;
+  role_display_name?: string;
+  grantedOn?: string;
+  granted_dtm?: string;
+};
+
+type GovernanceUserDto = {
+  userId?: string;
+  user_id?: string;
+  displayName?: string;
+  user_full_name?: string;
+  email?: string;
+  email_address?: string;
+};
+
+type RoleDto = {
+  roleId?: string;
+  role_id?: string;
+  roleName?: string;
+  role_display_name?: string;
 };
 
 function mapApiProjectToForm(prev: FormData, d: ProjectApiDto): FormData {
@@ -51,6 +78,10 @@ function toProjectUpdatePayload(formData: FormData): { projectDisplayName: strin
     projectDisplayName: String(formData.name ?? '').trim(),
     projectDescText: String(formData.description ?? ''),
   };
+}
+
+function apiUserMessage(err: unknown, fallback: string): string {
+  return (err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? fallback;
 }
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -143,12 +174,9 @@ function PropertiesTab({ data, onChange }: { data: FormData; onChange: (f: strin
         <Field label="Project ID" field="projectId" ro />
         <Field label="Project Name *" field="name" />
         <Field label="Description" field="description" ta />
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="Default Environment" field="defaultEnvironment" ro />
-          <Field label="Owner" field="owner" ro />
+        <div className="rounded border border-slate-800 bg-slate-900/40 px-3 py-2 text-[12px] text-slate-400">
+          Additional metadata fields are hidden here until backend persistence is available.
         </div>
-        <Field label="Tags (read-only)" field="tags" ro />
-        <Field label="Labels (read-only)" field="labels" ro />
         <div className="border-t border-slate-800 pt-4 grid grid-cols-2 gap-4">
           <Field label="Created By" field="createdBy" ro />
           <Field label="Created On" field="createdOn" ro />
@@ -164,14 +192,248 @@ function PropertiesTab({ data, onChange }: { data: FormData; onChange: (f: strin
   );
 }
 
-// ─── Activity ─────────────────────────────────────────────────────────────
+// ─── Permissions ──────────────────────────────────────────────────────────
 
-function ActivityTab() {
+type ProjectMemberRow = {
+  userId: string;
+  displayName: string;
+  email: string;
+  roleId: string;
+  roleName: string;
+  grantedOn: string;
+};
+
+type UserOption = {
+  userId: string;
+  label: string;
+};
+
+type RoleOption = {
+  roleId: string;
+  roleName: string;
+};
+
+function ProjectPermissionsTab({ projectId }: { projectId: string }) {
+  const [members, setMembers] = useState<ProjectMemberRow[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [roles, setRoles] = useState<RoleOption[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newUserId, setNewUserId] = useState('');
+  const [newRoleId, setNewRoleId] = useState('');
+
+  const load = useCallback(async () => {
+    if (!projectId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [membersRes, usersRes, rolesRes] = await Promise.all([
+        api.getProjectMembers(projectId),
+        api.getUsers(),
+        api.getRoles(),
+      ]);
+
+      const memberRows = ((membersRes.data?.data ?? membersRes.data) as ProjectMemberDto[]).map(row => {
+        const userId = String(row.userId ?? row.user_id ?? '');
+        const displayName = String(row.displayName ?? row.user_full_name ?? '').trim();
+        const email = String(row.email ?? row.email_address ?? '').trim();
+        return {
+          userId,
+          displayName: displayName || email || userId,
+          email,
+          roleId: String(row.roleId ?? row.role_id ?? ''),
+          roleName: String(row.roleName ?? row.role_display_name ?? '').trim() || 'Unknown role',
+          grantedOn: String(row.grantedOn ?? row.granted_dtm ?? ''),
+        };
+      }).filter(row => row.userId && row.roleId);
+
+      const userOptions = ((usersRes.data?.data ?? usersRes.data) as GovernanceUserDto[]).map(row => {
+        const userId = String(row.userId ?? row.user_id ?? '');
+        const displayName = String(row.displayName ?? row.user_full_name ?? '').trim();
+        const email = String(row.email ?? row.email_address ?? '').trim();
+        return {
+          userId,
+          label: displayName || email || userId,
+        };
+      }).filter(row => row.userId);
+
+      const roleOptions = ((rolesRes.data?.data ?? rolesRes.data) as RoleDto[]).map(row => {
+        const roleId = String(row.roleId ?? row.role_id ?? '');
+        const roleName = String(row.roleName ?? row.role_display_name ?? '').trim();
+        return {
+          roleId,
+          roleName: roleName || roleId,
+        };
+      }).filter(row => row.roleId);
+
+      setMembers(memberRows);
+      setUsers(userOptions);
+      setRoles(roleOptions);
+      setNewRoleId(prev => prev || roleOptions[0]?.roleId || '');
+    } catch (err: unknown) {
+      setError(apiUserMessage(err, 'Failed to load project permissions'));
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const memberUserIds = new Set(members.map(member => member.userId));
+  const availableUsers = users.filter(user => !memberUserIds.has(user.userId));
+
+  useEffect(() => {
+    if (!availableUsers.some(user => user.userId === newUserId)) {
+      setNewUserId(availableUsers[0]?.userId ?? '');
+    }
+  }, [availableUsers, newUserId]);
+
+  const mutate = async (run: () => Promise<void>) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await run();
+      await load();
+    } catch (err: unknown) {
+      setError(apiUserMessage(err, 'Permission update failed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addMember = async () => {
+    if (!newUserId || !newRoleId) return;
+    await mutate(async () => {
+      await api.addProjectMember(projectId, { userId: newUserId, roleId: newRoleId });
+      setShowAdd(false);
+    });
+  };
+
+  const removeMember = async (userId: string) => {
+    await mutate(async () => {
+      await api.removeProjectMember(projectId, userId);
+    });
+  };
+
+  const changeRole = async (userId: string, roleId: string) => {
+    await mutate(async () => {
+      await api.removeProjectMember(projectId, userId);
+      await api.addProjectMember(projectId, { userId, roleId });
+    });
+  };
+
   return (
-    <div className="flex-1 overflow-auto p-5">
-      <div className="flex flex-col items-center justify-center h-40 text-slate-600">
-        <p className="text-sm">Activity log is not yet available for this project.</p>
+    <div className="flex-1 overflow-auto p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-400">Project members and their roles</div>
+        <button
+          type="button"
+          onClick={() => setShowAdd(v => !v)}
+          disabled={saving || availableUsers.length === 0 || roles.length === 0}
+          className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-[12px] text-white"
+        >
+          Add Member
+        </button>
       </div>
+
+      {error && (
+        <div className="rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">
+          {error}
+        </div>
+      )}
+
+      {showAdd && (
+        <div className="rounded border border-slate-700 bg-slate-900/50 p-3 flex items-center gap-2">
+          <select
+            value={newUserId}
+            onChange={e => setNewUserId(e.target.value)}
+            className="flex-1 h-8 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200"
+          >
+            {availableUsers.map(user => (
+              <option key={user.userId} value={user.userId}>{user.label}</option>
+            ))}
+          </select>
+          <select
+            value={newRoleId}
+            onChange={e => setNewRoleId(e.target.value)}
+            className="h-8 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200"
+          >
+            {roles.map(role => (
+              <option key={role.roleId} value={role.roleId}>{role.roleName}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => { void addMember(); }}
+            className="h-8 px-3 rounded bg-blue-600 hover:bg-blue-500 text-[12px] text-white"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAdd(false)}
+            className="h-8 px-3 rounded border border-slate-600 text-[12px] text-slate-300"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-[12px] text-slate-400">Loading permissions…</div>
+      ) : (
+        <div className="rounded border border-slate-700 overflow-hidden">
+          <table className="w-full text-[12px]">
+            <thead className="bg-slate-800/70 text-slate-400">
+              <tr>
+                <th className="px-3 py-2 text-left">Member</th>
+                <th className="px-3 py-2 text-left">Email</th>
+                <th className="px-3 py-2 text-left">Role</th>
+                <th className="px-3 py-2 text-left">Granted</th>
+                <th className="px-3 py-2 text-right"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {members.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-5 text-center text-slate-500">No project members assigned.</td>
+                </tr>
+              )}
+              {members.map(member => (
+                <tr key={`${member.userId}:${member.roleId}`} className="bg-slate-900/30">
+                  <td className="px-3 py-2 text-slate-200">{member.displayName}</td>
+                  <td className="px-3 py-2 text-slate-400">{member.email || '—'}</td>
+                  <td className="px-3 py-2">
+                    <select
+                      value={member.roleId}
+                      onChange={e => { void changeRole(member.userId, e.target.value); }}
+                      disabled={saving}
+                      className="h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 disabled:opacity-50"
+                    >
+                      {roles.map(role => (
+                        <option key={role.roleId} value={role.roleId}>{role.roleName}</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-3 py-2 text-slate-400">{member.grantedOn || '—'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      type="button"
+                      onClick={() => { void removeMember(member.userId); }}
+                      disabled={saving}
+                      className="text-[11px] text-red-300 hover:text-red-200 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -181,7 +443,8 @@ function ActivityTab() {
 export function ProjectWorkspace({ tabId }: { tabId: string }) {
   const dispatch    = useAppDispatch();
   const tab         = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
-  const subTab      = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'overview') as ProjectSubTab;
+  const selectedSubTab = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'overview') as ProjectSubTab;
+  const subTab = SUB_TABS.some(t => t.id === selectedSubTab) ? selectedSubTab : 'overview';
   const projectId   = tab?.objectId ?? '';
   const projectName = tab?.objectName ?? 'Project';
 
@@ -192,8 +455,6 @@ export function ProjectWorkspace({ tabId }: { tabId: string }) {
     status: 'draft',
     version: '1',
     lockState: 'Unlocked',
-    defaultEnvironment: 'Development',
-    tags: '',
     createdBy: '—', createdOn: '—', updatedBy: '—', updatedOn: '—',
     lastOpenedBy: '—', lastOpenedOn: '—',
     folderCount: 0, pipelineCount: 0, orchestratorCount: 0, connectionCount: 0, memberCount: 0,
@@ -270,9 +531,7 @@ export function ProjectWorkspace({ tabId }: { tabId: string }) {
 
       {subTab === 'overview'    && <OverviewTab data={formData} />}
       {subTab === 'properties'  && <PropertiesTab data={formData} onChange={handleChange} />}
-      {subTab === 'history'     && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} /></div>}
-      {subTab === 'permissions' && <div className="flex-1 overflow-hidden"><ObjectPermissionsGrid rows={[]} /></div>}
-      {subTab === 'activity'    && <ActivityTab />}
+      {subTab === 'permissions' && <ProjectPermissionsTab projectId={projectId} />}
     </div>
   );
 }

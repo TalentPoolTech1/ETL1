@@ -23,7 +23,17 @@ export interface Pipeline {
 
 export interface Node {
   id: string;
-  type: 'source' | 'transform' | 'target' | 'join' | 'aggregate' | 'filter' | 'custom';
+  type:
+    | 'source'
+    | 'transform'
+    | 'target'
+    | 'join'
+    | 'aggregate'
+    | 'aggregation'
+    | 'filter'
+    | 'custom'
+    | 'custom_sql'
+    | 'union';
   name: string;
   x: number;
   y: number;
@@ -33,6 +43,9 @@ export interface Node {
   inputs: Port[];
   outputs: Port[];
   version: number;
+  createdAt?: string;
+  updatedAt?: string;
+  isDragging?: boolean;
 }
 
 export interface Port {

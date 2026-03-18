@@ -160,8 +160,8 @@ function FormField({ def, value, onChange }: { def: FieldDef; value: string; onC
   const inputType = def.isSecret && !show ? 'password' : (s.type === 'integer' || s.type === 'number' ? 'number' : 'text');
 
   return (
-    <div>
-      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400 mb-1.5">
+    <div className="space-y-1">
+      <label className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
         {label}
         {def.required && <span className="text-red-400">*</span>}
         {def.isSecret && (
@@ -197,7 +197,7 @@ function FormField({ def, value, onChange }: { def: FieldDef; value: string; onC
         )}
       </div>
       {s.description && !s.enum && (
-        <p className="mt-1 text-[11px] text-slate-600">{s.description}</p>
+        <p className="text-[10px] text-slate-600 leading-tight">{s.description}</p>
       )}
     </div>
   );
@@ -230,7 +230,7 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
 
   return (
     <form onSubmit={submit} className="flex flex-col max-h-[560px]">
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
 
         {/* Technology badge */}
         <div className={`flex items-center gap-3 p-3 rounded-lg border ${p.border} ${p.bg}`}>
@@ -247,8 +247,8 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
         </div>
 
         {/* Connection name */}
-        <div>
-          <label className="block text-xs font-medium text-slate-400 mb-1.5">
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-slate-400">
             Connection name <span className="text-red-400">*</span>
           </label>
           <input
@@ -312,7 +312,7 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
 
 export function CreateConnectionDialog() {
   const dispatch          = useAppDispatch();
-  const { connectorTypes } = useAppSelector(s => s.connections);
+  const { connectorTypes, technologies, preselectedTechCode } = useAppSelector(s => s.connections);
   const [typesLoading, setTypesLoading] = useState(false);
   const [selected, setSelected]         = useState<ConnectorType | null>(null);
   const [saving, setSaving]             = useState(false);
@@ -324,6 +324,16 @@ export function CreateConnectionDialog() {
       dispatch(fetchConnectorTypes()).finally(() => setTypesLoading(false));
     }
   }, [dispatch, connectorTypes.length]);
+
+  // Auto-select the technology when preselectedTechCode is provided
+  useEffect(() => {
+    if (preselectedTechCode && connectorTypes.length > 0 && !selected) {
+      const match = connectorTypes.find(
+        t => t.typeCode.toUpperCase() === preselectedTechCode.toUpperCase(),
+      );
+      if (match) setSelected(match);
+    }
+  }, [preselectedTechCode, connectorTypes, selected]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -344,12 +354,17 @@ export function CreateConnectionDialog() {
     if (!selected) return;
     setSaving(true);
     setError(null);
+    // Resolve technologyId from technologies list (match by techCode = typeCode)
+    const tech = technologies.find(
+      t => t.techCode.toUpperCase() === selected.typeCode.toUpperCase(),
+    );
     try {
       await dispatch(createConnector({
         connectorDisplayName: displayName,
         connectorTypeCode:    selected.typeCode,
-        connConfig:           config,
-        connSecrets:          secrets,
+        config,
+        secrets,
+        technologyId: tech?.techId ?? null,
       })).unwrap();
     } catch (err: any) {
       setError(err instanceof Error ? err.message : (err?.userMessage ?? 'Failed to create connection'));

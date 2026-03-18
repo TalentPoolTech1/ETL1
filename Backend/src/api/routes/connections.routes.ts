@@ -19,6 +19,7 @@ import { Router } from 'express';
 import { ConnectionsController } from '../controllers/connections.controller';
 import { ConnectorRegistry } from '../../connectors/ConnectorRegistry';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
+import { requirePermission } from '../middleware/rbac.middleware';
 
 const router = Router();
 const ctrl = new ConnectionsController();
@@ -31,7 +32,7 @@ router.use(userIdMiddleware);
 // ---------------------------------------------------------------------------
 
 /** Returns all registered connector types with their schemas for the dynamic UI form */
-router.get('/types', (_req, res) => {
+router.get('/types', requirePermission('CONNECTION_VIEW'), (_req, res) => {
     const types = ConnectorRegistry.getRegisteredTypeCodes().map(code => {
         const plugin = ConnectorRegistry.get(code)!;
         return {
@@ -50,25 +51,29 @@ router.get('/types', (_req, res) => {
 // ---------------------------------------------------------------------------
 // CRUD
 // ---------------------------------------------------------------------------
-router.post('/',    (req, res, next) => ctrl.create(req, res, next));
-router.get('/',     (req, res, next) => ctrl.list(req, res, next));
-router.post('/test', (req, res, next) => ctrl.testConnectionConfig(req, res, next));
-router.get('/:id',  (req, res, next) => ctrl.getById(req, res, next));
-router.put('/:id',  (req, res, next) => ctrl.update(req, res, next));
-router.delete('/:id', (req, res, next) => ctrl.delete(req, res, next));
+router.post('/',     requirePermission('CONNECTION_CREATE'), (req, res, next) => ctrl.create(req, res, next));
+router.get('/',      requirePermission('CONNECTION_VIEW'),   (req, res, next) => ctrl.list(req, res, next));
+router.post('/test', requirePermission('CONNECTION_VIEW'),   (req, res, next) => ctrl.testConnectionConfig(req, res, next));
+router.get('/:id',   requirePermission('CONNECTION_VIEW'),   (req, res, next) => ctrl.getById(req, res, next));
+router.put('/:id',   requirePermission('CONNECTION_EDIT'),   (req, res, next) => ctrl.update(req, res, next));
+router.delete('/:id', requirePermission('CONNECTION_DELETE'), (req, res, next) => ctrl.delete(req, res, next));
 
 // ---------------------------------------------------------------------------
 // Test & Health
 // ---------------------------------------------------------------------------
-router.post('/:id/test',   (req, res, next) => ctrl.testConnection(req, res, next));
-router.get('/:id/health',  (req, res, next) => ctrl.getHealth(req, res, next));
+router.post('/:id/test',  requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.testConnection(req, res, next));
+router.get('/:id/health', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.getHealth(req, res, next));
+router.get('/:id/usage', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.getUsage(req, res, next));
+router.get('/:id/history', requirePermission('AUDIT_VIEW'), (req, res, next) => ctrl.getHistory(req, res, next));
+router.get('/:id/permissions', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.getPermissions(req, res, next));
+router.put('/:id/permissions', requirePermission('CONNECTION_EDIT'), (req, res, next) => ctrl.updatePermissions(req, res, next));
 
 // ---------------------------------------------------------------------------
 // Metadata browsing (lazy-load hierarchy for Metadata Service)
 // ---------------------------------------------------------------------------
-router.get('/:id/databases',           (req, res, next) => ctrl.listDatabases(req, res, next));
-router.get('/:id/schemas',             (req, res, next) => ctrl.listSchemas(req, res, next));
-router.get('/:id/tables',              (req, res, next) => ctrl.listTables(req, res, next));
-router.get('/:id/tables/:table',       (req, res, next) => ctrl.describeTable(req, res, next));
+router.get('/:id/databases', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.listDatabases(req, res, next));
+router.get('/:id/schemas', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.listSchemas(req, res, next));
+router.get('/:id/tables', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.listTables(req, res, next));
+router.get('/:id/tables/:table', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.describeTable(req, res, next));
 
 export default router;

@@ -17,6 +17,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db/connection';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
+import { requirePermission } from '../middleware/rbac.middleware';
 
 const router = Router();
 router.use(userIdMiddleware);
@@ -33,7 +34,7 @@ async function setSession(client: any, userId: string) {
 
 // ─── KPIs ──────────────────────────────────────────────────────────────────────
 
-router.get('/kpis', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/kpis', requirePermission('AUDIT_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { projectId, dateFrom, dateTo } = req.query;
@@ -44,30 +45,10 @@ router.get('/kpis', async (req: Request, res: Response, next: NextFunction) => {
       const from  = (dateFrom as string) ?? today;
       const to    = (dateTo   as string) ?? today;
 
-      // Parameterised — no string interpolation to prevent SQL injection
-      const kpiParams: unknown[] = [from, to];
-      const projectWhere = projectId ? 'AND p.project_id = $3::uuid' : '';
-      if (projectId) kpiParams.push(String(projectId));
-
-      const r = await client.query(`
-        SELECT
-          COUNT(*)                                                            AS total_today,
-          COUNT(*) FILTER (WHERE pr.run_status_code = 'RUNNING')             AS running_now,
-          COUNT(*) FILTER (WHERE pr.run_status_code = 'SUCCESS')::float
-            / NULLIF(COUNT(*), 0) * 100                                      AS success_rate_today,
-          COUNT(*) FILTER (WHERE pr.run_status_code = 'FAILED')              AS failed_today,
-          AVG(pr.run_duration_ms) FILTER (WHERE pr.run_status_code = 'SUCCESS') AS avg_duration_ms_today,
-          COUNT(*) FILTER (WHERE pr.sla_status_code = 'BREACHED')            AS sla_breaches_today,
-          COALESCE(
-            SUM(COALESCE(pr.bytes_read_num,0) + COALESCE(pr.bytes_written_num,0))::float / 1e9,
-            0
-          )                                                                   AS data_volume_gb_today,
-          (SELECT COUNT(*) FROM catalog.pipelines p2 WHERE p2.active_version_id IS NOT NULL ${projectId ? 'AND p2.project_id = $3::uuid' : ''}) AS active_pipelines
-        FROM execution.pipeline_runs pr
-        LEFT JOIN catalog.pipelines p ON p.pipeline_id = pr.pipeline_id
-        WHERE DATE(COALESCE(pr.start_dtm, pr.created_dtm)) BETWEEN $1 AND $2
-        ${projectWhere}
-      `, kpiParams);
+      const r = await client.query(
+        `SELECT * FROM execution.fn_get_execution_kpis($1::date, $2::date, $3::uuid)`,
+        [from, to, projectId ? String(projectId) : null],
+      );
 
       const row = r.rows[0] ?? {};
       return {
@@ -88,7 +69,7 @@ router.get('/kpis', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Pipeline runs list ────────────────────────────────────────────────────────
 
-router.get('/pipeline-runs', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/pipeline-runs', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const {
@@ -103,62 +84,39 @@ router.get('/pipeline-runs', async (req: Request, res: Response, next: NextFunct
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
 
-      const conditions: string[] = [];
-      const params: unknown[] = [];
-      let idx = 1;
-
-      const add = (cond: string, val: unknown) => {
-        conditions.push(cond.replace('?', `$${idx++}`));
-        params.push(val);
-      };
-
-      if (pipelineId)            add(`pr.pipeline_id = ?::uuid`, pipelineId);
-      if (projectId)             add(`p.project_id   = ?::uuid`, projectId);
-      if (status)                add(`pr.run_status_code   = ?`, status);
-      if (triggerType)           add(`pr.trigger_type_code = ?`, triggerType);
-      if (dateFrom)              add(`DATE(pr.start_dtm) >= ?::date`, dateFrom);
-      if (dateTo)                add(`DATE(pr.start_dtm) <= ?::date`, dateTo);
-      if (search)                add(`p.pipeline_display_name ILIKE ?`, `%${search}%`);
-      if (myJobsOnly === 'true') add(`pr.triggered_by_user_id = ?::uuid`, userId);
-
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-
       const [data, count] = await Promise.all([
-        client.query(`
-          SELECT
-            pr.pipeline_run_id,
-            p.pipeline_display_name                                          AS pipeline_name,
-            pr.pipeline_id,
-            p.project_id,
-            proj.project_display_name                                        AS project_name,
-            COALESCE(pv.release_tag_label, 'v' || pv.version_num_seq::text) AS version_label,
-            pr.run_status_code     AS run_status,
-            pr.trigger_type_code   AS trigger_type,
-            u.user_full_name       AS submitted_by,
-            pr.start_dtm,
-            pr.end_dtm,
-            pr.run_duration_ms     AS duration_ms,
-            pr.rows_processed_num  AS rows_processed,
-            pr.bytes_read_num      AS bytes_read,
-            pr.bytes_written_num   AS bytes_written,
-            pr.error_message_text  AS error_message,
-            pr.retry_count_num     AS retry_count,
-            pr.sla_status_code     AS sla_status
-          FROM execution.pipeline_runs pr
-          LEFT JOIN catalog.pipelines p         ON p.pipeline_id   = pr.pipeline_id
-          LEFT JOIN catalog.pipeline_versions pv ON pv.version_id  = pr.version_id
-          LEFT JOIN etl.projects proj            ON proj.project_id = p.project_id
-          LEFT JOIN etl.users u                  ON u.user_id       = pr.triggered_by_user_id
-          ${where}
-          ORDER BY pr.start_dtm DESC NULLS LAST, pr.created_dtm DESC
-          LIMIT ${limit} OFFSET ${offset}
-        `, params),
-        client.query(`
-          SELECT COUNT(*) AS cnt
-          FROM execution.pipeline_runs pr
-          LEFT JOIN catalog.pipelines p ON p.pipeline_id = pr.pipeline_id
-          ${where}
-        `, params),
+        client.query(
+          `SELECT * FROM execution.fn_list_pipeline_runs(
+             $1::uuid, $2::uuid, $3, $4, $5::date, $6::date, $7, $8, $9::uuid, $10, $11
+           )`,
+          [
+            pipelineId  ? String(pipelineId)  : null,
+            projectId   ? String(projectId)   : null,
+            status      ? String(status)      : null,
+            triggerType ? String(triggerType) : null,
+            dateFrom    ? String(dateFrom)    : null,
+            dateTo      ? String(dateTo)      : null,
+            search      ? String(search)      : null,
+            myJobsOnly === 'true',
+            userId,
+            limit,
+            offset,
+          ],
+        ),
+        client.query(
+          `SELECT execution.fn_count_pipeline_runs($1::uuid, $2::uuid, $3, $4, $5::date, $6::date, $7, $8, $9::uuid) AS cnt`,
+          [
+            pipelineId  ? String(pipelineId)  : null,
+            projectId   ? String(projectId)   : null,
+            status      ? String(status)      : null,
+            triggerType ? String(triggerType) : null,
+            dateFrom    ? String(dateFrom)    : null,
+            dateTo      ? String(dateTo)      : null,
+            search      ? String(search)      : null,
+            myJobsOnly === 'true',
+            userId,
+          ],
+        ),
       ]);
 
       return {
@@ -193,55 +151,20 @@ router.get('/pipeline-runs', async (req: Request, res: Response, next: NextFunct
 
 // ─── Pipeline run detail ───────────────────────────────────────────────────────
 
-router.get('/pipeline-runs/:runId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/pipeline-runs/:runId', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const row = await db.transaction(async client => {
       await setSession(client, userId);
-      const r = await client.query(`
-        SELECT
-          pr.pipeline_run_id,
-          p.pipeline_display_name                                          AS pipeline_name,
-          proj.project_display_name                                        AS project_name,
-          COALESCE(pv.release_tag_label, 'v' || pv.version_num_seq::text) AS version_label,
-          pr.run_status_code     AS run_status,
-          pr.trigger_type_code   AS trigger_type,
-          u.user_full_name       AS submitted_by,
-          pr.start_dtm,
-          pr.end_dtm,
-          pr.run_duration_ms     AS duration_ms,
-          pr.rows_processed_num  AS rows_processed,
-          pr.bytes_read_num      AS bytes_read,
-          pr.bytes_written_num   AS bytes_written,
-          pr.error_message_text  AS error_message,
-          pr.retry_count_num     AS retry_count,
-          pr.sla_status_code     AS sla_status,
-          pr.external_engine_job_id AS spark_job_id,
-          pr.spark_ui_url_text   AS spark_ui_url
-        FROM execution.pipeline_runs pr
-        LEFT JOIN catalog.pipelines p         ON p.pipeline_id   = pr.pipeline_id
-        LEFT JOIN catalog.pipeline_versions pv ON pv.version_id  = pr.version_id
-        LEFT JOIN etl.projects proj            ON proj.project_id = p.project_id
-        LEFT JOIN etl.users u                  ON u.user_id       = pr.triggered_by_user_id
-        WHERE pr.pipeline_run_id = $1
-      `, [req.params.runId]);
-      
-      const nodesResult = await client.query(`
-        SELECT
-           node_run_id        AS "nodeRunId",
-           node_id_in_ir_text AS "nodeId",
-           node_display_name  AS "nodeName",
-           node_status_code   AS "runStatus",
-           start_dtm          AS "startDtm",
-           end_dtm            AS "endDtm",
-           rows_in_num        AS "rowsIn",
-           rows_out_num       AS "rowsOut",
-           error_message_text AS "errorMessage",
-           node_metrics_json  AS "metrics"
-         FROM execution.pipeline_node_runs
-         WHERE pipeline_run_id = $1
-         ORDER BY start_dtm NULLS LAST
-      `, [req.params.runId]);
+      const r = await client.query(
+        `SELECT * FROM execution.fn_get_pipeline_run_detail($1::uuid)`,
+        [req.params.runId],
+      );
+
+      const nodesResult = await client.query(
+        `SELECT * FROM execution.fn_get_pipeline_run_nodes_detail($1::uuid)`,
+        [req.params.runId],
+      );
       
       const outRow = r.rows[0] ?? null;
       if (outRow) outRow.nodes = nodesResult.rows;
@@ -274,7 +197,7 @@ router.get('/pipeline-runs/:runId', async (req: Request, res: Response, next: Ne
 
 // ─── Pipeline run logs ─────────────────────────────────────────────────────────
 
-router.get('/pipeline-runs/:runId/logs', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/pipeline-runs/:runId/logs', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const limit  = Math.min(parseInt(String(req.query['limit']  ?? 500)), 2000);
@@ -283,13 +206,8 @@ router.get('/pipeline-runs/:runId/logs', async (req: Request, res: Response, nex
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT created_dtm AS log_dtm, log_level_code AS log_level,
-                log_source_code AS log_source, log_message_text AS log_message
-         FROM execution.pipeline_run_logs
-         WHERE pipeline_run_id = $1
-         ORDER BY created_dtm ASC
-         LIMIT $2 OFFSET $3`,
-        [req.params.runId, limit, offset]
+        `SELECT * FROM execution.fn_get_pipeline_run_logs_paginated($1::uuid, NULL, $2, $3)`,
+        [req.params.runId, limit, offset],
       );
       return r.rows;
     });
@@ -299,27 +217,14 @@ router.get('/pipeline-runs/:runId/logs', async (req: Request, res: Response, nex
 
 // ─── Pipeline run nodes ────────────────────────────────────────────────────────
 
-router.get('/pipeline-runs/:runId/nodes', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/pipeline-runs/:runId/nodes', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT
-           node_run_id,
-           node_id_in_ir_text,
-           node_display_name,
-           node_status_code   AS run_status,
-           start_dtm,
-           end_dtm,
-           rows_in_num        AS rows_in,
-           rows_out_num       AS rows_out,
-           error_message_text AS error_message,
-           node_metrics_json  AS metrics
-         FROM execution.pipeline_node_runs
-         WHERE pipeline_run_id = $1
-         ORDER BY start_dtm NULLS LAST`,
-        [req.params.runId]
+        `SELECT * FROM execution.fn_get_pipeline_run_nodes_detail($1::uuid)`,
+        [req.params.runId],
       );
       return r.rows;
     });
@@ -329,26 +234,17 @@ router.get('/pipeline-runs/:runId/nodes', async (req: Request, res: Response, ne
 
 // ─── Retry pipeline run ────────────────────────────────────────────────────────
 
-router.post('/pipeline-runs/:runId/retry', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/pipeline-runs/:runId/retry', requirePermission('PIPELINE_RUN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const row = await db.transaction(async client => {
       await setSession(client, userId);
-      const existing = await client.query(
-        `SELECT pipeline_id, version_id, retry_count_num FROM execution.pipeline_runs WHERE pipeline_run_id = $1`,
-        [req.params.runId]
-      );
-      if (!existing.rows[0]) throw new Error('Run not found');
-      const orig = existing.rows[0];
       const r = await client.query(
-        `INSERT INTO execution.pipeline_runs
-           (pipeline_id, version_id, run_status_code, trigger_type_code,
-            triggered_by_user_id, retry_count_num)
-         VALUES ($1, $2, 'PENDING', 'MANUAL', $3::uuid, $4)
-         RETURNING pipeline_run_id`,
-        [orig.pipeline_id, orig.version_id, userId, (orig.retry_count_num ?? 0) + 1]
+        `CALL execution.pr_retry_pipeline_run($1::uuid, $2::uuid, null)`,
+        [req.params.runId, userId],
       );
-      return r.rows[0];
+      if (!r.rows[0]) throw new Error('Run not found');
+      return { pipeline_run_id: r.rows[0].p_new_run_id };
     });
     return res.status(202).json({ success: true, data: { pipelineRunId: row.pipeline_run_id } });
   } catch (err) { return next(err); }
@@ -356,13 +252,13 @@ router.post('/pipeline-runs/:runId/retry', async (req: Request, res: Response, n
 
 // ─── Cancel pipeline run ───────────────────────────────────────────────────────
 
-router.post('/pipeline-runs/:runId/cancel', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/pipeline-runs/:runId/cancel', requirePermission('PIPELINE_RUN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const result = await db.transaction(async client => {
       await setSession(client, userId);
       const existing = await client.query(
-        `SELECT run_status_code FROM execution.pipeline_runs WHERE pipeline_run_id = $1::uuid`,
+        `SELECT run_status_code FROM execution.fn_get_pipeline_run_detail($1::uuid)`,
         [req.params.runId]
       );
       if (!existing.rowCount) return { ok: false as const, status: 404 as const };
@@ -393,51 +289,37 @@ router.post('/pipeline-runs/:runId/cancel', async (req: Request, res: Response, 
 
 // ─── Orchestrator runs list ────────────────────────────────────────────────────
 
-router.get('/orchestrator-runs', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/orchestrator-runs', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
-    const { projectId, status, triggerType, page = '1', pageSize = '50' } = req.query;
+    const { projectId, orchestratorId, status, triggerType, page = '1', pageSize = '50' } = req.query;
     const limit  = Math.min(parseInt(String(pageSize)), 500);
     const offset = (parseInt(String(page)) - 1) * limit;
 
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
-      const conditions: string[] = [];
-      const params: unknown[] = [];
-      let idx = 1;
-      if (projectId)   { conditions.push(`o.project_id = $${idx++}::uuid`); params.push(projectId); }
-      if (status)      { conditions.push(`orch.run_status_code   = $${idx++}`); params.push(status); }
-      if (triggerType) { conditions.push(`orch.trigger_type_code = $${idx++}`); params.push(triggerType); }
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
       const [data, count] = await Promise.all([
-        client.query(`
-          SELECT
-            orch.orch_run_id,
-            o.orch_display_name       AS orchestrator_name,
-            orch.orch_id,
-            o.project_id,
-            proj.project_display_name AS project_name,
-            orch.run_status_code      AS run_status,
-            orch.trigger_type_code    AS trigger_type,
-            orch.start_dtm,
-            orch.end_dtm,
-            orch.run_duration_ms      AS duration_ms,
-            orch.error_message_text   AS error_message,
-            orch.retry_count_num      AS retry_count
-          FROM execution.orchestrator_runs orch
-          LEFT JOIN catalog.orchestrators o ON o.orch_id = orch.orch_id
-          LEFT JOIN etl.projects proj       ON proj.project_id = o.project_id
-          ${where}
-          ORDER BY orch.start_dtm DESC NULLS LAST, orch.created_dtm DESC
-          LIMIT ${limit} OFFSET ${offset}
-        `, params),
-        client.query(`
-          SELECT COUNT(*) AS cnt
-          FROM execution.orchestrator_runs orch
-          LEFT JOIN catalog.orchestrators o ON o.orch_id = orch.orch_id
-          ${where}
-        `, params),
+        client.query(
+          `SELECT * FROM execution.fn_list_orchestrator_runs($1::uuid, $2::uuid, $3, $4, $5, $6)`,
+          [
+            projectId      ? String(projectId)      : null,
+            orchestratorId ? String(orchestratorId) : null,
+            status      ? String(status)      : null,
+            triggerType ? String(triggerType) : null,
+            limit,
+            offset,
+          ],
+        ),
+        client.query(
+          `SELECT execution.fn_count_orchestrator_runs($1::uuid, $2::uuid, $3, $4) AS cnt`,
+          [
+            projectId      ? String(projectId)      : null,
+            orchestratorId ? String(orchestratorId) : null,
+            status      ? String(status)      : null,
+            triggerType ? String(triggerType) : null,
+          ],
+        ),
       ]);
 
       return {
@@ -466,81 +348,111 @@ router.get('/orchestrator-runs', async (req: Request, res: Response, next: NextF
 
 // ─── Orchestrator run detail ───────────────────────────────────────────────────
 
-router.get('/orchestrator-runs/:runId', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/orchestrator-runs/:runId', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
-    const row = await db.transaction(async client => {
+    const detail = await db.transaction(async client => {
       await setSession(client, userId);
-      const r = await client.query(`
-        SELECT
-          orch.orch_run_id,
-          orch.run_status_code      AS run_status,
-          orch.trigger_type_code    AS trigger_type,
-          orch.start_dtm,
-          orch.end_dtm,
-          orch.run_duration_ms      AS duration_ms,
-          orch.error_message_text   AS error_message,
-          orch.retry_count_num      AS retry_count,
-          o.orch_display_name       AS orchestrator_name,
-          o.project_id,
-          proj.project_display_name AS project_name,
-          u.user_full_name          AS submitted_by
-        FROM execution.orchestrator_runs orch
-        LEFT JOIN catalog.orchestrators o ON o.orch_id = orch.orch_id
-        LEFT JOIN etl.projects proj       ON proj.project_id = o.project_id
-        LEFT JOIN etl.users u             ON u.user_id       = orch.triggered_by_user_id
-        WHERE orch.orch_run_id = $1
-      `, [req.params.runId]);
-      return r.rows[0] ?? null;
+      const [detailResult, pipelineResult] = await Promise.all([
+        client.query(
+          `SELECT
+             orch_run_id,
+             orch_id,
+             orch_display_name,
+             project_id,
+             project_display_name,
+             run_status_code,
+             trigger_type_code,
+             triggered_by_user_id,
+             submitted_by_full_name,
+             start_dtm,
+             end_dtm,
+             run_duration_ms,
+             error_message_text,
+             retry_count_num,
+             env_display_name,
+             run_options_json,
+             created_dtm
+           FROM execution.fn_get_orchestrator_run_detail($1::uuid)`,
+          [req.params.runId],
+        ),
+        client.query(
+          `SELECT
+             pipeline_run_id,
+             pipeline_id,
+             pipeline_display_name,
+             dag_node_id_text,
+             execution_order_num,
+             run_status_code,
+             start_dtm,
+             end_dtm,
+             run_duration_ms,
+             error_message_text
+           FROM execution.fn_get_orchestrator_run_pipeline_map($1::uuid)`,
+          [req.params.runId],
+        ),
+      ]);
+
+      const row = detailResult.rows[0] ?? null;
+      if (!row) return null;
+      return {
+        ...row,
+        pipeline_runs: pipelineResult.rows.map((pipelineRow: any) => ({
+          pipelineRunId: pipelineRow.pipeline_run_id,
+          pipelineId: pipelineRow.pipeline_id,
+          pipelineName: pipelineRow.pipeline_display_name,
+          dagNodeId: pipelineRow.dag_node_id_text,
+          executionOrder: pipelineRow.execution_order_num,
+          runStatus: pipelineRow.run_status_code,
+          startDtm: pipelineRow.start_dtm,
+          endDtm: pipelineRow.end_dtm,
+          durationMs: pipelineRow.run_duration_ms,
+          errorMessage: pipelineRow.error_message_text,
+        })),
+      };
     });
-    if (!row) return res.status(404).json({ success: false, userMessage: 'Run not found' });
+    if (!detail) return res.status(404).json({ success: false, userMessage: 'Run not found' });
     return res.json({ success: true, data: {
-      pipelineRunId:  row.orch_run_id,
-      pipelineName:   row.orchestrator_name ?? 'Orchestrator',
-      projectName:    row.project_name,
-      versionLabel:   '',
-      runStatus:      row.run_status,
-      triggerType:    row.trigger_type,
-      submittedBy:    row.submitted_by,
-      startDtm:       row.start_dtm,
-      endDtm:         row.end_dtm,
-      durationMs:     row.duration_ms,
-      errorMessage:   row.error_message,
-      retryCount:     row.retry_count ?? 0,
-      slaStatus:      'N_A',
-      sparkJobId:     null,
-      sparkUiUrl:     null,
-      nodes:          [],
+      orchRunId:         detail.orch_run_id,
+      orchestratorId:    detail.orch_id,
+      orchestratorName:  detail.orch_display_name ?? 'Orchestrator',
+      projectId:         detail.project_id ?? null,
+      projectName:       detail.project_display_name ?? null,
+      runStatus:         detail.run_status_code ?? 'UNKNOWN',
+      triggerType:       detail.trigger_type_code ?? 'MANUAL',
+      submittedBy:       detail.submitted_by_full_name ?? null,
+      startDtm:          detail.start_dtm,
+      endDtm:            detail.end_dtm,
+      durationMs:        detail.run_duration_ms,
+      errorMessage:      detail.error_message_text,
+      retryCount:        detail.retry_count_num ?? 0,
+      environmentName:   detail.env_display_name ?? null,
+      options:           detail.run_options_json ?? null,
+      createdDtm:        detail.created_dtm,
+      pipelineRuns:      detail.pipeline_runs,
     }});
   } catch (err) { return next(err); }
 });
 
 // ─── Retry / Cancel orchestrator run ──────────────────────────────────────────
 
-router.post('/orchestrator-runs/:runId/retry', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/orchestrator-runs/:runId/retry', requirePermission('PIPELINE_RUN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const row = await db.transaction(async client => {
       await setSession(client, userId);
-      const existing = await client.query(
-        `SELECT orch_id, retry_count_num FROM execution.orchestrator_runs WHERE orch_run_id = $1`,
-        [req.params.runId]
-      );
-      if (!existing.rows[0]) throw new Error('Run not found');
       const r = await client.query(
-        `INSERT INTO execution.orchestrator_runs
-           (orch_id, run_status_code, trigger_type_code, triggered_by_user_id, retry_count_num)
-         VALUES ($1, 'PENDING', 'MANUAL', $2::uuid, $3)
-         RETURNING orch_run_id`,
-        [existing.rows[0].orch_id, userId, (existing.rows[0].retry_count_num ?? 0) + 1]
+        `CALL execution.pr_retry_orchestrator_run($1::uuid, $2::uuid, null)`,
+        [req.params.runId, userId],
       );
-      return r.rows[0];
+      if (!r.rows[0]) throw new Error('Run not found');
+      return { orch_run_id: r.rows[0].p_new_run_id };
     });
     return res.status(202).json({ success: true, data: { orchRunId: row.orch_run_id } });
   } catch (err) { return next(err); }
 });
 
-router.post('/orchestrator-runs/:runId/cancel', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/orchestrator-runs/:runId/cancel', requirePermission('PIPELINE_RUN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const result = await db.transaction(async client => {

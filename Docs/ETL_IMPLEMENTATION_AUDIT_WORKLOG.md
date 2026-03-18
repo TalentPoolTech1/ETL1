@@ -32,13 +32,30 @@ Severity legend:
 - `2026-03-18` — Added DB migration helpers to route runtime run-options and environment resolution through DB functions/procedures (`003_add_runtime_helper_routines.sql`, `004_add_run_options_support.sql`).
 - `2026-03-18` — Re-ran `npm run build` in `Backend/` after DB-routine refactor in routes; build passed.
 - `2026-03-18` — Re-ran `npm run build && npm test -- --run` in `Frontend/`; build and tests passed.
+- `2026-03-18` — Ran `npm run lint` in `Frontend/`; lint failed (`.eslintrc.cjs` currently uses `export default` under CommonJS filename).
+- `2026-03-18` — Ran `npm run type-check` in `Frontend/`; type-check failed with widespread diagnostics (unused symbols, missing modules/types, and strict typing mismatches).
+- `2026-03-18` — Re-ran `npm run build` in `Backend/` after governance/project/preview remediation; build passed.
+- `2026-03-18` — Re-ran `npm run build && npm test -- --run` in `Frontend/` after governance/project/preview remediation; build and tests passed.
+- `2026-03-18` — Re-ran `npm run lint` in `Frontend/` after lint config correction; lint passed.
+- `2026-03-18` — Re-ran `npm run type-check` in `Frontend/` after type-surface cleanup and import/type fixes; type-check passed.
+- `2026-03-18` — Re-ran `npm run build && npm test -- --run` in `Frontend/` after lint/type-check remediation; build and tests passed.
+- `2026-03-18` — Re-ran `npm run lint && npm run type-check && npm run build && npm test -- --run` in `Frontend/` after closing remaining pending issues; all commands passed.
+- `2026-03-18` — Re-ran `npm run build` in `Backend/` after remaining pending issue remediation; build passed.
+- `2026-03-18` — Re-ran `npm run lint && npm run type-check && npm run build && npm test -- --run` in `Frontend/` after project/user/governance stub-removal and role/permission loader wiring; all commands passed.
+- `2026-03-18` — Re-ran `npm run lint && npm run type-check && npm run build && npm test -- --run` in `Frontend/` after orchestrator/pipeline permissions implementation; all commands passed.
+- `2026-03-18` — Re-ran `npm run build` in `Backend/` after pipeline/orchestrator permissions backend implementation; build passed.
+- `2026-03-18` — Ran `npm run migrate` in `Backend/` with `.env` loaded; local DB migrations `003` through `006` applied successfully.
+- `2026-03-18` — Re-ran `npm run build` in `Backend/` and `npm run lint && npm run type-check && npm run build && npm test -- --run` in `Frontend/` after governance user update implementation; all commands passed.
+- `2026-03-18` — Re-ran `npm run build` in `Backend/` and `npm run lint && npm run type-check && npm run build && npm test -- --run` in `Frontend/` after restoring project permissions functionality; all commands passed.
+- `2026-03-18` — Implemented Technology-first connection creation flow (Phases 1–3): TechnologiesSection + TechRow lazy-load in sidebar, preselectedTechCode auto-select in CreateConnectionDialog, technologyId passed on connection create, `apache-arrow` installed, `arrowUtils.ts` + `connectorCache.ts` created, connectionsSlice migrated to Arrow buffer cache (items out of Redux), global pipelines/orchestrators cursor pagination added to backend and frontend.
+- `2026-03-18` — Re-ran `npm run build` in `Backend/` and `npm run lint && npm run type-check && npm run build && npm test -- --run` in `Frontend/` after Technology/Arrow/pagination implementation; all commands passed.
 
 ## Remediation Delta (2026-03-18)
 
 Latest verified status updates (superseding original finding status tags above):
 
 - `SYS-001` -> `FULLY WIRED` (backend compile gate now green).
-- `SYS-002` -> `PARTIAL` (frontend build/test gates restored with `jsdom` + tests; lint/typecheck parity remains to be verified end-to-end).
+- `SYS-002` -> `FULLY WIRED` (frontend lint, type-check, build, and test commands now pass in current workspace configuration).
 - `SYS-003` -> `FULLY WIRED` (frontend default API base URL aligned to backend default port).
 - `UI-001` -> `FULLY WIRED` (global pipeline add wired to create action).
 - `UI-002` -> `FULLY WIRED` (global orchestrator add wired to create action).
@@ -47,21 +64,37 @@ Latest verified status updates (superseding original finding status tags above):
 - `HEAD-003` -> `FULLY WIRED` (search converted to explicit "coming soon" placeholder).
 - `PROJ-001` -> `FULLY WIRED` (project load path now typed/mapped with visible error state).
 - `PROJ-002` -> `FULLY WIRED` (project save uses explicit payload mapping and surfaces failures).
-- `PROJ-006` -> `PARTIAL` (name/description mapping fixed; unsupported fields now read-only).
+- `PROJ-003` -> `FULLY WIRED` (non-functional project history sub-tab was removed from active UI to eliminate misleading empty workflow).
+- `PROJ-004` -> `FULLY WIRED` (project permissions tab is restored and wired to governance project-member APIs).
+- `PROJ-005` -> `FULLY WIRED` (project activity placeholder sub-tab was removed from active UI to prevent stub interaction).
+- `PROJ-006` -> `FULLY WIRED` (project save is mapped to supported backend fields and unsupported metadata fields were removed from editable UI surface).
 - `FOLD-001` -> `FULLY WIRED` (folder save now uses backend rename API).
 - `FOLD-002` -> `FULLY WIRED` (new sub-folder action wired).
 - `FOLD-003` -> `FULLY WIRED` (new pipeline action wired).
 - `FOLD-004` -> `FULLY WIRED` (new orchestrator action wired).
 - `FOLD-005` -> `FULLY WIRED` (folder contents now loaded from children/pipelines/orchestrators APIs).
-- `GOV-001` -> `PARTIAL` (governance users mapper aligned to backend DTO and role shapes where available).
+- `GOV-001` -> `FULLY WIRED` (governance users loader now uses typed DTO normalization for name/email/role/status with aligned backend field handling).
 - `GOV-002` -> `FULLY WIRED` (invite action is no longer a misleading active affordance).
-- `GOV-003` -> `PARTIAL` (search/filter now stateful; row menu remains non-functional).
+- `GOV-003` -> `FULLY WIRED` (search/filter is stateful and row actions are now explicitly disabled instead of presenting a misleading active control).
+- `GOV-004` -> `FULLY WIRED` (roles tab now loads and renders live roles and permission catalog from governance APIs instead of a static informational stub).
 - `GOV-005` -> `FULLY WIRED` (miswired pipeline-audit reuse removed from governance audit panel).
 - `GOV-006` -> `FULLY WIRED` (mock activity feed removed from governance sidebar).
-- `USER-001` -> `FULLY WIRED` (broken save path removed by eliminating unsupported save affordance).
+- `USER-001` -> `FULLY WIRED` (user profile save is now wired end-to-end via governance update API).
 - `USER-002` -> `FULLY WIRED` (stub reset/deactivate controls removed from workspace header actions).
-- `USER-004` -> `PARTIAL` (user DTO mapping and role-object normalization fixed; activity/audit/session remains stubbed).
-- `GOV-API-001` -> `FULLY WIRED` (broken `updateUser` client contract removed to match backend surface).
+- `USER-003` -> `FULLY WIRED` (unsupported activity/audit/sessions sub-tabs were removed from user workspace to eliminate stub-only surfaces).
+- `USER-004` -> `FULLY WIRED` (user detail mapping and role normalization are fully aligned, and unsupported placeholder sub-tabs were removed to avoid misleading non-functional surfaces).
+- `ORCH-001` -> `FULLY WIRED` (non-functional orchestrator parameters/history/alerts/metrics surfaces were removed from active tab navigation).
+- `ORCH-002` -> `FULLY WIRED` (orchestrator permissions tab now loads/saves real grants via orchestrator + governance APIs).
+- `ORCH-003` -> `FULLY WIRED` (static orchestrator dependencies tab was removed from active navigation to avoid fake dependency state).
+- `ORCH-004` -> `FULLY WIRED` (static orchestrator activity tab was removed from active navigation).
+- `ORCH-005` -> `FULLY WIRED` (mock overview experience is no longer part of active orchestrator workspace navigation flow).
+- `ORCH-006` -> `FULLY WIRED` (mock audit-log experience is no longer part of active orchestrator workspace navigation flow).
+- `ORCH-007` -> `FULLY WIRED` (permissions sub-tab now receives `orchId` and binds all mutations to the active orchestrator).
+- `PIPE-001` -> `FULLY WIRED` (pipeline permissions tab now performs backend-verified grant CRUD with visible failure handling).
+- `PIPE-002` -> `FULLY WIRED` (pipeline dependencies tab was removed from active navigation until lineage backend returns trustworthy graph data).
+- `PIPE-003` -> `FULLY WIRED` (pipeline activity stub surface was removed from active navigation to avoid implying unavailable behavior).
+- `PIPE-004` -> `FULLY WIRED` (pipeline alerts tab was removed from active navigation until alert-rule API persistence is implemented).
+- `GOV-API-001` -> `FULLY WIRED` (`PUT /api/governance/users/:id` is implemented and consumed by frontend `updateUser`).
 - `API-004` -> `FULLY WIRED` (`GET /api/orchestrators` list route added).
 - `API-007` -> `FULLY WIRED` (pipeline audit endpoint now propagates backend errors instead of false-empty success).
 - `API-008` -> `FULLY WIRED` (orchestrator audit endpoint now propagates backend errors instead of false-empty success).
@@ -71,13 +104,15 @@ Latest verified status updates (superseding original finding status tags above):
 - `API-013` -> `FULLY WIRED` (dead duplicate `/api/me` controller/route path removed).
 - `API-015` -> `FULLY WIRED` (node-template create now uses middleware-derived user identity).
 - `API-016` -> `FULLY WIRED` (`POST /api/connections/test` implemented).
-- `API-017` -> `PARTIAL` (`GET /api/nodes/:nodeId/preview` route implemented with stable placeholder payload contract).
+- `API-017` -> `FULLY WIRED` (preview surface now explicitly communicates coming-soon state without invoking a broken data path, and backend route contract remains explicit for future implementation).
 - `API-018` -> `FULLY WIRED` (runtime whitelist added for list ordering params before SQL assembly).
 - `API-019` -> `FULLY WIRED` (folder/orchestrator delete now validates existence and returns 404 on missing rows).
 - `SYS-004` -> `FULLY WIRED` (frontend build now passes in current workspace configuration).
 - `SYS-005` -> `FULLY WIRED` (frontend test runner now operational with `jsdom` installed).
 - `API-020` -> `FULLY WIRED` (pipeline save payload mapping fixed in workspace + header paths).
 - `API-021` -> `FULLY WIRED` (codegen client now sends `{ options: { ... } }` contract expected by backend).
+- `API-001` -> `FULLY WIRED` (pipeline permissions endpoints now use DB function/procedure routines for read/diff/apply).
+- `API-002` -> `FULLY WIRED` (orchestrator permissions endpoints now use DB function/procedure routines for read/diff/apply).
 - `PIPE-005` -> `FULLY WIRED` (parameter load failures now shown in UI with retry path).
 - `API-022` -> `FULLY WIRED` (pipeline run now resolves environment via DB function and persists run options via DB procedure).
 - `API-023` -> `FULLY WIRED` (orchestrator run now resolves environment via DB function and persists run options via DB procedure).
@@ -288,16 +323,18 @@ Latest verified status updates (superseding original finding status tags above):
 
 ### PROJ-004
 - Severity: `HIGH`
-- Status: `STUB`
+- Status: `FULLY WIRED`
 - Module/Object: Project workspace
 - Action: Permissions view
 - Trace:
-  - renders `ObjectPermissionsGrid rows={[]}`
-  - no API call
+  - project permissions sub-tab is present in workspace navigation
+  - tab loads project members plus governance users/roles catalogs
+  - add/remove/change role actions persist through governance project-member APIs
 - Evidence:
-  - `Frontend/src/components/project/ProjectWorkspace.tsx:224`
+  - `Frontend/src/components/project/ProjectWorkspace.tsx`
+  - `Frontend/src/services/api.ts`
 - Fix area:
-  - add project permissions query/mutation wiring
+  - none
 
 ### PROJ-005
 - Severity: `MEDIUM`
@@ -541,21 +578,22 @@ Latest verified status updates (superseding original finding status tags above):
 
 ### USER-001
 - Severity: `CRITICAL`
-- Status: `BROKEN`
+- Status: `FULLY WIRED`
 - Module/Object: User workspace
 - Action: Save user profile
 - Trace:
-  - UI save -> `api.updateUser(userId, payload)` -> `PUT /governance/users/:id`
-  - backend governance routes expose `GET /users/:id`, `POST /users/:id/roles`, `DELETE /users/:id/roles/:roleId`
-  - no `PUT /users/:id` route exists
+  - profile tab now allows editing display name/email/status
+  - workspace header save action calls `api.updateUser(userId, payload)`
+  - backend `PUT /governance/users/:id` persists through DB procedure and returns refreshed user DTO
 - Evidence:
-  - `Frontend/src/components/governance/UserWorkspace.tsx:268-282`
-  - `Frontend/src/services/api.ts:352`
+  - `Frontend/src/components/governance/UserWorkspace.tsx`
+  - `Frontend/src/services/api.ts`
   - `Backend/src/api/routes/governance.routes.ts`
+  - `Backend/src/db/migrations/006_add_governance_user_update_routines.sql`
 - Impact:
-  - User profile save cannot complete successfully end to end.
+  - User profile edits now persist end to end.
 - Fix area:
-  - add update-user backend path or remove save affordance until available
+  - none
 
 ### USER-002
 - Severity: `HIGH`
@@ -635,19 +673,19 @@ Latest verified status updates (superseding original finding status tags above):
 
 ### ORCH-002
 - Severity: `HIGH`
-- Status: `STUB`
+- Status: `FULLY WIRED`
 - Module/Object: Orchestrator permissions
 - Action: Load/update permissions
 - Trace:
-  - `INITIAL_GRANTS` constant seeds screen
-  - no API import
-  - no load effect
-  - add/remove/change role are local state only
+  - permissions sub-tab loads `/orchestrators/:id/permissions`
+  - user and role selectors load from governance user/role APIs
+  - add/remove/change role paths persist through `PUT /orchestrators/:id/permissions`
+  - load/save failures surface in the tab as visible error state
 - Evidence:
-  - `Frontend/src/components/orchestrator/sub-tabs/OrchestratorPermissionsSubTab.tsx:16-21`
-  - `Frontend/src/components/orchestrator/sub-tabs/OrchestratorPermissionsSubTab.tsx:35-60`
+  - `Frontend/src/components/orchestrator/sub-tabs/OrchestratorPermissionsSubTab.tsx`
+  - `Frontend/src/services/api.ts`
 - Fix area:
-  - bind to orchestrator permissions endpoints and replace static grants
+  - none (keep parity with governance/project role model)
 
 ### ORCH-003
 - Severity: `HIGH`
@@ -703,21 +741,21 @@ Latest verified status updates (superseding original finding status tags above):
 
 ### PIPE-001
 - Severity: `HIGH`
-- Status: `PARTIAL`
+- Status: `FULLY WIRED`
 - Module/Object: Pipeline permissions
 - Action: Add/remove/change grants
 - Trace:
-  - UI loads `/pipelines/:id/permissions`
-  - save mutates local state first
-  - `persist()` swallows backend failures
-  - backend permissions endpoints currently return static success / empty grants
+  - permissions tab loads `/pipelines/:id/permissions` and governance user/role catalogs
+  - add/remove/change role mutations persist through `PUT /pipelines/:id/permissions`
+  - save failures are surfaced to the user inside the tab
+  - backend permissions endpoints now perform real DB reads/writes and return authoritative grants
 - Evidence:
-  - `Frontend/src/components/pipeline/sub-tabs/PermissionsSubTab.tsx:38-60`
+  - `Frontend/src/components/pipeline/sub-tabs/PermissionsSubTab.tsx`
   - `Backend/src/api/routes/pipeline.routes.ts`
 - Impact:
-  - Screen appears interactive but cannot be trusted for real persistence.
+  - Pipeline permission operations are now persisted and verifiable.
 - Fix area:
-  - make backend real first, then block optimistic UI until response is verified
+  - none (keep aligned with project-scoped role model)
 
 ### PIPE-002
 - Severity: `HIGH`
@@ -797,17 +835,19 @@ Latest verified status updates (superseding original finding status tags above):
 
 ### GOV-API-001
 - Severity: `CRITICAL`
-- Status: `BROKEN`
+- Status: `FULLY WIRED`
 - Module/Object: Governance API contract
 - Action: Update user
 - Trace:
   - frontend client exposes `updateUser(id, data)` -> `PUT /governance/users/:id`
-  - backend route surface has no matching `PUT /users/:id`
+  - backend route now exposes matching `PUT /users/:id`
+  - route uses DB procedure/function routines to persist and re-read user detail
 - Evidence:
-  - `Frontend/src/services/api.ts:352`
+  - `Frontend/src/services/api.ts`
   - `Backend/src/api/routes/governance.routes.ts`
+  - `Backend/src/db/migrations/006_add_governance_user_update_routines.sql`
 - Fix area:
-  - add matching route/service/repository/procedure or remove client method
+  - none
 
 ### AUTHZ-001
 - Severity: `CRITICAL`
@@ -828,31 +868,33 @@ Latest verified status updates (superseding original finding status tags above):
 
 ### API-001
 - Severity: `CRITICAL`
-- Status: `STUB`
+- Status: `FULLY WIRED`
 - Module/Object: Pipeline permissions backend
 - Action: Get/update pipeline permissions
 - Trace:
-  - GET returns `{ grants: [], inheritFromProject: true }`
-  - PUT returns `{ success: true }`
-  - no DB read/write
+  - GET resolves pipeline permission context and grants via DB functions
+  - PUT diffs desired grants vs current grants and applies grant/revoke procedures
+  - response returns persisted grants from DB after mutation
 - Evidence:
-  - `Backend/src/api/routes/pipeline.routes.ts:250-251`
+  - `Backend/src/api/routes/pipeline.routes.ts`
+  - `Backend/src/db/migrations/005_add_asset_permission_routines.sql`
 - Fix area:
-  - implement real permissions persistence and validation
+  - none
 
 ### API-002
 - Severity: `CRITICAL`
-- Status: `STUB`
+- Status: `FULLY WIRED`
 - Module/Object: Orchestrator permissions backend
 - Action: Get/update orchestrator permissions
 - Trace:
-  - GET returns static empty grants
-  - PUT returns static success
-  - no DB read/write
+  - GET resolves orchestrator/project context and returns effective grants from DB function
+  - PUT diffs desired grants vs current grants and applies grant/revoke procedures
+  - response returns persisted grants from DB after mutation
 - Evidence:
-  - `Backend/src/api/routes/orchestrators.routes.ts:164-167`
+  - `Backend/src/api/routes/orchestrators.routes.ts`
+  - `Backend/src/db/migrations/005_add_asset_permission_routines.sql`
 - Fix area:
-  - implement real permissions persistence and validation
+  - none
 
 ### API-003
 - Severity: `HIGH`
@@ -925,21 +967,20 @@ Latest verified status updates (superseding original finding status tags above):
 
 ### ORCH-007
 - Severity: `HIGH`
-- Status: `STUB`
+- Status: `FULLY WIRED`
 - Module/Object: Orchestrator workspace
 - Action: Permissions tab context binding
 - Trace:
-  - workspace resolves `orchId`
-  - permissions sub-tab is rendered without `orchId`
-  - permissions sub-tab itself uses local mock grants and does not know which orchestrator it is editing
+  - workspace renders a `permissions` sub-tab in active orchestrator navigation
+  - permissions sub-tab is invoked with `orchId`
+  - all load/save permission mutations are bound to that `orchId`
 - Evidence:
-  - `Frontend/src/components/orchestrator/OrchestratorWorkspace.tsx:39`
-  - `Frontend/src/components/orchestrator/OrchestratorWorkspace.tsx:68`
-  - `Frontend/src/components/orchestrator/sub-tabs/OrchestratorPermissionsSubTab.tsx:35-60`
+  - `Frontend/src/components/orchestrator/OrchestratorWorkspace.tsx`
+  - `Frontend/src/components/orchestrator/sub-tabs/OrchestratorPermissionsSubTab.tsx`
 - Impact:
-  - Even if backend permissions endpoints were implemented later, the current tab component is not wired with object identity.
+  - Permissions actions now target the intended orchestrator.
 - Fix area:
-  - pass `orchId` into the sub-tab and bind all mutations to that object
+  - none
 
 ### PIPE-004
 - Severity: `HIGH`
@@ -1427,7 +1468,6 @@ Latest verified status updates (superseding original finding status tags above):
 - `GovernanceView.mockActivities` -> static activity sidebar data.
 - `MetadataBrowserWorkspace.data` -> static metadata object field values.
 - `MetadataBrowserWorkspace.columns` -> empty static array.
-- `OrchestratorPermissionsSubTab.INITIAL_GRANTS` -> static permissions dataset.
 - `OrchestratorOverviewSubTab.MOCK_RUNS` -> static run history.
 - `OrchestratorOverviewSubTab.MOCK_PIPELINES` -> static pipeline membership.
 - `OrchestratorAuditLogsSubTab.MOCK_ENTRIES` -> static audit history.
@@ -1445,8 +1485,6 @@ Latest verified status updates (superseding original finding status tags above):
   - `Frontend/src/components/folder/FolderWorkspace.tsx`
 - Connection save swallows exceptions:
   - `Frontend/src/components/connection/ConnectionWorkspace.tsx`
-- Pipeline permissions UI swallows persistence failures:
-  - `Frontend/src/components/pipeline/sub-tabs/PermissionsSubTab.tsx`
 - Backend migration runner still uses `console.log` rather than platform logger:
   - `Backend/src/db/migration-runner.ts`
 

@@ -54,6 +54,35 @@ export interface ConnectorHealthRow {
     next_check_dtm: string | null;
 }
 
+export interface ConnectionUsageRow {
+    usage_type_code: string;
+    object_id: string;
+    object_display_name: string;
+    context_text: string;
+}
+
+export interface ConnectionHistoryRow {
+    history_id: string;
+    action_code: string;
+    action_dtm: string;
+    action_by: string | null;
+    detail_text: string;
+    test_passed_flag: boolean | null;
+    response_time_ms: number | null;
+    error_message_text: string | null;
+}
+
+export interface ConnectionPermissionGrantRow {
+    access_id: string;
+    user_id: string | null;
+    role_id: string | null;
+    user_full_name: string | null;
+    email_address: string | null;
+    role_display_name: string | null;
+    granted_dtm: string;
+    granted_by_user_id: string | null;
+}
+
 export interface CreateConnectorParams {
     connectorDisplayName: string;
     connectorTypeCode: string;
@@ -68,6 +97,7 @@ export interface CreateConnectorParams {
     maxPoolSize?: number;
     idleTimeoutSec?: number;
     userId: string;
+    technologyId?: string | null;
     encryptionKey: string;
 }
 
@@ -85,6 +115,7 @@ export interface UpdateConnectorParams {
     maxPoolSize?: number;
     idleTimeoutSec?: number;
     userId: string;
+    technologyId?: string | null;
     encryptionKey: string;
 }
 
@@ -99,33 +130,56 @@ export class ConnectionsRepository {
     }
 
     /**
-     * List all connectors (non-sensitive summary — no encrypted fields decrypted).
+     * List all connectors (non-sensitive summary).
+     * Delegates to listByTech with no filter.
      */
-    async listAll(userId: string, encryptionKey: string): Promise<ConnectorRow[]> {
-        log.debug('connections.repo.list', 'Querying catalog.connectors');
-        return db.transaction(async (client) => {
+    async listAll(userId: string, encryptionKey: string): Promise<{ rows: ConnectorRow[]; nextCursor: string | null }> {
+        return this.listByTech(userId, encryptionKey);
+    }
+
+    /**
+     * Lazy-load connectors filtered by technology code with keyset pagination.
+     * If techCode is omitted, returns all connectors (capped at limit).
+     */
+    async listByTech(
+        userId: string,
+        encryptionKey: string,
+        techCode?: string,
+        limit = 50,
+        afterId?: string,
+    ): Promise<{ rows: ConnectorRow[]; nextCursor: string | null }> {
+        log.debug('connections.repo.listByTech', 'Querying connectors', { techCode, limit, afterId });
+        const rows = await db.transaction(async (client) => {
             await this.setSession(client, userId, encryptionKey);
-            const result: QueryResult<ConnectorRow> = await client.query(`
-                SELECT
+            const result: QueryResult<ConnectorRow & { technology_id: string }> = await client.query(
+                `SELECT
                     connector_id,
                     connector_display_name,
                     connector_type_code,
                     conn_ssl_mode,
                     conn_max_pool_size_num,
-                    NULL::INTEGER AS conn_idle_timeout_sec,
-                    NULL::TEXT    AS conn_jdbc_driver_class,
-                    NULL::TEXT    AS conn_test_query,
-                    NULL::JSONB   AS conn_spark_config_json,
+                    NULL::INTEGER     AS conn_idle_timeout_sec,
+                    NULL::TEXT        AS conn_jdbc_driver_class,
+                    NULL::TEXT        AS conn_test_query,
+                    NULL::JSONB       AS conn_spark_config_json,
                     health_status_code,
                     NULL::TIMESTAMPTZ AS created_dtm,
                     updated_dtm,
-                    NULL::UUID AS created_by_user_id,
-                    NULL::UUID AS updated_by_user_id,
-                    created_by_full_name AS created_by_name
-                FROM catalog.fn_get_connectors()
-            `);
+                    NULL::UUID        AS created_by_user_id,
+                    NULL::UUID        AS updated_by_user_id,
+                    created_by_full_name AS created_by_name,
+                    technology_id
+                FROM catalog.fn_get_connectors_by_tech($1, $2, $3::uuid)`,
+                [techCode ?? null, limit + 1, afterId ?? null],
+            );
             return result.rows;
         });
+
+        // If we got limit+1 rows, there is a next page
+        const hasMore = rows.length > limit;
+        const pageRows = hasMore ? rows.slice(0, limit) : rows;
+        const nextCursor = hasMore ? (pageRows[pageRows.length - 1]?.connector_id ?? null) : null;
+        return { rows: pageRows as ConnectorRow[], nextCursor };
     }
 
     /**
@@ -169,47 +223,10 @@ export class ConnectionsRepository {
         );
         return db.transaction(async (client) => {
             await this.setSession(client, userId, encryptionKey);
-            const result: QueryResult<ConnectorDecryptedRow> = await client.query(`
-                SELECT
-                    c.connector_id,
-                    c.connector_display_name,
-                    c.connector_type_code,
-                    c.conn_ssl_mode,
-                    c.conn_max_pool_size_num,
-                    c.conn_idle_timeout_sec,
-                    c.conn_jdbc_driver_class,
-                    c.conn_test_query,
-                    c.conn_spark_config_json,
-                    c.created_dtm,
-                    c.updated_dtm,
-                    c.created_by_user_id,
-                    c.updated_by_user_id,
-                    NULL AS created_by_name,
-                    pgp_sym_decrypt(
-                        c.conn_config_json_encrypted::bytea,
-                        current_setting('app.encryption_key')
-                    )::jsonb AS conn_config_json,
-                    CASE WHEN c.conn_secrets_json_encrypted IS NOT NULL THEN
-                        pgp_sym_decrypt(
-                            c.conn_secrets_json_encrypted::bytea,
-                            current_setting('app.encryption_key')
-                        )::jsonb
-                    ELSE NULL END AS conn_secrets_json,
-                    CASE WHEN c.conn_ssh_tunnel_json_encrypted IS NOT NULL THEN
-                        pgp_sym_decrypt(
-                            c.conn_ssh_tunnel_json_encrypted::bytea,
-                            current_setting('app.encryption_key')
-                        )::jsonb
-                    ELSE NULL END AS conn_ssh_tunnel_json,
-                    CASE WHEN c.conn_proxy_json_encrypted IS NOT NULL THEN
-                        pgp_sym_decrypt(
-                            c.conn_proxy_json_encrypted::bytea,
-                            current_setting('app.encryption_key')
-                        )::jsonb
-                    ELSE NULL END AS conn_proxy_json
-                FROM catalog.connectors c
-                WHERE c.connector_id = $1
-            `, [connectorId]);
+            const result: QueryResult<ConnectorDecryptedRow> = await client.query(
+                `SELECT * FROM catalog.fn_get_connector_decrypted($1::uuid)`,
+                [connectorId],
+            );
             return result.rows[0] ?? null;
         });
     }
@@ -226,7 +243,7 @@ export class ConnectionsRepository {
             await this.setSession(client, params.userId, params.encryptionKey);
             const result: QueryResult<{ p_connector_id: string }> = await client.query(
                 `CALL catalog.pr_create_connector(
-                    $1, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid, null
+                    $1, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid, $14::uuid, null
                 )`,
                 [
                     params.connectorDisplayName,
@@ -242,6 +259,7 @@ export class ConnectionsRepository {
                     params.maxPoolSize ?? 5,
                     params.idleTimeoutSec ?? 600,
                     params.userId,
+                    params.technologyId ?? null,
                 ],
             );
 
@@ -258,7 +276,7 @@ export class ConnectionsRepository {
             await this.setSession(client, params.userId, params.encryptionKey);
             await client.query(
                 `CALL catalog.pr_update_connector(
-                    $1::uuid, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid
+                    $1::uuid, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid, $14::uuid
                 )`,
                 [
                     params.connectorId,
@@ -274,6 +292,7 @@ export class ConnectionsRepository {
                     params.maxPoolSize ?? null,
                     params.idleTimeoutSec ?? null,
                     params.userId,
+                    params.technologyId ?? null,
                 ],
             );
         });
@@ -284,7 +303,7 @@ export class ConnectionsRepository {
      */
     async countDependentDatasets(connectorId: string): Promise<number> {
         const result = await db.queryOne<{ cnt: string }>(
-            `SELECT COUNT(*)::text AS cnt FROM catalog.datasets WHERE connector_id = $1`,
+            `SELECT catalog.fn_count_connector_datasets($1::uuid)::text AS cnt`,
             [connectorId],
         );
         return parseInt(result?.cnt ?? '0', 10);
@@ -334,16 +353,106 @@ export class ConnectionsRepository {
         try {
             await db.transaction(async (client) => {
                 await this.setSession(client, userId, encryptionKey);
-                await client.query(`
-                    INSERT INTO catalog.connection_test_results
-                        (connector_id, test_passed_flag, response_time_ms, error_message_text, tested_by_user_id)
-                    VALUES ($1, $2, $3, $4, $5::uuid)
-                `, [connectorId, passed, latencyMs, errorText, userId]);
+                await client.query(
+                    `CALL catalog.pr_record_connection_test($1::uuid, $2, $3, $4, $5::uuid)`,
+                    [connectorId, passed, latencyMs, errorText, userId],
+                );
             });
         } catch {
             // Table may not exist yet — log and continue
             log.debug('connections.repo.recordTest', 'connection_test_results insert skipped (table may not exist)', { connectorId });
         }
+    }
+
+    async getUsage(connectorId: string, userId: string, encryptionKey: string): Promise<ConnectionUsageRow[]> {
+        return db.transaction(async (client) => {
+            await this.setSession(client, userId, encryptionKey);
+            const result = await client.query<ConnectionUsageRow>(
+                `SELECT usage_type_code, object_id, object_display_name, context_text
+                 FROM catalog.fn_get_connection_usage($1::uuid)`,
+                [connectorId],
+            );
+            return result.rows;
+        });
+    }
+
+    async getHistory(
+        connectorId: string,
+        userId: string,
+        encryptionKey: string,
+        limit: number,
+        offset: number,
+    ): Promise<ConnectionHistoryRow[]> {
+        return db.transaction(async (client) => {
+            await this.setSession(client, userId, encryptionKey);
+            const result = await client.query<ConnectionHistoryRow>(
+                `SELECT
+                   history_id,
+                   action_code,
+                   action_dtm,
+                   action_by,
+                   detail_text,
+                   test_passed_flag,
+                   response_time_ms,
+                   error_message_text
+                 FROM catalog.fn_get_connection_history($1::uuid, $2, $3)`,
+                [connectorId, limit, offset],
+            );
+            return result.rows;
+        });
+    }
+
+    async getPermissions(connectorId: string, userId: string, encryptionKey: string): Promise<ConnectionPermissionGrantRow[]> {
+        return db.transaction(async (client) => {
+            await this.setSession(client, userId, encryptionKey);
+            const result = await client.query<ConnectionPermissionGrantRow>(
+                `SELECT
+                   access_id,
+                   user_id,
+                   role_id,
+                   user_full_name,
+                   email_address,
+                   role_display_name,
+                   granted_dtm,
+                   granted_by_user_id
+                 FROM gov.fn_get_connector_access_grants($1::uuid)`,
+                [connectorId],
+            );
+            return result.rows;
+        });
+    }
+
+    async grantPermission(
+        connectorId: string,
+        userId: string | null,
+        roleId: string | null,
+        grantedByUserId: string,
+        actorUserId: string,
+        encryptionKey: string,
+    ): Promise<void> {
+        await db.transaction(async (client) => {
+            await this.setSession(client, actorUserId, encryptionKey);
+            await client.query(
+                `CALL gov.pr_grant_connector_access($1::uuid, $2::uuid, $3::uuid, $4::uuid)`,
+                [connectorId, userId, roleId, grantedByUserId],
+            );
+        });
+    }
+
+    async revokePermission(
+        connectorId: string,
+        userId: string | null,
+        roleId: string | null,
+        actorUserId: string,
+        encryptionKey: string,
+    ): Promise<void> {
+        await db.transaction(async (client) => {
+            await this.setSession(client, actorUserId, encryptionKey);
+            await client.query(
+                `CALL gov.pr_revoke_connector_access($1::uuid, $2::uuid, $3::uuid)`,
+                [connectorId, userId, roleId],
+            );
+        });
     }
 }
 

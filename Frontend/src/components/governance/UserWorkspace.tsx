@@ -1,34 +1,100 @@
 /**
  * UserWorkspace — tab content for a User object.
- * Sub-tabs: Profile | Access | Activity | Audit | Sessions | Preferences
+ * Sub-tabs: Profile | Access | Preferences
  */
-import React, { useState, useEffect } from 'react';
-import { Shield, UserCheck, Monitor } from 'lucide-react';
-import { useAppSelector } from '@/store/hooks';
+import { useState, useEffect } from 'react';
+import { Shield, UserCheck } from 'lucide-react';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { markTabSaved, markTabUnsaved } from '@/store/slices/tabsSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
-import { ObjectHistoryGrid } from '@/components/shared/ObjectHistoryGrid';
 import type { UserSubTab } from '@/types';
 import api from '@/services/api';
 
 const SUB_TABS = [
   { id: 'profile',     label: 'Profile',     shortcut: '1' },
   { id: 'access',      label: 'Access',      shortcut: '2' },
-  { id: 'activity',    label: 'Activity',    shortcut: '3' },
-  { id: 'audit',       label: 'Audit',       shortcut: '4' },
-  { id: 'sessions',    label: 'Sessions',    shortcut: '5' },
-  { id: 'preferences', label: 'Preferences', shortcut: '6' },
+  { id: 'preferences', label: 'Preferences', shortcut: '3' },
 ] satisfies { id: UserSubTab; label: string; shortcut: string }[];
 
 type FD = Record<string, unknown>;
 
-function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex items-start gap-2 text-[12px]">
-      <span className="text-slate-500 w-36 flex-shrink-0">{label}</span>
-      <span className={`text-slate-300 ${mono ? 'font-mono text-[11px]' : ''}`}>{value || '—'}</span>
-    </div>
-  );
+type UserRoleDto =
+  | string
+  | {
+      roleName?: string;
+      role_name?: string;
+      role_display_name?: string;
+    };
+
+type UserDetailDto = {
+  userId?: string;
+  user_id?: string;
+  username?: string;
+  user_login_name?: string;
+  displayName?: string;
+  user_full_name?: string;
+  email?: string;
+  user_email?: string;
+  isActive?: boolean;
+  is_account_active?: boolean;
+  is_active_flag?: boolean;
+  user_type_code?: string;
+  userType?: string;
+  default_role_name?: string;
+  defaultRole?: string;
+  locale?: string;
+  locale_code?: string;
+  timezone?: string;
+  timezone_code?: string;
+  mfa_enabled_flag?: boolean;
+  created_by_name?: string;
+  createdOn?: string;
+  created_dtm?: string;
+  lastLogin?: string;
+  last_login_dtm?: string;
+  updatedOn?: string;
+  updated_dtm?: string;
+  roles?: UserRoleDto[];
+  is_platform_admin?: boolean;
+  is_user_admin?: boolean;
+  has_audit_access?: boolean;
+};
+
+function normalizeRoleNames(roles: UserRoleDto[] | undefined): string[] {
+  if (!Array.isArray(roles)) return [];
+  return roles
+    .map(role => {
+      if (typeof role === 'string') return role.trim();
+      return (role.roleName ?? role.role_display_name ?? role.role_name ?? '').trim();
+    })
+    .filter(Boolean);
+}
+
+function mapUserDetailToForm(prev: FD, data: UserDetailDto): FD {
+  const roles = normalizeRoleNames(data.roles);
+  const isActive = (data.isActive ?? data.is_account_active ?? data.is_active_flag) !== false;
+  return {
+    ...prev,
+    userId: data.userId ?? data.user_id ?? prev.userId,
+    username: data.username ?? data.user_login_name ?? data.email ?? prev.username,
+    displayName: data.displayName ?? data.user_full_name ?? prev.displayName,
+    email: data.email ?? data.user_email ?? prev.email,
+    status: isActive ? 'active' : 'inactive',
+    userType: data.user_type_code ?? data.userType ?? prev.userType,
+    defaultRole: data.default_role_name ?? data.defaultRole ?? roles[0] ?? prev.defaultRole,
+    locale: data.locale ?? data.locale_code ?? prev.locale,
+    timezone: data.timezone ?? data.timezone_code ?? prev.timezone,
+    mfaStatus: data.mfa_enabled_flag ? 'Enabled' : 'Disabled',
+    createdBy: data.created_by_name ?? '—',
+    createdOn: data.createdOn ?? data.created_dtm ?? '—',
+    lastLogin: data.lastLogin ?? data.last_login_dtm ?? '—',
+    updatedOn: data.updatedOn ?? data.updated_dtm ?? '—',
+    roles,
+    isPlatformAdmin: data.is_platform_admin ?? false,
+    isUserAdmin: data.is_user_admin ?? false,
+    hasAuditAccess: data.has_audit_access ?? false,
+  };
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────
@@ -79,9 +145,20 @@ function ProfileTab({ data, onChange }: { data: FD; onChange: (f: string, v: str
         <F label="User ID" field="userId" ro />
         <div className="grid grid-cols-2 gap-4">
           <F label="Username" field="username" ro />
-          <F label="Display Name" field="displayName" ro />
+          <F label="Display Name" field="displayName" />
         </div>
-        <F label="Email" field="email" ro />
+        <F label="Email" field="email" />
+        <div>
+          <label className="block text-[11px] text-slate-500 mb-1">Account Status</label>
+          <select
+            value={String(data.status ?? 'active')}
+            onChange={e => onChange('status', e.target.value)}
+            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full"
+          >
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <F label="User Type" field="userType" ro />
           <F label="Default Role" field="defaultRole" ro />
@@ -144,22 +221,6 @@ function AccessTab({ data }: { data: FD }) {
   );
 }
 
-// ─── Sessions sub-tab ─────────────────────────────────────────────────────
-
-function SessionsTab() {
-  return (
-    <div className="flex-1 overflow-auto p-5">
-      <div className="max-w-2xl">
-        <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Active Sessions</div>
-        <div className="flex flex-col items-center justify-center h-32 text-slate-600 border border-slate-800 rounded-lg">
-          <Monitor className="w-6 h-6 mb-2 opacity-40" />
-          <p className="text-sm">No active sessions to display.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Preferences sub-tab ─────────────────────────────────────────────────
 
 function PreferencesTab({ data }: { data: FD }) {
@@ -200,8 +261,10 @@ function PreferencesTab({ data }: { data: FD }) {
 // ─── Main workspace ───────────────────────────────────────────────────────
 
 export function UserWorkspace({ tabId }: { tabId: string }) {
+  const dispatch  = useAppDispatch();
   const tab       = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
-  const subTab    = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'profile') as UserSubTab;
+  const selectedSubTab = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'profile') as UserSubTab;
+  const subTab = SUB_TABS.some(t => t.id === selectedSubTab) ? selectedSubTab : 'profile';
   const userName  = tab?.objectName ?? 'User';
 
   const [formData, setFormData] = useState<FD>({
@@ -221,39 +284,65 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
     isPlatformAdmin: false, isUserAdmin: false, hasAuditAccess: false,
     theme: 'dark', dateFormat: 'YYYY-MM-DD', landingPage: 'dashboard',
   });
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load real user data on mount
   useEffect(() => {
     const userId = tab?.objectId;
     if (!userId) return;
+    setLoadError(null);
     api.getUser(userId)
       .then(res => {
         const d = res.data?.data ?? res.data;
         if (!d) return;
-        setFormData(prev => ({
-          ...prev,
-          userId:         d.userId          ?? d.user_id          ?? prev.userId,
-          username:       d.username        ?? d.user_login_name  ?? d.email ?? prev.username,
-          displayName:    d.displayName     ?? d.user_full_name   ?? prev.displayName,
-          email:          d.email           ?? d.user_email       ?? prev.email,
-          status:         (d.isActive ?? d.is_active_flag) === false ? 'inactive' : 'active',
-          userType:       d.user_type_code   ?? d.userType        ?? prev.userType,
-          defaultRole:    d.default_role_name ?? d.defaultRole     ?? prev.defaultRole,
-          locale:         d.locale           ?? d.locale_code      ?? prev.locale,
-          timezone:       d.timezone         ?? d.timezone_code    ?? prev.timezone,
-          mfaStatus:      d.mfa_enabled_flag ? 'Enabled' : 'Disabled',
-          createdBy:      d.created_by_name  ?? '—',
-          createdOn:      d.createdOn        ?? d.created_dtm      ?? '—',
-          lastLogin:      d.lastLogin        ?? d.last_login_dtm   ?? '—',
-          updatedOn:      d.updatedOn        ?? d.updated_dtm      ?? '—',
-          roles:          Array.isArray(d.roles) ? d.roles.map((r: any) => r?.roleName ?? r?.role_name ?? r).filter(Boolean) : prev.roles,
-          isPlatformAdmin: d.is_platform_admin ?? false,
-          isUserAdmin:     d.is_user_admin     ?? false,
-          hasAuditAccess:  d.has_audit_access  ?? false,
-        }));
+        setFormData(prev => mapUserDetailToForm(prev, d as UserDetailDto));
+        setIsDirty(false);
+        dispatch(markTabSaved(tabId));
       })
-      .catch(() => { /* user may not exist yet — keep defaults */ });
-  }, [tab?.objectId]);
+      .catch((err: unknown) => {
+        setLoadError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load user details');
+      });
+  }, [dispatch, tab?.objectId, tabId]);
+
+  useEffect(() => {
+    if (isDirty) dispatch(markTabUnsaved(tabId));
+    else dispatch(markTabSaved(tabId));
+  }, [dispatch, isDirty, tabId]);
+
+  const handleFieldChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    setIsDirty(true);
+    setSaveError(null);
+  };
+
+  const handleSave = async () => {
+    const userId = String(formData.userId ?? tab?.objectId ?? '').trim();
+    if (!userId || isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const payload = {
+        displayName: String(formData.displayName ?? '').trim(),
+        email: String(formData.email ?? '').trim(),
+        isActive: String(formData.status ?? 'active') === 'active',
+      };
+      const response = await api.updateUser(userId, payload);
+      const data = response.data?.data ?? response.data;
+      if (data) {
+        setFormData(prev => mapUserDetailToForm(prev, data as UserDetailDto));
+      }
+      setIsDirty(false);
+      dispatch(markTabSaved(tabId));
+    } catch (err: unknown) {
+      const message = (err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to save user details';
+      setSaveError(message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0d0f1a]">
@@ -261,16 +350,31 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
         type="user"
         name={String(formData.displayName ?? userName)}
         hierarchyPath={tab?.hierarchyPath ?? `Users → ${userName}`}
-        isDirty={false}
-        actions={undefined}
+        isDirty={isDirty}
+        actions={isDirty ? (
+          <button
+            onClick={() => { void handleSave(); }}
+            disabled={isSaving}
+            className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50"
+          >
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
+        ) : undefined}
       />
       <SubTabBar tabId={tabId} tabs={SUB_TABS} defaultTab="profile" />
+      {loadError && (
+        <div className="mx-5 mt-4 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">
+          {loadError}
+        </div>
+      )}
+      {saveError && (
+        <div className="mx-5 mt-4 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">
+          {saveError}
+        </div>
+      )}
 
-      {subTab === 'profile'     && <ProfileTab data={formData} onChange={() => {}} />}
+      {subTab === 'profile'     && <ProfileTab data={formData} onChange={handleFieldChange} />}
       {subTab === 'access'      && <AccessTab data={formData} />}
-      {subTab === 'activity'    && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} emptyMessage="No activity records." /></div>}
-      {subTab === 'audit'       && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} emptyMessage="No audit records." /></div>}
-      {subTab === 'sessions'    && <SessionsTab />}
       {subTab === 'preferences' && <PreferencesTab data={formData} />}
     </div>
   );

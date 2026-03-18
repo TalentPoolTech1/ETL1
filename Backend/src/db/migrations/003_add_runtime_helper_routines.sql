@@ -3,6 +3,13 @@
 
 BEGIN;
 
+DROP FUNCTION IF EXISTS etl.fn_get_folder_by_id(UUID);
+DROP FUNCTION IF EXISTS catalog.fn_get_orchestrators(UUID);
+DROP FUNCTION IF EXISTS catalog.fn_get_orchestrator_by_id(UUID);
+DROP FUNCTION IF EXISTS catalog.fn_get_pipeline_runtime_info(UUID);
+DROP FUNCTION IF EXISTS execution.fn_get_environment_id_by_name(TEXT);
+DROP PROCEDURE IF EXISTS execution.pr_upsert_run_parameter(UUID, TEXT, TEXT);
+
 -- ============================================================================
 -- Folder read helper
 -- ============================================================================

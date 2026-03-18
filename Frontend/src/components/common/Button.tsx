@@ -6,7 +6,7 @@ interface ButtonProps {
   size?: 'sm' | 'md' | 'lg';
   disabled?: boolean;
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
   className?: string;
   type?: 'button' | 'submit' | 'reset';
   title?: string;

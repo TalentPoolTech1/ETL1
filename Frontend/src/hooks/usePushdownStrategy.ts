@@ -11,24 +11,24 @@ import {
   SourceTableInfo,
   EligibilityAnalysis,
   ExecutionPoint,
-} from './PushdownEligibilityEngine';
+} from '@/transformations/pushdown/PushdownEligibilityEngine';
 import {
   ExecutionPointStateManager,
   ExecutionPointChoice,
-} from './ExecutionPointState';
+} from '@/transformations/pushdown/ExecutionPointState';
 import {
   FunctionAvailabilityFilter,
   FunctionPalette,
-} from './FunctionAvailabilityFilter';
-import { SourceTechnology } from './CapabilityMatrix';
-import { TransformSequence, TransformStep } from '../ir';
+} from '@/transformations/pushdown/FunctionAvailabilityFilter';
+import { SourceTechnology } from '@/transformations/pushdown/CapabilityMatrix';
+import { TransformSequence, TransformStep } from '@/transformations/ir';
 
 interface PushdownStrategyState {
   // Analysis
   analysis: EligibilityAnalysis | null;
   
   // Execution point choices
-  executionPoints: Map<string, ExecutionPoint>;
+  executionPoints: Map<string, ExecutionPointChoice>;
   
   // Function availability per context
   functionPalettes: Map<string, FunctionPalette>;
@@ -226,9 +226,14 @@ export function usePushdownStrategy(): UsePushdownStrategyReturn {
       analysis: EligibilityAnalysis;
       executionPoints: Record<string, ExecutionPoint>;
     }) => {
-      const points = new Map<string, ExecutionPoint>();
+      const points = new Map<string, ExecutionPointChoice>();
       for (const [stepId, point] of Object.entries(config.executionPoints)) {
-        points.set(stepId, point);
+        points.set(stepId, {
+          stepId,
+          choice: point,
+          isUserChosen: true,
+          changedAt: new Date(),
+        });
       }
 
       setState(prev => ({

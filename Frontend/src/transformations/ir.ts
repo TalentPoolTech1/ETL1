@@ -5,7 +5,7 @@
  * This is the format stored in the database and used for code generation.
  */
 
-import { TransformPrimitive } from './TransformRegistry';
+import { TransformPrimitive } from '../registry/TransformRegistry';
 
 /**
  * Error handling policy for a transformation step

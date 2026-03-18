@@ -13,7 +13,31 @@
  *   custom  → type: 'transformation',  transformationType: 'custom_sql'
  */
 
-import type { PipelineDefinition, PipelineNode as BackendNode } from '../../Backend/src/codegen/core/types/pipeline.types';
+type BackendNode = {
+  id: string;
+  name: string;
+  type: 'source' | 'transformation' | 'sink';
+  sourceType?: string;
+  sinkType?: string;
+  transformationType?: string;
+  config: Record<string, any>;
+  inputs: string[];
+};
+
+type PipelineDefinition = {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  environment: {
+    technology: 'pyspark' | 'scala-spark';
+    sparkVersion: string;
+  };
+  sparkConfig: {
+    appName: string;
+  };
+  nodes: BackendNode[];
+};
 
 interface FrontendNode {
   id: string;

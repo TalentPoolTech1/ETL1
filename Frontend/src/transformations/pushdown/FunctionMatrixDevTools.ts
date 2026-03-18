@@ -22,7 +22,10 @@ export interface MatrixValidationReport {
   stats: {
     totalFunctions: number;
     enabledFunctions: number;
-    functionsPerCategory: { [key: string]: number };
+    totalCategories: number;
+    functionsByCategory: { [key: string]: number };
+    supportByTech: { [key: string]: number };
+    functionsPerCategory?: { [key: string]: number };
     technologyCoverage: { [key: string]: { native: number; alternative: number; partial: number; none: number } };
   };
 }
@@ -235,6 +238,7 @@ export class FunctionMatrixDevTools {
       warnings,
       stats: {
         ...stats,
+        functionsPerCategory: stats.functionsByCategory,
         technologyCoverage: coverageByTech,
       },
     };

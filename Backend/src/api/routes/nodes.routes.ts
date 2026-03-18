@@ -10,14 +10,16 @@ router.get('/:nodeId/preview', async (req: Request, res: Response, next: NextFun
     const limitRaw = Number.parseInt(String(req.query['limit'] ?? '100'), 10);
     const limit = Number.isNaN(limitRaw) ? 100 : Math.min(Math.max(limitRaw, 1), 1000);
 
-    // Runtime row-level node preview is not implemented yet. We return a
-    // stable envelope so the UI can degrade gracefully without hard failures.
+    // Runtime row-level node preview is not implemented yet. We return an
+    // explicit unavailable contract so UI behavior is deterministic.
     return res.json({
       success: true,
       data: {
         nodeId,
         pipelineId: null,
         pipelineName: null,
+        previewAvailable: false,
+        availabilityReason: 'Row-level preview is not implemented yet for this node.',
         rows: [],
         columns: [],
         totalRows: 0,

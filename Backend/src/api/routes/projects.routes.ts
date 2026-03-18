@@ -14,6 +14,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db/connection';
 import { LoggerFactory } from '../../shared/logging';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
+import { requirePermission } from '../middleware/rbac.middleware';
 import { AppErrors } from '../../shared/errors';
 
 const router = Router();
@@ -33,7 +34,7 @@ async function setSession(client: any, userId: string) {
 
 // ─── List projects ─────────────────────────────────────────────────────────────
 
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
@@ -47,7 +48,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Get project ───────────────────────────────────────────────────────────────
 
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const row = await db.transaction(async client => {
@@ -66,7 +67,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Create project ────────────────────────────────────────────────────────────
 
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requirePermission('PIPELINE_CREATE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { projectDisplayName, projectDescText } = req.body;
@@ -98,7 +99,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Update project ────────────────────────────────────────────────────────────
 
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { projectDisplayName, projectDescText } = req.body;
@@ -127,12 +128,12 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Delete project ────────────────────────────────────────────────────────────
 
-router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', requirePermission('PIPELINE_DELETE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const deleted = await db.transaction(async client => {
       await setSession(client, userId);
-      const check = await client.query(`SELECT 1 FROM etl.projects WHERE project_id = $1`, [req.params.id]);
+      const check = await client.query(`SELECT 1 FROM etl.fn_get_projects() WHERE project_id = $1`, [req.params.id]);
       if (check.rowCount === 0) return false;
       await client.query(`CALL etl.pr_delete_project($1)`, [req.params.id]);
       return true;
@@ -145,25 +146,15 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
 // ─── List ROOT-LEVEL pipelines for project (folder_id IS NULL) ─────────────────
 // Folder-scoped pipelines are retrieved via GET /api/folders/:id/pipelines
 
-router.get('/:id/pipelines', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/pipelines', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT
-           p.pipeline_id,
-           p.project_id,
-           p.folder_id,
-           p.pipeline_display_name,
-           p.pipeline_desc_text,
-           p.active_version_id,
-           p.created_dtm,
-           p.updated_dtm
-         FROM catalog.pipelines p
-         WHERE p.project_id = $1
-           AND p.folder_id IS NULL
-         ORDER BY p.pipeline_display_name`,
+        `SELECT pipeline_id, project_id, folder_id, pipeline_display_name,
+                pipeline_desc_text, active_version_id, created_dtm, updated_dtm
+         FROM catalog.fn_get_root_pipelines($1::uuid)`,
         [req.params.id]
       );
       return r.rows;
@@ -175,24 +166,15 @@ router.get('/:id/pipelines', async (req: Request, res: Response, next: NextFunct
 // ─── List ROOT-LEVEL orchestrators for project (folder_id IS NULL) ─────────────
 // Folder-scoped orchestrators are retrieved via GET /api/folders/:id/orchestrators
 
-router.get('/:id/orchestrators', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/orchestrators', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT
-           o.orch_id,
-           o.project_id,
-           o.folder_id,
-           o.orch_display_name,
-           o.orch_desc_text,
-           o.created_dtm,
-           o.updated_dtm
-         FROM catalog.orchestrators o
-         WHERE o.project_id = $1
-           AND o.folder_id IS NULL
-         ORDER BY o.orch_display_name`,
+        `SELECT orch_id, project_id, folder_id, orch_display_name,
+                orch_desc_text, created_dtm, updated_dtm
+         FROM catalog.fn_get_root_orchestrators($1::uuid)`,
         [req.params.id]
       );
       return r.rows;

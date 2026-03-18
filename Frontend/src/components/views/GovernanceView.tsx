@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { ActivityTimeline } from '@/components/collaboration/CollaborationUI';
 import { 
   Users, 
@@ -12,30 +12,122 @@ import {
 } from 'lucide-react';
 import api from '@/services/api';
 
+type GovernanceRoleDto =
+  | string
+  | {
+      roleName?: string;
+      role_name?: string;
+      roleDisplayName?: string;
+    };
+
+type GovernanceUserDto = {
+  displayName?: string;
+  user_full_name?: string;
+  username?: string;
+  name?: string;
+  email?: string;
+  user_email?: string;
+  roles?: GovernanceRoleDto[];
+  role_name?: string;
+  role?: string;
+  isActive?: boolean;
+  is_account_active?: boolean;
+  is_active_flag?: boolean;
+};
+
+type GovernanceUserRow = {
+  name: string;
+  email: string;
+  role: string;
+  status: 'Active' | 'Inactive';
+};
+
+type GovernanceRoleRow = {
+  roleName: string;
+  description: string;
+  memberCount: number;
+};
+
+type GovernancePermissionRow = {
+  permCode: string;
+  permDesc: string;
+};
+
+function normalizeUser(user: GovernanceUserDto): GovernanceUserRow {
+  const roleFromArray = Array.isArray(user.roles)
+    ? user.roles
+        .map(role => {
+          if (typeof role === 'string') return role.trim();
+          return (role.roleName ?? role.roleDisplayName ?? role.role_name ?? '').trim();
+        })
+        .find(Boolean)
+    : '';
+  const role = roleFromArray || (user.role_name ?? user.role ?? '').trim() || 'Unassigned';
+  const isActive = (user.isActive ?? user.is_account_active ?? user.is_active_flag) !== false;
+  return {
+    name: (user.displayName ?? user.user_full_name ?? user.username ?? user.name ?? 'Unknown').trim(),
+    email: (user.email ?? user.user_email ?? '').trim(),
+    role,
+    status: isActive ? 'Active' : 'Inactive',
+  };
+}
+
 export function GovernanceView() {
   const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'audit'>('users');
 
-  const [users, setUsers] = useState<{ name: string; email: string; role: string; status: string }[]>([]);
+  const [users, setUsers] = useState<GovernanceUserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+  const [roles, setRoles] = useState<GovernanceRoleRow[]>([]);
+  const [permissions, setPermissions] = useState<GovernancePermissionRow[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+  const [rolesError, setRolesError] = useState<string | null>(null);
   const [searchText, setSearchText] = useState('');
   const [showActiveOnly, setShowActiveOnly] = useState(false);
 
   useEffect(() => {
     if (activeTab !== 'users') return;
     setLoadingUsers(true);
+    setUsersError(null);
     api.getUsers()
       .then(res => {
         const data = res.data?.data ?? res.data;
-        const mapped = (Array.isArray(data) ? data : []).map((u: any) => ({
-          name:   u.displayName    ?? u.user_full_name ?? u.username ?? u.name ?? 'Unknown',
-          email:  u.email          ?? u.user_email     ?? '',
-          role:   (Array.isArray(u.roles) ? u.roles.map((r: any) => r.roleName ?? r.role_name ?? r).filter(Boolean) : [u.role_name ?? u.role]).find(Boolean) ?? 'Viewer',
-          status: (u.isActive ?? u.is_active_flag) === false ? 'Inactive' : 'Active',
-        }));
+        const mapped = (Array.isArray(data) ? data : []).map(row => normalizeUser((row ?? {}) as GovernanceUserDto));
         setUsers(mapped);
       })
-      .catch(() => setUsers([]))
+      .catch((err: unknown) => {
+        setUsers([]);
+        setUsersError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load users');
+      })
       .finally(() => setLoadingUsers(false));
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'roles') return;
+    setLoadingRoles(true);
+    setRolesError(null);
+    Promise.all([api.getRoles(), api.getPermissions()])
+      .then(([rolesRes, permsRes]) => {
+        const rawRoles = rolesRes.data?.data ?? rolesRes.data;
+        const rawPerms = permsRes.data?.data ?? permsRes.data;
+        const mappedRoles = (Array.isArray(rawRoles) ? rawRoles : []).map((role: any) => ({
+          roleName: String(role.roleName ?? role.role_display_name ?? role.role_name ?? 'Unknown'),
+          description: String(role.description ?? role.role_desc_text ?? ''),
+          memberCount: Number(role.memberCount ?? role.member_count ?? 0),
+        }));
+        const mappedPerms = (Array.isArray(rawPerms) ? rawPerms : []).map((perm: any) => ({
+          permCode: String(perm.permCode ?? perm.perm_code_name ?? 'UNKNOWN'),
+          permDesc: String(perm.permDesc ?? perm.perm_desc_text ?? ''),
+        }));
+        setRoles(mappedRoles);
+        setPermissions(mappedPerms);
+      })
+      .catch((err: unknown) => {
+        setRoles([]);
+        setPermissions([]);
+        setRolesError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load roles and permissions');
+      })
+      .finally(() => setLoadingRoles(false));
   }, [activeTab]);
 
   const visibleUsers = users.filter(user => {
@@ -126,6 +218,9 @@ export function GovernanceView() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-100">
+                      {usersError ? (
+                        <tr><td colSpan={4} className="px-6 py-4 text-sm text-red-600">{usersError}</td></tr>
+                      ) : null}
                       {loadingUsers ? (
                         <tr><td colSpan={4} className="px-6 py-8 text-center text-sm text-neutral-400">Loading users…</td></tr>
                       ) : visibleUsers.length === 0 ? (
@@ -155,7 +250,11 @@ export function GovernanceView() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button title="User row actions are not available yet" className="p-1 hover:bg-neutral-100 rounded">
+                            <button
+                              disabled
+                              title="User row actions are not available yet"
+                              className="p-1 rounded opacity-60 cursor-not-allowed"
+                            >
                               <MoreVertical className="w-4 h-4 text-neutral-400" />
                             </button>
                           </td>
@@ -169,19 +268,58 @@ export function GovernanceView() {
 
             {activeTab === 'roles' && (
               <div className="max-w-4xl space-y-8">
-                 <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                       <Key className="w-5 h-5 text-amber-500" />
-                       <h3 className="text-sm font-semibold text-neutral-900">Permission Hierarchy</h3>
+                {rolesError && (
+                  <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    {rolesError}
+                  </div>
+                )}
+                {loadingRoles ? (
+                  <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm text-sm text-neutral-500">
+                    Loading roles and permissions…
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Key className="w-5 h-5 text-amber-500" />
+                        <h3 className="text-sm font-semibold text-neutral-900">Roles</h3>
+                      </div>
+                      {roles.length === 0 ? (
+                        <p className="text-sm text-neutral-500">No roles returned by governance API.</p>
+                      ) : (
+                        <div className="space-y-3">
+                          {roles.map(role => (
+                            <div key={role.roleName} className="rounded border border-neutral-200 p-3">
+                              <div className="flex items-center justify-between">
+                                <p className="text-sm font-semibold text-neutral-900">{role.roleName}</p>
+                                <span className="text-xs text-neutral-500">{role.memberCount} members</span>
+                              </div>
+                              <p className="text-xs text-neutral-500 mt-1">{role.description || 'No description'}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-neutral-500">
-                       Permissions follow an inheritance model from Organization down to individual Assets. 
-                       RBAC policies defined here apply globally unless overridden at the project level.
-                    </p>
-                    <div className="pt-4 border-t border-neutral-100">
-                       <button className="text-xs font-semibold text-primary-600 hover:underline">Manage Custom Roles</button>
+                    <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Shield className="w-5 h-5 text-primary-600" />
+                        <h3 className="text-sm font-semibold text-neutral-900">Permissions</h3>
+                      </div>
+                      {permissions.length === 0 ? (
+                        <p className="text-sm text-neutral-500">No permissions returned by governance API.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-96 overflow-auto pr-1">
+                          {permissions.map(perm => (
+                            <div key={perm.permCode} className="rounded border border-neutral-200 p-3">
+                              <p className="text-xs font-semibold text-neutral-900">{perm.permCode}</p>
+                              <p className="text-xs text-neutral-500 mt-1">{perm.permDesc || 'No description'}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                 </div>
+                  </div>
+                )}
               </div>
             )}
 

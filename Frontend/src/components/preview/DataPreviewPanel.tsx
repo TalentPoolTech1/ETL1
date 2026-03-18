@@ -1,8 +1,12 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useAppSelector } from '@/store/hooks';
-import api from '@/services/api';
 
 interface PreviewRow { [key: string]: unknown; }
+interface PreviewEnvelope {
+  rows?: PreviewRow[];
+  previewAvailable?: boolean;
+  availabilityReason?: string;
+}
 
 const ITEM_HEIGHT = 32;
 const VISIBLE_ITEMS = 15;
@@ -14,6 +18,7 @@ export function DataPreviewPanel() {
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<{ column: string; direction: 'asc' | 'desc' } | null>(null);
   const [filterText, setFilterText] = useState('');
   const [scrollTop, setScrollTop] = useState(0);
@@ -24,21 +29,18 @@ export function DataPreviewPanel() {
     if (!selectedNodeId) return;
     setLoading(true);
     setError(null);
-    try {
-      const res = await api.getPreview(selectedNodeId, { limit: 1000 });
-      const data = res.data.data ?? res.data;
-      setRows(data.rows ?? data ?? []);
-    } catch (err: unknown) {
-      setError((err as any)?.response?.data?.userMessage ?? 'Failed to load preview');
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
+    setRows([]);
+    setUnavailableMessage('Row-level data preview is coming soon for this workspace.');
+    setLoading(false);
   }, [selectedNodeId]);
 
   useEffect(() => {
     if (selectedNodeId) loadPreview();
-    else setRows([]);
+    else {
+      setRows([]);
+      setUnavailableMessage(null);
+      setError(null);
+    }
   }, [selectedNodeId, loadPreview]);
 
   const allColumns = rows.length > 0 ? Object.keys(rows[0]) : [];
@@ -103,7 +105,13 @@ export function DataPreviewPanel() {
           <h3 className="text-sm font-medium text-neutral-900">Data Preview</h3>
           {selectedNodeId && (
             <div className="text-xs text-neutral-500">
-              {loading ? 'Loading…' : error ? <span className="text-red-500">{error}</span> : `${filteredData.length} rows`}
+              {loading
+                ? 'Loading…'
+                : error
+                ? <span className="text-red-500">{error}</span>
+                : unavailableMessage
+                ? unavailableMessage
+                : `${filteredData.length} rows`}
             </div>
           )}
           {!selectedNodeId && <div className="text-xs text-neutral-400">Select a node to preview data</div>}
@@ -111,13 +119,17 @@ export function DataPreviewPanel() {
         <div className="flex items-center gap-2">
           {selectedNodeId && (
             <>
-              <input type="text" placeholder="Search…" value={filterText}
-                onChange={e => setFilterText(e.target.value)}
-                className="px-2 py-1 border border-neutral-300 rounded text-xs w-32 focus:outline-none focus:ring-1 focus:ring-primary-400" />
-              <button onClick={loadPreview} title="Refresh"
-                className="text-xs text-neutral-500 hover:text-neutral-700">⟳</button>
-              <button onClick={() => setShowExportModal(true)} title="Export"
-                className="text-xs text-neutral-500 hover:text-neutral-700">📥</button>
+              {!unavailableMessage && (
+                <>
+                  <input type="text" placeholder="Search…" value={filterText}
+                    onChange={e => setFilterText(e.target.value)}
+                    className="px-2 py-1 border border-neutral-300 rounded text-xs w-32 focus:outline-none focus:ring-1 focus:ring-primary-400" />
+                  <button onClick={loadPreview} title="Refresh"
+                    className="text-xs text-neutral-500 hover:text-neutral-700">⟳</button>
+                  <button onClick={() => setShowExportModal(true)} title="Export"
+                    className="text-xs text-neutral-500 hover:text-neutral-700">📥</button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -140,15 +152,22 @@ export function DataPreviewPanel() {
         <div className="flex-1 flex items-center justify-center text-red-400 text-sm">{error}</div>
       )}
 
+      {/* Unavailable */}
+      {selectedNodeId && !loading && !error && unavailableMessage && (
+        <div className="flex-1 flex items-center justify-center text-neutral-500 text-sm px-6 text-center">
+          {unavailableMessage}
+        </div>
+      )}
+
       {/* No data */}
-      {selectedNodeId && !loading && !error && rows.length === 0 && (
+      {selectedNodeId && !loading && !error && !unavailableMessage && rows.length === 0 && (
         <div className="flex-1 flex items-center justify-center text-neutral-400 text-sm">
           No preview data available for this node.
         </div>
       )}
 
       {/* Table */}
-      {selectedNodeId && !loading && !error && rows.length > 0 && (
+      {selectedNodeId && !loading && !error && !unavailableMessage && rows.length > 0 && (
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* Header */}
           <div className="bg-neutral-50 border-b border-neutral-200 flex h-8 flex-shrink-0">

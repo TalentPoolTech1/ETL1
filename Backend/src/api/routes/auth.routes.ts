@@ -27,8 +27,7 @@ authRouter.post('/login', async (req: Request, res: Response, next: NextFunction
       user_full_name: string;
     }>(
       `SELECT user_id, email_address, password_hash_text, user_full_name
-       FROM etl.users
-       WHERE email_address = $1 AND is_account_active = true`,
+       FROM etl.fn_get_user_for_login($1)`,
       [email]
     );
 
@@ -50,10 +49,7 @@ authRouter.post('/login', async (req: Request, res: Response, next: NextFunction
       { expiresIn: '8h' }
     );
 
-    await db.query(
-      `UPDATE etl.users SET last_login_dtm = NOW() WHERE user_id = $1`,
-      [user.user_id]
-    );
+    await db.query(`CALL etl.pr_record_user_login($1::uuid)`, [user.user_id]);
 
     log.info('users.login', 'Login successful', { userId: user.user_id });
 
@@ -85,8 +81,7 @@ authRouter.get('/me', authGuard, async (req: Request, res: Response, next: NextF
       user_full_name: string;
     }>(
       `SELECT user_id, email_address, user_full_name
-       FROM etl.users
-       WHERE user_id = $1 AND is_account_active = true`,
+       FROM etl.fn_get_active_user_by_id($1::uuid)`,
       [userId]
     );
 
@@ -130,7 +125,7 @@ authRouter.post('/change-password', authGuard, async (req: Request, res: Respons
 
   try {
     const user = await db.queryOne<{ user_id: string; password_hash_text: string }>(
-      `SELECT user_id, password_hash_text FROM etl.users WHERE user_id = $1 AND is_account_active = true`,
+      `SELECT user_id, password_hash_text FROM etl.fn_get_active_user_by_id($1::uuid)`,
       [userId]
     );
 
@@ -145,10 +140,7 @@ authRouter.post('/change-password', authGuard, async (req: Request, res: Respons
     }
 
     const newHash = await bcrypt.hash(newPassword, 12);
-    await db.query(
-      `UPDATE etl.users SET password_hash_text = $2, updated_dtm = NOW() WHERE user_id = $1`,
-      [userId, newHash]
-    );
+    await db.query(`CALL etl.pr_update_user_password($1::uuid, $2)`, [userId, newHash]);
 
     log.info('users.password.change', 'Password changed successfully', { userId });
     res.json({ success: true });

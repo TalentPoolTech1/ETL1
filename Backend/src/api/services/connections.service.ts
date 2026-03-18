@@ -46,6 +46,7 @@ export interface CreateConnectorInput {
     maxPoolSize?: number;
     idleTimeoutSec?: number;
     userId: string;
+    technologyId?: string;
 }
 
 export interface UpdateConnectorInput {
@@ -62,6 +63,7 @@ export interface UpdateConnectorInput {
     maxPoolSize?: number;
     idleTimeoutSec?: number;
     userId: string;
+    technologyId?: string;
 }
 
 export interface ConnectorSummary {
@@ -73,8 +75,13 @@ export interface ConnectorSummary {
     healthStatusCode: string;
     createdByFullName: string | null;
     updatedDtm: string;
+    technologyId?: string | null;
 }
 
+export interface ConnectorPageResult {
+    items: ConnectorSummary[];
+    nextCursor: string | null;
+}
 export interface TestConnectorInput {
     connectorId: string;
     userId: string;
@@ -95,6 +102,35 @@ export interface HealthResult {
     nextCheckDtm: string | null;
 }
 
+export interface ConnectionUsageItem {
+    usageType: string;
+    objectId: string;
+    objectName: string;
+    context: string;
+}
+
+export interface ConnectionHistoryItem {
+    id: string;
+    timestamp: string;
+    action: string;
+    actor: string;
+    comment: string;
+    testPassed?: boolean;
+    responseMs?: number | null;
+    errorMessage?: string | null;
+}
+
+export interface ConnectionPermissionGrant {
+    id: string;
+    userId: string | null;
+    roleId: string | null;
+    principalType: 'user' | 'role';
+    principalName: string;
+    roleName: string | null;
+    grantedOn: string;
+    grantedBy: string | null;
+}
+
 export interface MetadataBrowseInput {
     connectorId: string;
     userId: string;
@@ -108,11 +144,29 @@ export class ConnectionsService {
 
     // ─── List ─────────────────────────────────────────────────────────────────
 
-    async listConnectors(userId: string): Promise<ConnectorSummary[]> {
+    async listConnectors(userId: string): Promise<ConnectorPageResult> {
         log.info('connections.list', 'Listing all connectors');
         try {
-            const rows = await connectionsRepository.listAll(userId, getEncryptionKey());
-            return rows.map(r => this.toSummary(r));
+            const result = await connectionsRepository.listAll(userId, getEncryptionKey());
+            return { items: result.rows.map(r => this.toSummary(r)), nextCursor: result.nextCursor };
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            throw connErrors.unexpected(err as Error);
+        }
+    }
+
+    async listConnectorsByTech(
+        userId: string,
+        techCode: string,
+        limit: number,
+        afterId?: string,
+    ): Promise<ConnectorPageResult> {
+        log.info('connections.listByTech', `Listing connectors for tech: ${techCode}`);
+        try {
+            const result = await connectionsRepository.listByTech(
+                userId, getEncryptionKey(), techCode, limit, afterId,
+            );
+            return { items: result.rows.map(r => this.toSummary(r)), nextCursor: result.nextCursor };
         } catch (err) {
             if (err instanceof AppError) throw err;
             throw connErrors.unexpected(err as Error);
@@ -169,6 +223,7 @@ export class ConnectionsService {
                 maxPoolSize: input.maxPoolSize,
                 idleTimeoutSec: input.idleTimeoutSec,
                 userId: input.userId,
+                technologyId: input.technologyId,
                 encryptionKey: getEncryptionKey(),
             });
 
@@ -223,6 +278,7 @@ export class ConnectionsService {
                 maxPoolSize: input.maxPoolSize,
                 idleTimeoutSec: input.idleTimeoutSec,
                 userId: input.userId,
+                technologyId: input.technologyId,
                 encryptionKey: getEncryptionKey(),
             });
 
@@ -378,6 +434,123 @@ export class ConnectionsService {
         }
     }
 
+    async getUsage(connectorId: string, userId: string): Promise<ConnectionUsageItem[]> {
+        log.debug('connections.usage.get', 'Loading connector usage', { connectorId });
+        try {
+            const rows = await connectionsRepository.getUsage(connectorId, userId, getEncryptionKey());
+            return rows.map(row => ({
+                usageType: row.usage_type_code,
+                objectId: row.object_id,
+                objectName: row.object_display_name,
+                context: row.context_text,
+            }));
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            throw connErrors.unexpected(err as Error);
+        }
+    }
+
+    async getHistory(connectorId: string, userId: string, limit = 100, offset = 0): Promise<ConnectionHistoryItem[]> {
+        log.debug('connections.history.get', 'Loading connector history', { connectorId, limit, offset });
+        try {
+            const rows = await connectionsRepository.getHistory(connectorId, userId, getEncryptionKey(), limit, offset);
+            return rows.map(row => ({
+                id: row.history_id,
+                timestamp: row.action_dtm,
+                action: row.action_code === 'I'
+                    ? 'CREATED'
+                    : row.action_code === 'U'
+                    ? 'UPDATED'
+                    : row.action_code === 'D'
+                    ? 'DELETED'
+                    : row.action_code === 'TEST'
+                    ? 'CONNECTION_TESTED'
+                    : row.action_code,
+                actor: row.action_by ?? 'system',
+                comment: row.detail_text,
+                testPassed: row.test_passed_flag ?? undefined,
+                responseMs: row.response_time_ms,
+                errorMessage: row.error_message_text,
+            }));
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            throw connErrors.unexpected(err as Error);
+        }
+    }
+
+    async getPermissions(connectorId: string, userId: string): Promise<ConnectionPermissionGrant[]> {
+        log.debug('connections.permissions.get', 'Loading connector permissions', { connectorId });
+        try {
+            const rows = await connectionsRepository.getPermissions(connectorId, userId, getEncryptionKey());
+            return rows.map(row => ({
+                id: row.access_id,
+                userId: row.user_id,
+                roleId: row.role_id,
+                principalType: row.user_id ? 'user' : 'role',
+                principalName: row.user_id
+                    ? (row.user_full_name ?? row.email_address ?? row.user_id)
+                    : (row.role_display_name ?? row.role_id ?? 'Unknown Role'),
+                roleName: row.role_display_name ?? null,
+                grantedOn: row.granted_dtm,
+                grantedBy: row.granted_by_user_id,
+            }));
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            throw connErrors.unexpected(err as Error);
+        }
+    }
+
+    async updatePermissions(
+        connectorId: string,
+        actorUserId: string,
+        rawGrants: Array<{ userId?: string; roleId?: string }>,
+    ): Promise<ConnectionPermissionGrant[]> {
+        log.info('connections.permissions.update', 'Updating connector permissions', { connectorId, requestedCount: rawGrants.length });
+        const desired = new Map<string, { userId: string | null; roleId: string | null }>();
+        for (const grant of rawGrants) {
+            const userId = typeof grant.userId === 'string' && grant.userId.trim() ? grant.userId.trim() : null;
+            const roleId = typeof grant.roleId === 'string' && grant.roleId.trim() ? grant.roleId.trim() : null;
+            if (!userId && !roleId) continue;
+            desired.set(`${userId ?? 'null'}:${roleId ?? 'null'}`, { userId, roleId });
+        }
+
+        try {
+            const currentRows = await connectionsRepository.getPermissions(connectorId, actorUserId, getEncryptionKey());
+            const current = new Map<string, { userId: string | null; roleId: string | null }>();
+            for (const row of currentRows) {
+                current.set(`${row.user_id ?? 'null'}:${row.role_id ?? 'null'}`, { userId: row.user_id, roleId: row.role_id });
+            }
+
+            for (const [key, grant] of desired.entries()) {
+                if (current.has(key)) continue;
+                await connectionsRepository.grantPermission(
+                    connectorId,
+                    grant.userId,
+                    grant.roleId,
+                    actorUserId,
+                    actorUserId,
+                    getEncryptionKey(),
+                );
+            }
+
+            for (const [key, grant] of current.entries()) {
+                if (desired.has(key)) continue;
+                await connectionsRepository.revokePermission(
+                    connectorId,
+                    grant.userId,
+                    grant.roleId,
+                    actorUserId,
+                    getEncryptionKey(),
+                );
+            }
+
+            return this.getPermissions(connectorId, actorUserId);
+        } catch (err) {
+            if (err instanceof AppError) throw err;
+            throw connErrors.unexpected(err as Error);
+        }
+    }
+
     // ─── Metadata browsing ────────────────────────────────────────────────────
 
     async listDatabases(input: MetadataBrowseInput): Promise<string[]> {
@@ -477,7 +650,7 @@ export class ConnectionsService {
         }
     }
 
-    private toSummary(row: ConnectorRow): ConnectorSummary {
+    private toSummary(row: ConnectorRow & { technology_id?: string }): ConnectorSummary {
         return {
             connectorId: row.connector_id,
             connectorDisplayName: row.connector_display_name,
@@ -487,6 +660,7 @@ export class ConnectionsService {
             healthStatusCode: row.health_status_code ?? 'UNKNOWN',
             createdByFullName: row.created_by_name,
             updatedDtm: row.updated_dtm,
+            technologyId: row.technology_id ?? null,
         };
     }
 }

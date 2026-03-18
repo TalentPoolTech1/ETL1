@@ -55,9 +55,13 @@ interface ProjectsState {
   /** Global pipelines (project_id IS NULL) */
   globalPipelines: PipelineSummary[];
   globalPipelinesLoaded: boolean;
+  globalPipelinesCursor: string | null;
+  globalPipelinesLoading: boolean;
   /** Global orchestrators (project_id IS NULL) */
   globalOrchestrators: OrchestratorSummary[];
   globalOrchestratorsLoaded: boolean;
+  globalOrchestratorsCursor: string | null;
+  globalOrchestratorsLoading: boolean;
   expandedProjectIds: string[];
   isLoading: boolean;
   error: string | null;
@@ -86,8 +90,12 @@ const initialState: ProjectsState = {
   orchestratorsByFolder: {},
   globalPipelines: [],
   globalPipelinesLoaded: false,
+  globalPipelinesCursor: null,
+  globalPipelinesLoading: false,
   globalOrchestrators: [],
   globalOrchestratorsLoaded: false,
+  globalOrchestratorsCursor: null,
+  globalOrchestratorsLoading: false,
   expandedProjectIds: [],
   isLoading: false,
   error: null,
@@ -199,14 +207,23 @@ export const fetchFolderOrchestrators = createAsyncThunk(
   }
 );
 
-export const fetchGlobalPipelines = createAsyncThunk('projects/fetchGlobalPipelines', async () => {
-  const res = await api.getGlobalPipelines();
-  return ((res.data.data ?? res.data) as any[]).map(mapPipeline);
-});
+export const fetchGlobalPipelines = createAsyncThunk(
+  'projects/fetchGlobalPipelines',
+  async (after?: string) => {
+    const res = await api.getGlobalPipelines({ after, limit: 50 });
+    const items = ((res.data.data ?? res.data) as any[]).map(mapPipeline);
+    const nextCursor: string | null = res.data.nextCursor ?? null;
+    return { items, nextCursor, append: !!after };
+  },
+);
 
-export const fetchGlobalOrchestrators = createAsyncThunk('projects/fetchGlobalOrchestrators', async () => {
-  const res = await api.getGlobalOrchestrators();
-  return ((res.data.data ?? res.data) as any[]).map(mapOrchestrator);
+export const fetchGlobalOrchestrators = createAsyncThunk(
+  'projects/fetchGlobalOrchestrators',
+  async (after?: string) => {
+    const res = await api.getGlobalOrchestrators({ after, limit: 50 });
+    const items = ((res.data.data ?? res.data) as any[]).map(mapOrchestrator);
+    const nextCursor: string | null = res.data.nextCursor ?? null;
+    return { items, nextCursor, append: !!after };
 });
 
 export const createProject = createAsyncThunk(
@@ -390,14 +407,24 @@ const projectsSlice = createSlice({
       .addCase(fetchFolderOrchestrators.fulfilled, (state, action) => {
         state.orchestratorsByFolder[action.payload.folderId] = action.payload.orchestrators;
       })
+      .addCase(fetchGlobalPipelines.pending, state => { state.globalPipelinesLoading = true; })
       .addCase(fetchGlobalPipelines.fulfilled, (state, action) => {
-        state.globalPipelines = action.payload;
+        const { items, nextCursor, append } = action.payload;
+        state.globalPipelines = append ? [...state.globalPipelines, ...items] : items;
         state.globalPipelinesLoaded = true;
+        state.globalPipelinesCursor = nextCursor;
+        state.globalPipelinesLoading = false;
       })
+      .addCase(fetchGlobalPipelines.rejected, state => { state.globalPipelinesLoading = false; })
+      .addCase(fetchGlobalOrchestrators.pending, state => { state.globalOrchestratorsLoading = true; })
       .addCase(fetchGlobalOrchestrators.fulfilled, (state, action) => {
-        state.globalOrchestrators = action.payload;
+        const { items, nextCursor, append } = action.payload;
+        state.globalOrchestrators = append ? [...state.globalOrchestrators, ...items] : items;
         state.globalOrchestratorsLoaded = true;
+        state.globalOrchestratorsCursor = nextCursor;
+        state.globalOrchestratorsLoading = false;
       })
+      .addCase(fetchGlobalOrchestrators.rejected, state => { state.globalOrchestratorsLoading = false; })
       .addCase(createProject.fulfilled, (state, action) => {
         state.projects.push(action.payload);
         state.createProjectOpen = false;

@@ -16,6 +16,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../../db/connection';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
 import { LoggerFactory } from '../../shared/logging';
+import { requirePermission } from '../middleware/rbac.middleware';
 
 const router = Router();
 router.use(userIdMiddleware);
@@ -32,6 +33,48 @@ async function setSession(client: any, userId: string) {
   await client.query(`SET LOCAL app.encryption_key = '${key.replace(/'/g, "''")}'`);
 }
 
+type PermissionGrantPayload = {
+  id: string;
+  userId: string;
+  roleId: string;
+  principal: string;
+  principalType: 'user';
+  role: string;
+  inherited: true;
+  expiry: null;
+  grantedDtm: string | null;
+};
+
+function normalizePermissionGrants(rawGrants: unknown): Array<{ userId: string; roleId: string }> {
+  if (!Array.isArray(rawGrants)) return [];
+  const normalized = new Map<string, { userId: string; roleId: string }>();
+  for (const grant of rawGrants) {
+    const userId = typeof (grant as { userId?: unknown }).userId === 'string'
+      ? (grant as { userId: string }).userId.trim()
+      : '';
+    const roleId = typeof (grant as { roleId?: unknown }).roleId === 'string'
+      ? (grant as { roleId: string }).roleId.trim()
+      : '';
+    if (!userId || !roleId) continue;
+    normalized.set(`${userId}:${roleId}`, { userId, roleId });
+  }
+  return Array.from(normalized.values());
+}
+
+function mapPermissionGrantRows(rows: any[]): PermissionGrantPayload[] {
+  return rows.map((row: any) => ({
+    id: `${row.user_id}:${row.role_id}`,
+    userId: String(row.user_id),
+    roleId: String(row.role_id),
+    principal: String(row.user_full_name ?? row.email_address ?? row.user_id),
+    principalType: 'user',
+    role: String(row.role_display_name ?? 'Viewer'),
+    inherited: true,
+    expiry: null,
+    grantedDtm: row.granted_dtm ?? null,
+  }));
+}
+
 async function resolveEnvironmentId(client: any, environment?: string): Promise<string | null> {
   const envName = environment?.trim();
   if (!envName) return null;
@@ -44,9 +87,11 @@ async function resolveEnvironmentId(client: any, environment?: string): Promise<
 
 // ─── Global orchestrators (project_id IS NULL) — before /:id ─────────────────
 
-router.get('/global', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/global', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
+    const limit   = Math.min(parseInt(String(req.query['limit'] ?? '50'), 10), 200);
+    const afterId = req.query['after'] as string | undefined;
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
@@ -59,17 +104,24 @@ router.get('/global', async (req: Request, res: Response, next: NextFunction) =>
            created_dtm,
            updated_dtm
          FROM catalog.fn_get_orchestrators(null::uuid)
-         WHERE project_id IS NULL`
+         WHERE project_id IS NULL
+           AND ($1::uuid IS NULL OR orch_id > $1::uuid)
+         ORDER BY orch_id
+         LIMIT $2`,
+        [afterId ?? null, limit + 1],
       );
       return r.rows;
     });
-    res.json({ success: true, data: rows });
+    const hasMore = rows.length > limit;
+    const page    = hasMore ? rows.slice(0, limit) : rows;
+    const nextCursor: string | null = hasMore ? page[page.length - 1].orch_id : null;
+    res.json({ success: true, data: page, nextCursor });
   } catch (err) { next(err); }
 });
 
 // ─── List orchestrators (optionally filtered by projectId) ───────────────────
 
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const projectId = req.query['projectId'] as string | undefined;
@@ -97,7 +149,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Get orchestrator ──────────────────────────────────────────────────────────
 
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const row = await db.transaction(async client => {
@@ -124,7 +176,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Create orchestrator — projectId + folderId both optional ─────────────────
 
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/', requirePermission('PIPELINE_CREATE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { projectId, orchDisplayName, orchDescText, folderId } = req.body;
@@ -158,23 +210,21 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Update orchestrator ───────────────────────────────────────────────────────
 
-router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.put('/:id', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { orchDisplayName, orchDescText, dagDefinitionJson } = req.body;
     const row = await db.transaction(async client => {
       await setSession(client, userId);
-      const r = await client.query(
-        `UPDATE catalog.orchestrators
-         SET orch_display_name   = COALESCE($2, orch_display_name),
-             orch_desc_text      = COALESCE($3, orch_desc_text),
-             dag_definition_json = COALESCE($4::jsonb, dag_definition_json),
-             updated_by_user_id  = $5::uuid,
-             updated_dtm         = CURRENT_TIMESTAMP
-         WHERE orch_id = $1
-         RETURNING orch_id, orch_display_name, orch_desc_text, updated_dtm`,
+      await client.query(
+        `CALL catalog.pr_update_orchestrator($1::uuid, $2, $3, $4::jsonb, $5::uuid)`,
         [req.params.id, orchDisplayName ?? null, orchDescText ?? null,
-         dagDefinitionJson ? JSON.stringify(dagDefinitionJson) : null, userId]
+         dagDefinitionJson ? JSON.stringify(dagDefinitionJson) : null, userId],
+      );
+      const r = await client.query(
+        `SELECT orch_id, orch_display_name, orch_desc_text, updated_dtm
+         FROM catalog.fn_get_orchestrator_by_id($1::uuid)`,
+        [req.params.id],
       );
       return r.rows[0] ?? null;
     });
@@ -186,7 +236,7 @@ router.put('/:id', async (req: Request, res: Response, next: NextFunction) => {
 
 // ─── Delete orchestrator ───────────────────────────────────────────────────────
 
-router.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/:id', requirePermission('PIPELINE_DELETE'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const deleted = await db.transaction(async client => {
@@ -204,7 +254,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
 
 // ─── Trigger run ───────────────────────────────────────────────────────────────
 
-router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:id/run', requirePermission('PIPELINE_RUN'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const { environment, concurrency } = (req.body ?? {}) as { environment?: string; concurrency?: string };
@@ -259,14 +309,119 @@ router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) 
 
 // ─── Permissions ───────────────────────────────────────────────────────────────
 
-router.get('/:id/permissions', (_req, res) =>
-  res.json({ success: true, data: { grants: [], inheritFromProject: true } }));
+router.get('/:id/permissions', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const result = await db.transaction(async client => {
+      await setSession(client, userId);
+      const contextResult = await client.query(
+        `SELECT orch_id, project_id
+         FROM catalog.fn_get_orchestrator_by_id($1::uuid)`,
+        [req.params.id],
+      );
+      const context = contextResult.rows[0] ?? null;
+      if (!context) throw Object.assign(new Error('Orchestrator not found'), { status: 404 });
+      if (!context.project_id) {
+        return { projectScoped: false, grants: [] as PermissionGrantPayload[] };
+      }
 
-router.put('/:id/permissions', (_req, res) => res.json({ success: true }));
+      const grantsResult = await client.query(
+        `SELECT project_id, user_id, role_id, user_full_name, email_address, role_display_name, granted_dtm
+         FROM catalog.fn_get_orchestrator_permission_grants($1::uuid)`,
+        [req.params.id],
+      );
+      return { projectScoped: true, grants: mapPermissionGrantRows(grantsResult.rows) };
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        grants: result.grants,
+        inheritFromProject: result.projectScoped,
+        projectScoped: result.projectScoped,
+      },
+    });
+  } catch (err: any) {
+    if (err?.status === 404) return res.status(404).json({ success: false, userMessage: 'Orchestrator not found' });
+    return next(err);
+  }
+});
+
+router.put('/:id/permissions', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = getUserId(res);
+    const desiredGrants = normalizePermissionGrants((req.body ?? {}).grants);
+    const desiredMap = new Map(desiredGrants.map(g => [`${g.userId}:${g.roleId}`, g]));
+    const result = await db.transaction(async client => {
+      await setSession(client, userId);
+      const contextResult = await client.query(
+        `SELECT orch_id, project_id
+         FROM catalog.fn_get_orchestrator_by_id($1::uuid)`,
+        [req.params.id],
+      );
+      const context = contextResult.rows[0] ?? null;
+      if (!context) throw Object.assign(new Error('Orchestrator not found'), { status: 404 });
+      if (!context.project_id) {
+        if (desiredGrants.length > 0) {
+          throw Object.assign(new Error('Global orchestrators do not support project-member permission changes'), { status: 409 });
+        }
+        return { projectScoped: false, grants: [] as PermissionGrantPayload[] };
+      }
+
+      const currentResult = await client.query(
+        `SELECT project_id, user_id, role_id, user_full_name, email_address, role_display_name, granted_dtm
+         FROM catalog.fn_get_orchestrator_permission_grants($1::uuid)`,
+        [req.params.id],
+      );
+      const currentRows = currentResult.rows;
+      const currentMap = new Map(currentRows.map((row: any) => [`${row.user_id}:${row.role_id}`, row]));
+
+      for (const desired of desiredGrants) {
+        if (!currentMap.has(`${desired.userId}:${desired.roleId}`)) {
+          await client.query(
+            `CALL catalog.pr_grant_orchestrator_permission($1::uuid, $2::uuid, $3::uuid, $4::uuid)`,
+            [req.params.id, desired.userId, desired.roleId, userId],
+          );
+        }
+      }
+
+      for (const row of currentRows) {
+        const key = `${row.user_id}:${row.role_id}`;
+        if (!desiredMap.has(key)) {
+          await client.query(
+            `CALL catalog.pr_revoke_orchestrator_permission($1::uuid, $2::uuid, $3::uuid)`,
+            [req.params.id, row.user_id, row.role_id],
+          );
+        }
+      }
+
+      const finalResult = await client.query(
+        `SELECT project_id, user_id, role_id, user_full_name, email_address, role_display_name, granted_dtm
+         FROM catalog.fn_get_orchestrator_permission_grants($1::uuid)`,
+        [req.params.id],
+      );
+      return { projectScoped: true, grants: mapPermissionGrantRows(finalResult.rows) };
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        grants: result.grants,
+        inheritFromProject: result.projectScoped,
+        projectScoped: result.projectScoped,
+      },
+    });
+  } catch (err: any) {
+    if (err?.status === 404) return res.status(404).json({ success: false, userMessage: 'Orchestrator not found' });
+    if (err?.status === 409) return res.status(409).json({ success: false, userMessage: err.message });
+    if (err?.code === 'P0002') return res.status(404).json({ success: false, userMessage: 'Orchestrator not found or inaccessible' });
+    return next(err);
+  }
+});
 
 // ─── Audit logs ────────────────────────────────────────────────────────────────
 
-router.get('/:id/audit-logs', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:id/audit-logs', requirePermission('AUDIT_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
     const limit  = parseInt(String(req.query['limit'] ?? 50));
@@ -274,10 +429,8 @@ router.get('/:id/audit-logs', async (req: Request, res: Response, next: NextFunc
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT h.hist_id AS id, h.hist_action_dtm AS timestamp,
-                h.hist_action_by AS user_id, h.hist_action_cd AS action_code
-         FROM history.orchestrators_history h
-         WHERE h.orch_id = $1 ORDER BY h.hist_action_dtm DESC LIMIT $2 OFFSET $3`,
+        `SELECT id, timestamp, user_id, action_code
+         FROM catalog.fn_get_orchestrator_audit_logs($1::uuid, $2, $3)`,
         [req.params.id, limit, offset]);
       return r.rows.map((row: any) => ({
         id: String(row.id), timestamp: row.timestamp, user: row.user_id ?? 'system',

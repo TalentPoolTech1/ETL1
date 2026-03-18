@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { updateNode } from '@/store/slices/pipelineSlice';
-import { fetchConnectors } from '@/store/slices/connectionsSlice';
+import { fetchConnectors, selectAllConnectors } from '@/store/slices/connectionsSlice';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { Badge } from '@/components/common/Badge';
@@ -23,7 +23,8 @@ type Section = 'overview' | 'configuration' | 'schema' | 'advanced' | 'permissio
 export function PropertiesPanel() {
   const dispatch = useAppDispatch();
   const { selectedNodeIds, nodes, activePipeline } = useAppSelector(state => state.pipeline);
-  const connectors = useAppSelector(s => s.connections.connectors);
+  const connectorsByTech = useAppSelector(s => s.connections.connectorsByTech);
+  const connectors = selectAllConnectors(connectorsByTech);
 
   const [activeSection, setActiveSection] = useState<Section>('overview');
   const [columnMappings, setColumnMappings] = useState<ColumnMapping[]>([]);

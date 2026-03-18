@@ -16,7 +16,7 @@ import { TRANSFORM_REGISTRY, getTransform, getTransformsInCategory } from '../..
 import { ParameterPanel } from './ParameterPanel';
 import { compileStep } from '../../transformations/codegen';
 
-interface TransformStepEditorProps {
+export interface TransformStepEditorProps {
   step: TransformStep;
   onChange: (step: TransformStep) => void;
   onRemove: () => void;

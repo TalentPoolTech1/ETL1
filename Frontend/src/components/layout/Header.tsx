@@ -60,17 +60,17 @@ function TBtn({ icon: Icon, label, onClick, disabled, variant = 'ghost', title, 
   icon: React.ElementType; label?: string; onClick?: () => void; disabled?: boolean;
   variant?: 'ghost' | 'primary' | 'success' | 'warning'; title?: string; loading?: boolean;
 }) {
-  const base = 'flex items-center gap-1 h-6 px-2 rounded text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0';
+  const base = 'flex items-center gap-1 h-[22px] px-1.5 rounded text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0';
   const colors = {
-    ghost:   'text-slate-400 hover:text-slate-200 hover:bg-slate-700',
+    ghost:   'text-slate-400 hover:text-slate-200 hover:bg-slate-700/60',
     primary: 'text-blue-300 hover:text-blue-100 hover:bg-blue-900/40',
-    success: 'bg-emerald-700 hover:bg-emerald-600 text-white',
-    warning: 'bg-amber-700 hover:bg-amber-600 text-white',
+    success: 'bg-emerald-700/80 hover:bg-emerald-600 text-white',
+    warning: 'bg-amber-700/80 hover:bg-amber-600 text-white',
   };
   return (
     <button title={title ?? label} onClick={onClick} disabled={disabled || loading} className={`${base} ${colors[variant]}`}>
-      {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Icon className="w-3 h-3" />}
-      {label && <span className="hidden md:inline">{label}</span>}
+      {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Icon className="w-3 h-3" strokeWidth={1.5} />}
+      {label && <span className="hidden lg:inline ml-0.5">{label}</span>}
     </button>
   );
 }
@@ -179,12 +179,12 @@ export function Header() {
   const initials    = displayName.split(' ').map((w: string) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
 
   return (
-    <header className="h-9 bg-[#0a0c15] border-b border-slate-800 flex items-center px-3 gap-2 flex-shrink-0 z-20">
+    <header className="h-8 bg-[#0a0c15] border-b border-slate-800 flex items-center px-3 gap-2 flex-shrink-0 z-20">
 
       {/* Logo */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="w-6 h-6 bg-blue-600 rounded-md flex items-center justify-center shadow-md shadow-blue-900/50">
-          <Zap className="w-3.5 h-3.5 text-white" fill="currentColor" />
+        <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center shadow-md shadow-blue-900/50">
+          <Zap className="w-3 h-3 text-white" fill="currentColor" />
         </div>
         <span className="text-sm font-bold text-slate-100 tracking-tight hidden sm:block">ETL1</span>
       </div>
@@ -202,15 +202,17 @@ export function Header() {
         </div>
       )}
 
+      <div className="flex-1" />
+
       {/* Global search placeholder */}
-      <div className="flex-1 max-w-[220px] min-w-0 relative mx-1">
+      <div className="w-[300px] relative">
         <button
           type="button"
-          className="w-full h-6 pl-6 pr-2 bg-slate-800/60 border border-slate-700/60 rounded text-[11px] text-left text-slate-500 hover:text-slate-300 transition-colors"
+          className="w-full h-[22px] pl-7 pr-2 bg-slate-800/40 border border-slate-700/50 rounded text-[10px] text-left text-slate-500 hover:text-slate-300 hover:bg-slate-800/60 transition-all"
           title="Global search is not yet available. Use Command Palette (Ctrl/Cmd+K)."
         >
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none" />
-          Global search coming soon (use Ctrl/Cmd+K)
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none" />
+          Search pipelines, orchestrators... (Ctrl+K)
         </button>
       </div>
 

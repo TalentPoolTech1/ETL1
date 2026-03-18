@@ -5,6 +5,13 @@
  * Simplifies imports throughout the application.
  */
 
+import { TRANSFORM_REGISTRY } from '../registry/TransformRegistry';
+import {
+  validateSequence,
+  type TransformSequence,
+  type TransformAuditEntry,
+} from './ir';
+
 // ============ REGISTRY ============
 export {
   TRANSFORM_REGISTRY,
@@ -66,7 +73,13 @@ export { TransformStepEditor, StepList, type TransformStepEditorProps } from '..
  * Get all available transform categories
  */
 export function getCategories(): string[] {
-  return Array.from(new Set(Object.values(TRANSFORM_REGISTRY).map(t => t.category)));
+  return Array.from(
+    new Set(
+      Object.values(TRANSFORM_REGISTRY as Record<string, { category: string }>).map(
+        t => t.category
+      )
+    )
+  );
 }
 
 /**

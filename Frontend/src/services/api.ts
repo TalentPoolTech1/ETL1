@@ -76,8 +76,8 @@ class APIClient {
   }
 
   /** Global pipelines (project_id IS NULL) */
-  getGlobalPipelines() {
-    return this.client.get('/pipelines/global');
+  getGlobalPipelines(params?: { after?: string; limit?: number }) {
+    return this.client.get('/pipelines/global', { params });
   }
 
   getPipeline(id: string) {
@@ -149,8 +149,8 @@ class APIClient {
   }
 
   /** Global orchestrators (project_id IS NULL) */
-  getGlobalOrchestrators() {
-    return this.client.get('/orchestrators/global');
+  getGlobalOrchestrators(params?: { after?: string; limit?: number }) {
+    return this.client.get('/orchestrators/global', { params });
   }
 
   getOrchestrator(id: string) {
@@ -231,8 +231,8 @@ class APIClient {
 
   // ─── Metadata ──────────────────────────────────────────────────────────────
 
-  getMetadataTree() {
-    return this.client.get('/metadata/tree');
+  getMetadataTree(search?: string) {
+    return this.client.get('/metadata/tree', { params: search ? { search } : undefined });
   }
 
   searchTree(query: string) {
@@ -243,10 +243,30 @@ class APIClient {
     return this.client.get(`/metadata/${datasetId}/profile`);
   }
 
+  refreshMetadata(datasetId: string) {
+    return this.client.post(`/metadata/${datasetId}/refresh`);
+  }
+
+  getMetadataLineage(datasetId: string) {
+    return this.client.get(`/metadata/${datasetId}/lineage`);
+  }
+
+  getMetadataHistory(datasetId: string, params?: { limit?: number; offset?: number }) {
+    return this.client.get(`/metadata/${datasetId}/history`, { params });
+  }
+
+  getMetadataPermissions(datasetId: string) {
+    return this.client.get(`/metadata/${datasetId}/permissions`);
+  }
+
+  getTechnologies() {
+    return this.client.get('/metadata/technologies');
+  }
+
   // ─── Connections ───────────────────────────────────────────────────────────
 
-  getConnections() {
-    return this.client.get('/connections');
+  getConnections(params?: { techCode?: string; limit?: number; after?: string }) {
+    return this.client.get('/connections', { params });
   }
 
   getConnectionTypes() {
@@ -279,6 +299,22 @@ class APIClient {
 
   getConnectionHealth(id: string) {
     return this.client.get(`/connections/${id}/health`);
+  }
+
+  getConnectionUsage(id: string) {
+    return this.client.get(`/connections/${id}/usage`);
+  }
+
+  getConnectionHistory(id: string, params?: { limit?: number; offset?: number }) {
+    return this.client.get(`/connections/${id}/history`, { params });
+  }
+
+  getConnectionPermissions(id: string) {
+    return this.client.get(`/connections/${id}/permissions`);
+  }
+
+  updateConnectionPermissions(id: string, grants: Array<{ userId?: string; roleId?: string }>) {
+    return this.client.put(`/connections/${id}/permissions`, { grants });
   }
 
   listDatabases(connectorId: string) {
@@ -353,8 +389,44 @@ class APIClient {
     return this.client.get(`/governance/users/${id}`);
   }
 
+  updateUser(id: string, data: { displayName?: string; email?: string; isActive?: boolean }) {
+    return this.client.put(`/governance/users/${id}`, data);
+  }
+
   getRoles() {
     return this.client.get('/governance/roles');
+  }
+
+  getRole(id: string) {
+    return this.client.get(`/governance/roles/${id}`);
+  }
+
+  createRole(data: { roleName: string; description?: string }) {
+    return this.client.post('/governance/roles', data);
+  }
+
+  updateRole(id: string, data: { roleName?: string; description?: string }) {
+    return this.client.put(`/governance/roles/${id}`, data);
+  }
+
+  getRoleMembers(roleId: string) {
+    return this.client.get(`/governance/roles/${roleId}/members`);
+  }
+
+  addRoleMember(roleId: string, userId: string) {
+    return this.client.post(`/governance/roles/${roleId}/members`, { userId });
+  }
+
+  removeRoleMember(roleId: string, userId: string) {
+    return this.client.delete(`/governance/roles/${roleId}/members/${userId}`);
+  }
+
+  getRolePermissions(roleId: string) {
+    return this.client.get(`/governance/roles/${roleId}/permissions`);
+  }
+
+  updateRolePermissions(roleId: string, permissionIds: string[]) {
+    return this.client.put(`/governance/roles/${roleId}/permissions`, { permissionIds });
   }
 
   getPermissions() {

@@ -1,24 +1,31 @@
 import React, { useMemo } from 'react';
 import { PushdownStrategyEditor } from '../../transformations/PushdownStrategyEditor';
 import { useAppSelector } from '@/store/hooks';
-import { TransformSequence } from '../../transformations/ir';
+import { TransformSequence } from '@/transformations/ir';
 
 export function OptimizeSubTab() {
   const nodes = useAppSelector(s => s.pipeline.activePipeline?.nodes ?? []);
 
   const sequence: TransformSequence = useMemo(() => {
-    if (!nodes || nodes.length === 0) {
-      return { steps: [] };
-    }
     return {
+      id: 'optimize-sequence',
+      name: 'Optimization Sequence',
+      columnId: 'pipeline',
+      columnName: 'pipeline',
+      targetEngine: 'spark',
       steps: nodes.map((node: any, idx: number) => ({
         stepId: node.id ?? `step_${idx}`,
-        operation: node.type ?? 'transform',
-        sourceTechnology: node.config?.technology ?? undefined,
-        config: node.config ?? {},
-        outputSchema: node.config?.outputSchema ?? undefined,
-        inputStepIds: idx > 0 ? [nodes[idx - 1].id ?? `step_${idx - 1}`] : [],
+        type: node.type ?? 'transform',
+        params: node.config ?? {},
+        enabled: true,
+        onError: 'RETURN_NULL' as const,
       })),
+      pipelineId: 'pipeline',
+      datasetId: 'dataset',
+      author: 'system',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      currentVersionId: 'v1',
     };
   }, [nodes]);
 
@@ -31,6 +38,7 @@ export function OptimizeSubTab() {
       ) : (
         <PushdownStrategyEditor 
           sequence={sequence} 
+          sourceTables={[]}
         />
       )}
     </div>

@@ -11,8 +11,8 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { markTabUnsaved, markTabSaved } from '@/store/slices/tabsSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
-import { ObjectHistoryGrid } from '@/components/shared/ObjectHistoryGrid';
-import { ObjectPermissionsGrid } from '@/components/shared/ObjectPermissionsGrid';
+import { ObjectHistoryGrid, type HistoryRow } from '@/components/shared/ObjectHistoryGrid';
+import { ObjectPermissionsGrid, type PermissionRow } from '@/components/shared/ObjectPermissionsGrid';
 import type { ConnectionSubTab } from '@/types';
 import api from '@/services/api';
 
@@ -27,6 +27,51 @@ const SUB_TABS = [
 ] satisfies { id: ConnectionSubTab; label: string; shortcut: string }[];
 
 type FD = Record<string, unknown>;
+
+function mapConnectionDtoToForm(dto: Record<string, unknown>, fallbackName: string, connectionId: string): FD {
+  return {
+    connectionId,
+    name: String(dto.connectorDisplayName ?? dto.connector_display_name ?? fallbackName),
+    technologyType: String(dto.connectorTypeCode ?? dto.connector_type_code ?? ''),
+    vendor: String(dto.connectorTypeCode ?? dto.connector_type_code ?? ''),
+    category: 'Database',
+    environment: 'Development',
+    host: '',
+    port: '',
+    database: '',
+    region: '',
+    description: '',
+    tags: '',
+    owner: String(dto.createdByFullName ?? dto.created_by_name ?? ''),
+    authMode: 'username_password',
+    username: '',
+    password: '',
+    sslEnabled: String(dto.connSslMode ?? dto.conn_ssl_mode ?? '').toUpperCase() !== 'DISABLE',
+    certAlias: '',
+    maxPoolSize: String(dto.connMaxPoolSizeNum ?? dto.conn_max_pool_size_num ?? ''),
+    status: String(dto.healthStatusCode ?? dto.health_status_code ?? 'UNKNOWN'),
+    createdBy: String(dto.createdByFullName ?? dto.created_by_name ?? '—'),
+    createdOn: String(dto.createdDtm ?? dto.created_dtm ?? '—'),
+    updatedBy: String(dto.updatedBy ?? dto.updated_by_user_id ?? '—'),
+    updatedOn: String(dto.updatedDtm ?? dto.updated_dtm ?? '—'),
+    secretSource: 'Platform Vault',
+    rotationPolicy: 'Manual',
+    maskingStatus: 'Enabled',
+  };
+}
+
+function buildConnectionUpdatePayload(form: FD) {
+  const payload: Record<string, unknown> = {
+    connectorDisplayName: String(form.name ?? '').trim(),
+    sslMode: form.sslEnabled ? 'REQUIRE' : 'DISABLE',
+  };
+  const maxPoolSizeRaw = String(form.maxPoolSize ?? '').trim();
+  const maxPoolSize = Number(maxPoolSizeRaw);
+  if (maxPoolSizeRaw && Number.isFinite(maxPoolSize)) {
+    payload.maxPoolSize = maxPoolSize;
+  }
+  return payload;
+}
 
 function Field({ label, field, value, onChange, ro, secret, placeholder }: {
   label: string; field: string; value: string; onChange?: (f: string, v: string) => void;
@@ -181,28 +226,20 @@ function AuthenticationTab({ data, onChange }: { data: FD; onChange: (f: string,
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'failed';
 
-function ConnectivityTab({ connectionId }: { connectionId: string }) {
-  const [status, setStatus]     = useState<TestStatus>('idle');
-  const [lastResult, setResult] = useState<{ testedBy: string; testedOn: string; responseMs?: number; error?: string } | null>(null);
-
-  const runTest = useCallback(async () => {
-    setStatus('testing');
-    try {
-      const res = await api.testConnectionById(connectionId);
-      const d = res.data?.data ?? res.data;
-      setStatus('success');
-      setResult({ testedBy: 'You', testedOn: new Date().toLocaleString(), responseMs: d?.responseMs });
-    } catch (err: unknown) {
-      setStatus('failed');
-      setResult({ testedBy: 'You', testedOn: new Date().toLocaleString(), error: (err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Connection failed' });
-    }
-  }, [connectionId]);
-
+function ConnectivityTab({
+  status,
+  lastResult,
+  onRunTest,
+}: {
+  status: TestStatus;
+  lastResult: { testedBy: string; testedOn: string; responseMs?: number; error?: string } | null;
+  onRunTest: () => void;
+}) {
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-lg space-y-4">
         <button
-          onClick={runTest}
+          onClick={onRunTest}
           disabled={status === 'testing'}
           className="flex items-center gap-2 h-9 px-5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-[13px] font-medium transition-colors disabled:opacity-60"
         >
@@ -246,15 +283,50 @@ function ConnectivityTab({ connectionId }: { connectionId: string }) {
 
 // ─── Usage sub-tab ────────────────────────────────────────────────────────
 
-function UsageTab() {
+function UsageTab({
+  rows,
+  loading,
+  error,
+}: {
+  rows: Array<{ usageType: string; objectName: string; context: string }>;
+  loading: boolean;
+  error: string | null;
+}) {
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-2xl">
         <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Used By</div>
-        <div className="flex flex-col items-center justify-center h-32 text-slate-600 border border-slate-800 rounded-lg">
-          <RefreshCw className="w-6 h-6 mb-2 opacity-40" />
-          <p className="text-sm">Usage data will be loaded once the connection is saved and in use.</p>
-        </div>
+        {loading ? (
+          <div className="text-[12px] text-slate-500 border border-slate-800 rounded-lg p-4">Loading usage…</div>
+        ) : error ? (
+          <div className="text-[12px] text-red-400 border border-red-800/50 rounded-lg p-4">{error}</div>
+        ) : rows.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-32 text-slate-600 border border-slate-800 rounded-lg">
+            <RefreshCw className="w-6 h-6 mb-2 opacity-40" />
+            <p className="text-sm">No dependent datasets, pipelines, or orchestrators found.</p>
+          </div>
+        ) : (
+          <div className="border border-slate-800 rounded-lg overflow-hidden">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="text-left text-[11px] text-slate-500 border-b border-slate-800">
+                  <th className="px-3 py-2 font-medium">Type</th>
+                  <th className="px-3 py-2 font-medium">Object</th>
+                  <th className="px-3 py-2 font-medium">Context</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr key={`${row.usageType}-${row.objectName}-${index}`} className="border-b border-slate-800/50">
+                    <td className="px-3 py-2 text-slate-400">{row.usageType}</td>
+                    <td className="px-3 py-2 text-slate-200">{row.objectName}</td>
+                    <td className="px-3 py-2 text-slate-500">{row.context}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -318,35 +390,154 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
     authMode: 'username_password',
     username: '', password: '', sslEnabled: false, certAlias: '',
     status: 'active',
+    maxPoolSize: '',
     createdBy: '—', createdOn: '—', updatedBy: '—', updatedOn: '—',
     secretSource: 'Platform Vault', rotationPolicy: 'Manual', maskingStatus: 'Enabled',
   });
   const [isDirty, setIsDirty]   = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<TestStatus>('idle');
+  const [lastTestResult, setLastTestResult] = useState<{ testedBy: string; testedOn: string; responseMs?: number; error?: string } | null>(null);
+
+  const [usageRows, setUsageRows] = useState<Array<{ usageType: string; objectName: string; context: string }>>([]);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageError, setUsageError] = useState<string | null>(null);
+
+  const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  const [permissionRows, setPermissionRows] = useState<PermissionRow[]>([]);
+  const [permissionsLoading, setPermissionsLoading] = useState(false);
+  const [permissionsError, setPermissionsError] = useState<string | null>(null);
+
+  const loadConnection = useCallback(async () => {
+    if (!connectionId) return;
+    setLoadError(null);
+    try {
+      const res = await api.getConnection(connectionId);
+      const data = (res.data?.data ?? res.data) as Record<string, unknown>;
+      setFormData(mapConnectionDtoToForm(data ?? {}, connectionName, connectionId));
+    } catch (err: unknown) {
+      setLoadError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load connection');
+    }
+  }, [connectionId, connectionName]);
 
   useEffect(() => {
-    if (!connectionId) return;
-    api.getConnection(connectionId).then(res => {
-      const d = res.data?.data ?? res.data;
-      if (d) setFormData(prev => ({ ...prev, ...d }));
-    }).catch(() => {/* use defaults */});
-  }, [connectionId]);
+    void loadConnection();
+  }, [loadConnection]);
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setIsDirty(true);
     dispatch(markTabUnsaved(tabId));
+    setSaveError(null);
   };
 
   const handleSave = async () => {
+    if (!connectionId) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
-      await api.updateConnection(connectionId, formData);
+      const payload = buildConnectionUpdatePayload(formData);
+      await api.updateConnection(connectionId, payload);
+      await loadConnection();
       setIsDirty(false);
       dispatch(markTabSaved(tabId));
-    } catch { /* noop */ }
+    } catch (err: unknown) {
+      setSaveError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to save connection');
+    }
     finally { setIsSaving(false); }
   };
+
+  const runConnectionTest = useCallback(async () => {
+    if (!connectionId || testStatus === 'testing') return;
+    setTestStatus('testing');
+    setLastTestResult(null);
+    try {
+      const res = await api.testConnectionById(connectionId);
+      const data = res.data?.data ?? res.data;
+      const responseMs = Number(data?.latencyMs ?? data?.responseMs ?? 0);
+      setTestStatus('success');
+      setLastTestResult({
+        testedBy: 'You',
+        testedOn: new Date().toLocaleString(),
+        responseMs: Number.isFinite(responseMs) ? responseMs : undefined,
+      });
+      await loadConnection();
+    } catch (err: unknown) {
+      setTestStatus('failed');
+      setLastTestResult({
+        testedBy: 'You',
+        testedOn: new Date().toLocaleString(),
+        error: (err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Connection test failed',
+      });
+    }
+  }, [connectionId, loadConnection, testStatus]);
+
+  useEffect(() => {
+    if (!connectionId) return;
+    if (subTab === 'usage') {
+      setUsageLoading(true);
+      setUsageError(null);
+      api.getConnectionUsage(connectionId)
+        .then(res => {
+          const data = res.data?.data ?? res.data;
+          const mapped = (Array.isArray(data) ? data : []).map((row: any) => ({
+            usageType: String(row.usageType ?? row.usage_type_code ?? 'USAGE'),
+            objectName: String(row.objectName ?? row.object_display_name ?? 'Unknown'),
+            context: String(row.context ?? row.context_text ?? ''),
+          }));
+          setUsageRows(mapped);
+        })
+        .catch((err: unknown) => setUsageError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load usage'))
+        .finally(() => setUsageLoading(false));
+    }
+
+    if (subTab === 'history') {
+      setHistoryLoading(true);
+      setHistoryError(null);
+      api.getConnectionHistory(connectionId, { limit: 100 })
+        .then(res => {
+          const data = res.data?.data ?? res.data;
+          const mapped = (Array.isArray(data) ? data : []).map((row: any) => ({
+            id: String(row.id),
+            timestamp: String(row.timestamp ?? ''),
+            action: String(row.action ?? 'UPDATED'),
+            actor: String(row.actor ?? 'system'),
+            comment: String(row.comment ?? ''),
+            newValue: row.responseMs != null ? `Response ${row.responseMs}ms` : undefined,
+            oldValue: row.errorMessage ? String(row.errorMessage) : undefined,
+          })) as HistoryRow[];
+          setHistoryRows(mapped);
+        })
+        .catch((err: unknown) => setHistoryError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load history'))
+        .finally(() => setHistoryLoading(false));
+    }
+
+    if (subTab === 'permissions') {
+      setPermissionsLoading(true);
+      setPermissionsError(null);
+      api.getConnectionPermissions(connectionId)
+        .then(res => {
+          const data = res.data?.data ?? res.data;
+          const mapped = (Array.isArray(data) ? data : []).map((row: any) => ({
+            id: String(row.id),
+            principalType: (row.principalType === 'role' ? 'role' : 'user') as PermissionRow['principalType'],
+            principalName: String(row.principalName ?? ''),
+            accessLevel: String(row.roleName ?? row.accessLevel ?? 'ACCESS'),
+            isInherited: false,
+            grantedBy: String(row.grantedBy ?? 'system'),
+            grantedOn: String(row.grantedOn ?? ''),
+          })) as PermissionRow[];
+          setPermissionRows(mapped);
+        })
+        .catch((err: unknown) => setPermissionsError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load permissions'))
+        .finally(() => setPermissionsLoading(false));
+    }
+  }, [connectionId, subTab]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0d0f1a]">
@@ -359,10 +550,11 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
         actions={
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => api.testConnectionById(connectionId)}
+              onClick={runConnectionTest}
+              disabled={testStatus === 'testing'}
               className="flex items-center gap-1.5 h-7 px-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[12px] font-medium transition-colors"
             >
-              <TestTube2 className="w-3.5 h-3.5" /> Test
+              {testStatus === 'testing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <TestTube2 className="w-3.5 h-3.5" />} Test
             </button>
             {isDirty && (
               <button
@@ -377,12 +569,31 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
       />
       <SubTabBar tabId={tabId} tabs={SUB_TABS} defaultTab="properties" />
 
+      {loadError && <div className="px-5 pt-3 text-[12px] text-red-400">{loadError}</div>}
+      {saveError && <div className="px-5 pt-2 text-[12px] text-red-400">{saveError}</div>}
+
       {subTab === 'properties'     && <PropertiesTab data={formData} onChange={handleChange} />}
       {subTab === 'authentication' && <AuthenticationTab data={formData} onChange={handleChange} />}
-      {subTab === 'connectivity'   && <ConnectivityTab connectionId={connectionId} />}
-      {subTab === 'usage'          && <UsageTab />}
-      {subTab === 'history'        && <div className="flex-1 overflow-hidden"><ObjectHistoryGrid rows={[]} /></div>}
-      {subTab === 'permissions'    && <div className="flex-1 overflow-hidden"><ObjectPermissionsGrid rows={[]} /></div>}
+      {subTab === 'connectivity'   && <ConnectivityTab status={testStatus} lastResult={lastTestResult} onRunTest={runConnectionTest} />}
+      {subTab === 'usage'          && <UsageTab rows={usageRows} loading={usageLoading} error={usageError} />}
+      {subTab === 'history'        && (
+        <div className="flex-1 overflow-hidden">
+          {historyError ? (
+            <div className="p-4 text-[12px] text-red-400">{historyError}</div>
+          ) : (
+            <ObjectHistoryGrid rows={historyRows} loading={historyLoading} />
+          )}
+        </div>
+      )}
+      {subTab === 'permissions'    && (
+        <div className="flex-1 overflow-hidden">
+          {permissionsError ? (
+            <div className="p-4 text-[12px] text-red-400">{permissionsError}</div>
+          ) : (
+            <ObjectPermissionsGrid rows={permissionRows} loading={permissionsLoading} readOnly />
+          )}
+        </div>
+      )}
       {subTab === 'security'       && <SecurityTab data={formData} />}
     </div>
   );

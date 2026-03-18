@@ -10,7 +10,7 @@ import {
   SourceTechnology,
   functionEntry,
   capability,
-} from './FunctionMatrixTypes';
+} from '../FunctionMatrixTypes';
 
 export const numericMathFunctions: FunctionEntry[] = [
   // Basic Arithmetic & Rounding
@@ -72,7 +72,6 @@ export const numericMathFunctions: FunctionEntry[] = [
     {
       priority: 'high',
       notes: 'Oracle/PG/RS use CEIL; MySQL/SS use CEILING. UI should accept either.',
-      uiBehavior: 'Show alternative syntax tip for MySQL and SQL Server',
     }
   ),
 
@@ -226,7 +225,6 @@ export const numericMathFunctions: FunctionEntry[] = [
     {
       priority: 'medium',
       notes: 'SQL Server uses LOG() for natural log. Others use LN().',
-      uiBehavior: 'Show note for SQL Server users',
     }
   ),
 
@@ -345,7 +343,6 @@ export const numericMathFunctions: FunctionEntry[] = [
     {
       priority: 'low',
       notes: 'SQL Server uses ATN2 instead of ATAN2',
-      uiBehavior: 'Show note for SQL Server',
     }
   ),
 
@@ -366,7 +363,6 @@ export const numericMathFunctions: FunctionEntry[] = [
     {
       priority: 'medium',
       notes: 'Non-deterministic function. Warning: Will return different values on each call.',
-      uiBehavior: 'Show warning about non-determinism in pipeline context',
     }
   ),
 ];

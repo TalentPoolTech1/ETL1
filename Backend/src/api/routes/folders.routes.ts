@@ -42,9 +42,7 @@ router.get('/project/:projectId', async (req: Request, res: Response, next: Next
       const r = await client.query(
         `SELECT folder_id, project_id, parent_folder_id, folder_display_name,
                 folder_type_code, created_dtm, updated_dtm
-         FROM etl.folders
-         WHERE project_id = $1::uuid AND parent_folder_id IS NULL
-         ORDER BY folder_display_name`,
+         FROM etl.fn_get_project_root_folders($1::uuid)`,
         [req.params.projectId]
       );
       return r.rows;
@@ -63,9 +61,7 @@ router.get('/:id/children', async (req: Request, res: Response, next: NextFuncti
       const r = await client.query(
         `SELECT folder_id, project_id, parent_folder_id, folder_display_name,
                 folder_type_code, created_dtm, updated_dtm
-         FROM etl.folders
-         WHERE parent_folder_id = $1::uuid
-         ORDER BY folder_display_name`,
+         FROM etl.fn_get_folder_children($1::uuid)`,
         [req.params.id]
       );
       return r.rows;
@@ -82,18 +78,9 @@ router.get('/:id/pipelines', async (req: Request, res: Response, next: NextFunct
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT
-           p.pipeline_id,
-           p.project_id,
-           p.folder_id,
-           p.pipeline_display_name,
-           p.pipeline_desc_text,
-           p.active_version_id,
-           p.created_dtm,
-           p.updated_dtm
-         FROM catalog.pipelines p
-         WHERE p.folder_id = $1::uuid
-         ORDER BY p.pipeline_display_name`,
+        `SELECT pipeline_id, project_id, folder_id, pipeline_display_name,
+                pipeline_desc_text, active_version_id, created_dtm, updated_dtm
+         FROM catalog.fn_get_pipelines_by_folder($1::uuid)`,
         [req.params.id]
       );
       return r.rows;
@@ -110,17 +97,9 @@ router.get('/:id/orchestrators', async (req: Request, res: Response, next: NextF
     const rows = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT
-           o.orch_id,
-           o.project_id,
-           o.folder_id,
-           o.orch_display_name,
-           o.orch_desc_text,
-           o.created_dtm,
-           o.updated_dtm
-         FROM catalog.orchestrators o
-         WHERE o.folder_id = $1::uuid
-         ORDER BY o.orch_display_name`,
+        `SELECT orch_id, project_id, folder_id, orch_display_name,
+                orch_desc_text, created_dtm, updated_dtm
+         FROM catalog.fn_get_orchestrators_by_folder($1::uuid)`,
         [req.params.id]
       );
       return r.rows;
@@ -199,35 +178,10 @@ router.put('/:id/rename', async (req: Request, res: Response, next: NextFunction
     if (!folderDisplayName?.trim()) return res.status(400).json({ success: false, userMessage: 'folderDisplayName is required' });
     await db.transaction(async client => {
       await setSession(client, userId);
-      // Get current folder data
-      const cur = await client.query(
-        `SELECT hierarchical_path_ltree FROM etl.folders WHERE folder_id = $1`,
-        [req.params.id]
-      );
-      if (!cur.rows[0]) throw Object.assign(new Error('Folder not found'), { status: 404 });
-      const oldLtree = cur.rows[0].hierarchical_path_ltree as string;
-      const newSlug = folderDisplayName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
-
-      // Compute new ltree for this folder
-      const pathParts = oldLtree.split('.');
-      pathParts[pathParts.length - 1] = newSlug;
-      const newLtree = pathParts.join('.');
-
-      // Update the folder itself
       await client.query(
-        `UPDATE etl.folders SET folder_display_name = $2, hierarchical_path_ltree = $3::ltree, updated_dtm = CURRENT_TIMESTAMP WHERE folder_id = $1`,
-        [req.params.id, folderDisplayName.trim(), newLtree]
+        `CALL etl.pr_rename_folder($1::uuid, $2)`,
+        [req.params.id, folderDisplayName.trim()],
       );
-
-      // Update all children ltree paths (replace old prefix with new prefix)
-      if (oldLtree !== newLtree) {
-        await client.query(
-          `UPDATE etl.folders
-           SET hierarchical_path_ltree = ($3::ltree || subpath(hierarchical_path_ltree, nlevel($1::ltree)))
-           WHERE hierarchical_path_ltree <@ $1::ltree AND folder_id != $2`,
-          [oldLtree, req.params.id, newLtree]
-        );
-      }
     });
     log.info('folder.rename', 'Folder renamed', { folderId: req.params.id, newName: folderDisplayName.trim(), userId });
     res.json({ success: true });

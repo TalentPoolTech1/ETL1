@@ -6,6 +6,7 @@ import { X, Workflow, Loader2, Folder } from 'lucide-react';
 
 export function CreatePipelineDialog() {
   const dispatch   = useAppDispatch();
+  const isOpen     = useAppSelector(s => s.projects.createPipelineOpen);
   const projectId  = useAppSelector(s => s.projects.createPipelineProjectId);
   const folderId   = useAppSelector(s => s.projects.createPipelineFolderId);
   const project    = useAppSelector(s => s.projects.projects.find(p => p.projectId === projectId));
@@ -23,7 +24,7 @@ export function CreatePipelineDialog() {
   const [error, setError]     = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { if (isOpen) inputRef.current?.focus(); }, [isOpen]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') dispatch(closeCreatePipeline()); };
@@ -31,7 +32,7 @@ export function CreatePipelineDialog() {
     return () => window.removeEventListener('keydown', handler);
   }, [dispatch]);
 
-  if (!projectId) return null;
+  if (!isOpen) return null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +67,7 @@ export function CreatePipelineDialog() {
       : <>in a folder</>
     : project
       ? <>at root of <span className="text-slate-300">{project.projectDisplayName}</span></>
-      : null;
+      : <><span className="text-blue-400 font-medium italic">Global scope</span></>;
 
   return (
     <div

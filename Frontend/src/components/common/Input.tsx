@@ -6,6 +6,7 @@ interface InputProps {
   placeholder?: string;
   value?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   disabled?: boolean;
   className?: string;
   label?: string;
@@ -18,6 +19,7 @@ export function Input({
   placeholder,
   value,
   onChange,
+  onKeyDown,
   disabled,
   className,
   label,
@@ -32,14 +34,15 @@ export function Input({
         placeholder={placeholder}
         value={value}
         onChange={onChange}
+        onKeyDown={onKeyDown}
         disabled={disabled}
         className={cx(
           'px-3 py-2 border rounded-md text-sm font-family-base',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-600',
           {
             'border-neutral-300 bg-white hover:border-neutral-400': !error && !disabled,
-            'border-danger-600 bg-danger-50': error,
-            'border-neutral-200 bg-neutral-50 text-neutral-500 cursor-not-allowed': disabled,
+            'border-danger-600 bg-danger-50': Boolean(error),
+            'border-neutral-200 bg-neutral-50 text-neutral-500 cursor-not-allowed': Boolean(disabled),
           },
           className
         )}

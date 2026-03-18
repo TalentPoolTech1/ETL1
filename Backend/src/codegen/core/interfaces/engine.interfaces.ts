@@ -66,6 +66,7 @@ export interface UdfDefinition {
 }
 
 export interface GenerationOptions {
+  technology?: string;
   includeComments?: boolean;
   includeSchemaValidation?: boolean;
   includeDataQuality?: boolean;

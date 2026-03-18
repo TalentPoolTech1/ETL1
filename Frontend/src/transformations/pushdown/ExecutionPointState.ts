@@ -89,12 +89,24 @@ export class ExecutionPointStateManager {
     sequence: TransformSequence
   ): ExecutionPointSwitchImpact {
     if (!this.eligibilityAnalysis) {
-      return { valid: false, warnings: ['No eligibility analysis available'], affectedSteps: [], affectedColumns: [] };
+      return {
+        valid: false,
+        warnings: ['No eligibility analysis available'],
+        affectedSteps: [],
+        affectedColumns: [],
+        dataMovementRequired: false,
+      };
     }
 
     const currentChoice = this.choices.get(stepId);
     if (!currentChoice) {
-      return { valid: false, warnings: ['Step not found'], affectedSteps: [], affectedColumns: [] };
+      return {
+        valid: false,
+        warnings: ['Step not found'],
+        affectedSteps: [],
+        affectedColumns: [],
+        dataMovementRequired: false,
+      };
     }
 
     const warnings: string[] = [];

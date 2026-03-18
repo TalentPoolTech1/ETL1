@@ -33,6 +33,41 @@ LANGUAGE sql STABLE AS $$
 $$;
 COMMENT ON FUNCTION catalog.fn_get_connectors() IS 'Lists all registered connectors with their type, SSL mode, pool size, and current health status. Config decryption only at execution time.';
 ;
+
+-- Filtered connector list by technology code with keyset pagination
+CREATE OR REPLACE FUNCTION catalog.fn_get_connectors_by_tech(
+    p_tech_code   TEXT,
+    p_limit       INTEGER DEFAULT 50,
+    p_after_id    UUID    DEFAULT NULL
+)
+RETURNS TABLE (
+    connector_id           UUID,
+    connector_display_name TEXT,
+    connector_type_code    TEXT,
+    conn_ssl_mode          TEXT,
+    conn_max_pool_size_num INTEGER,
+    health_status_code     TEXT,
+    created_by_full_name   TEXT,
+    updated_dtm            TIMESTAMPTZ,
+    technology_id          UUID
+)
+LANGUAGE sql STABLE AS $$
+    SELECT c.connector_id, c.connector_display_name, c.connector_type_code,
+           c.conn_ssl_mode, c.conn_max_pool_size_num,
+           COALESCE(h.health_status_code, 'UNKNOWN') AS health_status_code,
+           u.user_full_name AS created_by_full_name, c.updated_dtm,
+           c.technology_id
+    FROM catalog.connectors c
+    LEFT JOIN etl.users u ON c.created_by_user_id = u.user_id
+    LEFT JOIN catalog.connector_health h ON c.connector_id = h.connector_id
+    LEFT JOIN meta.technology_types t ON c.technology_id = t.technology_id
+    WHERE (p_tech_code IS NULL OR t.tech_code = p_tech_code)
+      AND (p_after_id IS NULL OR c.connector_id > p_after_id)
+    ORDER BY c.connector_id
+    LIMIT p_limit;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_connectors_by_tech(TEXT, INTEGER, UUID) IS 'Lazy-loads connectors filtered by technology code with keyset pagination. p_after_id is the last connector_id from the previous page.';
+;
 CREATE OR REPLACE FUNCTION catalog.fn_get_connector_by_id(p_connector_id UUID)
 RETURNS TABLE (
     connector_id           UUID,
@@ -55,7 +90,8 @@ LANGUAGE sql STABLE AS $$
            c.conn_jdbc_driver_class, c.conn_test_query, c.conn_spark_config_json,
            c.conn_ssl_mode, c.conn_max_pool_size_num, c.conn_idle_timeout_sec,
            COALESCE(h.health_status_code, 'UNKNOWN'),
-           c.created_dtm, c.updated_dtm, c.created_by_user_id, c.updated_by_user_id
+           c.created_dtm, c.updated_dtm, c.created_by_user_id, c.updated_by_user_id,
+           c.technology_id
     FROM catalog.connectors c
     LEFT JOIN catalog.connector_health h ON c.connector_id = h.connector_id
     WHERE c.connector_id = p_connector_id;
@@ -98,6 +134,7 @@ CREATE OR REPLACE PROCEDURE catalog.pr_create_connector(
     p_conn_max_pool_size_num     INTEGER,
     p_conn_idle_timeout_sec      INTEGER,
     p_created_by_user_id         UUID,
+    p_technology_id              UUID,
     OUT p_connector_id           UUID
 )
 LANGUAGE plpgsql AS $$
@@ -112,7 +149,8 @@ BEGIN
         conn_ssl_mode,
         conn_ssh_tunnel_json_encrypted, conn_proxy_json_encrypted,
         conn_max_pool_size_num, conn_idle_timeout_sec,
-        created_by_user_id
+        created_by_user_id,
+        technology_id
     )
     VALUES (
         p_connector_display_name,
@@ -133,7 +171,8 @@ BEGIN
              ELSE NULL END,
         COALESCE(p_conn_max_pool_size_num, 5),
         COALESCE(p_conn_idle_timeout_sec, 600),
-        p_created_by_user_id
+        p_created_by_user_id,
+        p_technology_id
     ) RETURNING connector_id INTO p_connector_id;
 
     -- Initialize health record as UNKNOWN
@@ -156,7 +195,8 @@ CREATE OR REPLACE PROCEDURE catalog.pr_update_connector(
     p_conn_proxy_plain           JSONB,
     p_conn_max_pool_size_num     INTEGER,
     p_conn_idle_timeout_sec      INTEGER,
-    p_updated_by_user_id         UUID
+    p_updated_by_user_id         UUID,
+    p_technology_id              UUID
 )
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -182,7 +222,8 @@ BEGIN
                                             ELSE conn_proxy_json_encrypted END,
         conn_max_pool_size_num        = COALESCE(p_conn_max_pool_size_num, conn_max_pool_size_num),
         conn_idle_timeout_sec         = COALESCE(p_conn_idle_timeout_sec, conn_idle_timeout_sec),
-        updated_by_user_id            = p_updated_by_user_id
+        updated_by_user_id            = p_updated_by_user_id,
+        technology_id                 = COALESCE(p_technology_id, technology_id)
     WHERE connector_id = p_connector_id;
 END;
 $$;

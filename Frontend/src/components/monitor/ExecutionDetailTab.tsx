@@ -270,7 +270,43 @@ export function ExecutionDetailTab({ runId, executionKind }: {
         if (nodeRes.status === 'fulfilled') setNodes(nodeRes.value.data.data ?? []);
       } else {
         const res = await api.getOrchestratorRunDetail(runId);
-        setDetail(res.data.data ?? res.data);
+        const data = res.data?.data ?? res.data;
+        setDetail({
+          pipelineRunId: data.orchRunId ?? runId,
+          pipelineName: data.orchestratorName ?? 'Orchestrator',
+          projectName: data.projectName ?? null,
+          versionLabel: '',
+          runStatus: data.runStatus ?? 'PENDING',
+          triggerType: data.triggerType ?? 'MANUAL',
+          submittedBy: data.submittedBy ?? null,
+          startDtm: data.startDtm ?? null,
+          endDtm: data.endDtm ?? null,
+          durationMs: data.durationMs ?? null,
+          rowsProcessed: null,
+          bytesRead: null,
+          bytesWritten: null,
+          errorCategory: null,
+          errorMessage: data.errorMessage ?? null,
+          retryCount: data.retryCount ?? 0,
+          slaStatus: 'N_A',
+          generatedCodeRef: null,
+          sparkJobId: null,
+          sparkUiUrl: null,
+          nodes: [],
+        });
+        setNodes((Array.isArray(data.pipelineRuns) ? data.pipelineRuns : []).map((run: any) => ({
+          nodeRunId: run.pipelineRunId ?? run.pipelineId ?? `${runId}-pipeline`,
+          nodeIdInIrText: run.dagNodeId ?? run.pipelineId ?? '',
+          nodeDisplayName: run.pipelineName ?? 'Pipeline',
+          runStatus: run.runStatus ?? 'PENDING',
+          startDtm: run.startDtm ?? null,
+          endDtm: run.endDtm ?? null,
+          durationMs: run.durationMs ?? null,
+          rowsIn: null,
+          rowsOut: null,
+          errorMessage: run.errorMessage ?? null,
+          metrics: { executionOrder: run.executionOrder ?? null },
+        })));
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to load execution details');

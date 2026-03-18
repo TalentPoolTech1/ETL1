@@ -12,11 +12,12 @@ import {
   Plug2
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { fetchConnectors, openCreateConnection } from '@/store/slices/connectionsSlice';
+import { fetchConnectors, openCreateConnection, selectAllConnectors } from '@/store/slices/connectionsSlice';
 
 export function ConnectionsManager() {
   const dispatch = useAppDispatch();
-  const connections = useAppSelector(s => s.connections.connectors);
+  const connectorsByTech = useAppSelector(s => s.connections.connectorsByTech);
+  const connections = selectAllConnectors(connectorsByTech);
   const loading = useAppSelector(s => s.connections.isLoading);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -43,7 +44,7 @@ export function ConnectionsManager() {
           <h1 className="text-2xl font-black text-neutral-900 tracking-tight">Connections</h1>
           <p className="text-sm text-neutral-500 font-medium">Manage your data sources and destinations</p>
         </div>
-        <button onClick={() => dispatch(openCreateConnection())} 
+        <button onClick={() => dispatch(openCreateConnection(undefined))}
           className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-brand-100 transition-all active:scale-[0.98]">
           <Plus size={18} />
           <span>New Connection</span>
