@@ -22,10 +22,7 @@ async function resolveEnvironmentId(client: any, environment?: string): Promise<
   const envName = environment?.trim();
   if (!envName) return null;
   const r = await client.query(
-    `SELECT env_id
-     FROM execution.environments
-     WHERE lower(env_display_name) = lower($1)
-     LIMIT 1`,
+    `SELECT execution.fn_get_environment_id_by_name($1) AS env_id`,
     [envName],
   );
   return (r.rows[0]?.env_id as string | undefined) ?? null;
@@ -182,8 +179,14 @@ router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) 
     const row = await db.transaction(async client => {
       await setSession(client, userId);
       const pRow = await client.query(
-        `SELECT pipeline_id,active_version_id FROM catalog.pipelines WHERE pipeline_id=$1`, [req.params['id']]);
-      if (!pRow.rows[0]) throw new Error('Pipeline not found');
+        `SELECT pipeline_id, active_version_id
+         FROM catalog.fn_get_pipeline_runtime_info($1::uuid)`,
+        [req.params['id']],
+      );
+      if (!pRow.rows[0]) throw Object.assign(new Error('Pipeline not found'), { status: 404 });
+      if (!pRow.rows[0].active_version_id) {
+        throw Object.assign(new Error('Pipeline has no active version'), { status: 409 });
+      }
       const envId = await resolveEnvironmentId(client, environment);
       const r = await client.query(
         `CALL execution.pr_initialize_pipeline_run($1::uuid, $2::uuid, $3::uuid, $4::uuid, null, $5)`,
@@ -191,24 +194,17 @@ router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) 
       );
       const pipelineRunId = r.rows[0].p_pipeline_run_id as string;
 
-      if (environment?.trim()) {
-        await client.query(
-          `INSERT INTO execution.run_parameters (pipeline_run_id, param_key_name, param_value_text)
-           VALUES ($1::uuid, $2, $3)
-           ON CONFLICT (pipeline_run_id, param_key_name) DO UPDATE
-           SET param_value_text = EXCLUDED.param_value_text`,
-          [pipelineRunId, '__environment', environment.trim()],
-        );
-      }
-      if (technology?.trim()) {
-        await client.query(
-          `INSERT INTO execution.run_parameters (pipeline_run_id, param_key_name, param_value_text)
-           VALUES ($1::uuid, $2, $3)
-           ON CONFLICT (pipeline_run_id, param_key_name) DO UPDATE
-           SET param_value_text = EXCLUDED.param_value_text`,
-          [pipelineRunId, '__technology', technology.trim()],
-        );
-      }
+      await client.query(
+        `CALL execution.pr_set_pipeline_run_options($1::uuid, $2::jsonb)`,
+        [
+          pipelineRunId,
+          JSON.stringify({
+            environment: environment?.trim() || null,
+            technology: technology?.trim() || null,
+            requestedBy: userId,
+          }),
+        ],
+      );
 
       return { pipeline_run_id: pipelineRunId, environmentApplied: Boolean(envId) };
     });
@@ -229,7 +225,12 @@ router.post('/:id/run', async (req: Request, res: Response, next: NextFunction) 
         environmentApplied: row.environmentApplied,
       },
     });
-  } catch (err) { log.warn('pipeline.run', 'Run trigger failed', { pipelineId: req.params['id'], error: (err as Error).message }); return next(err); }
+  } catch (err: any) {
+    if (err.status === 404) return res.status(404).json({ success: false, userMessage: 'Pipeline not found' });
+    if (err.status === 409) return res.status(409).json({ success: false, userMessage: 'Pipeline has no active version to run' });
+    log.warn('pipeline.run', 'Run trigger failed', { pipelineId: req.params['id'], error: (err as Error).message });
+    return next(err);
+  }
 });
 
 router.get('/:id/lineage', async (req: Request, res: Response, next: NextFunction) => {

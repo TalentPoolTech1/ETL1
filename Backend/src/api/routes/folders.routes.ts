@@ -137,10 +137,16 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     const row = await db.transaction(async client => {
       await setSession(client, userId);
       const r = await client.query(
-        `SELECT folder_id, project_id, parent_folder_id, folder_display_name,
-                folder_type_code, created_dtm, updated_dtm
-         FROM etl.folders WHERE folder_id = $1`,
-        [req.params.id]
+        `SELECT
+           folder_id,
+           project_id,
+           parent_folder_id,
+           folder_display_name,
+           folder_type_code,
+           created_dtm,
+           updated_dtm
+         FROM etl.fn_get_folder_by_id($1::uuid)`,
+        [req.params.id],
       );
       return r.rows[0] ?? null;
     });
@@ -160,28 +166,22 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
 
     const row = await db.transaction(async client => {
       await setSession(client, userId);
-
-      // Build LTREE path: parent path + new slug
-      let ltreePath: string;
-      if (parentFolderId) {
-        const parent = await client.query(
-          `SELECT hierarchical_path_ltree FROM etl.folders WHERE folder_id = $1`,
-          [parentFolderId]
-        );
-        if (!parent.rows[0]) throw new Error('Parent folder not found');
-        const slug = folderDisplayName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
-        ltreePath = `${parent.rows[0].hierarchical_path_ltree}.${slug}`;
-      } else {
-        const slug = folderDisplayName.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
-        ltreePath = slug;
-      }
-
+      const created = await client.query<{ p_folder_id: string }>(
+        `CALL etl.pr_create_folder($1::uuid, $2::uuid, $3, $4, null)`,
+        [projectId, parentFolderId ?? null, folderDisplayName.trim(), folderTypeCode],
+      );
+      const folderId = created.rows[0].p_folder_id;
       const r = await client.query(
-        `INSERT INTO etl.folders
-           (project_id, parent_folder_id, folder_display_name, hierarchical_path_ltree, folder_type_code)
-         VALUES ($1::uuid, $2::uuid, $3, $4::ltree, $5)
-         RETURNING folder_id, project_id, parent_folder_id, folder_display_name, folder_type_code, created_dtm, updated_dtm`,
-        [projectId, parentFolderId ?? null, folderDisplayName.trim(), ltreePath, folderTypeCode]
+        `SELECT
+           folder_id,
+           project_id,
+           parent_folder_id,
+           folder_display_name,
+           folder_type_code,
+           created_dtm,
+           updated_dtm
+         FROM etl.fn_get_folder_by_id($1::uuid)`,
+        [folderId],
       );
       return r.rows[0];
     });
@@ -241,7 +241,7 @@ router.delete('/:id', async (req: Request, res: Response, next: NextFunction) =>
     const userId = getUserId(res);
     const deleted = await db.transaction(async client => {
       await setSession(client, userId);
-      const exists = await client.query(`SELECT 1 FROM etl.folders WHERE folder_id = $1::uuid`, [req.params.id]);
+      const exists = await client.query(`SELECT folder_id FROM etl.fn_get_folder_by_id($1::uuid)`, [req.params.id]);
       if (!exists.rowCount) return false;
       await client.query(`CALL etl.pr_delete_folder($1::uuid)`, [req.params.id]);
       return true;

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { AuditLogsSubTab } from '@/components/pipeline/sub-tabs/AuditLogsSubTab';
 import { ActivityTimeline } from '@/components/collaboration/CollaborationUI';
 import { 
   Users, 
@@ -15,12 +14,6 @@ import api from '@/services/api';
 
 export function GovernanceView() {
   const [activeTab, setActiveTab] = useState<'users' | 'roles' | 'audit'>('users');
-
-  const mockActivities: any[] = [
-    { id: '1', user: 'Admin User', action: 'Created Project', target: 'Finance_ETL', timestamp: new Date(), icon: 'plus' },
-    { id: '2', user: 'Data Engineer', action: 'Modified Pipeline', target: 'Sales_Sync', timestamp: new Date(Date.now() - 3600000), icon: 'edit' },
-    { id: '3', user: 'Security Officer', action: 'Granted Permission', target: 'User_X', timestamp: new Date(Date.now() - 7200000), icon: 'key' },
-  ];
 
   const [users, setUsers] = useState<{ name: string; email: string; role: string; status: string }[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -62,9 +55,13 @@ export function GovernanceView() {
           <h1 className="text-xl font-bold text-neutral-900">Governance & Security</h1>
           <p className="text-xs text-neutral-500 mt-1">Manage users, roles, and audit trails across the platform.</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-xs font-semibold rounded-lg hover:bg-primary-700 shadow-sm transition-all hover:shadow-md active:scale-95">
+        <button
+          disabled
+          title="Invite flow is not implemented yet"
+          className="flex items-center gap-2 px-4 py-2 bg-primary-600/60 text-white text-xs font-semibold rounded-lg opacity-70 cursor-not-allowed"
+        >
           <UserPlus className="w-4 h-4" />
-          <span>Invite User</span>
+          <span>Invite User (coming soon)</span>
         </button>
       </div>
 
@@ -190,14 +187,19 @@ export function GovernanceView() {
 
             {activeTab === 'audit' && (
               <div className="space-y-8">
-                <AuditLogsSubTab pipelineId="" />
+                <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm">
+                  <h3 className="text-sm font-semibold text-neutral-900 mb-2">System Audit Log</h3>
+                  <p className="text-xs text-neutral-500">
+                    Dedicated governance/system audit API is not yet implemented.
+                  </p>
+                </div>
               </div>
             )}
           </div>
 
           {/* Right Sidebar - Activity Summary */}
           <div className="w-80 border-l border-neutral-200 bg-white p-6 overflow-y-auto">
-            <ActivityTimeline activities={mockActivities} />
+            <ActivityTimeline activities={[]} />
           </div>
         </div>
       </div>
