@@ -15,11 +15,14 @@
  * GET    /api/connections/:id/tables/:table      — Describe table (?database=&schema=)
  */
 
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { ConnectionsController } from '../controllers/connections.controller';
 import { ConnectorRegistry } from '../../connectors/ConnectorRegistry';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
 import { requirePermission } from '../middleware/rbac.middleware';
+import { metadataIntrospectionService } from '../../metadata/MetadataIntrospectionService';
+import { connectionsService } from '../services/connections.service';
+import { connectionsRepository } from '../../db/repositories/connections.repository';
 
 const router = Router();
 const ctrl = new ConnectionsController();
@@ -75,5 +78,73 @@ router.get('/:id/databases', requirePermission('CONNECTION_VIEW'), (req, res, ne
 router.get('/:id/schemas', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.listSchemas(req, res, next));
 router.get('/:id/tables', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.listTables(req, res, next));
 router.get('/:id/tables/:table', requirePermission('CONNECTION_VIEW'), (req, res, next) => ctrl.describeTable(req, res, next));
+
+// ---------------------------------------------------------------------------
+// Metadata import — introspect source and register datasets in catalog
+// ---------------------------------------------------------------------------
+
+function getUserId(res: Response): string {
+    return (res.locals['userId'] as string) ?? 'system';
+}
+
+/** GET /api/connections/:id/introspect/schemas — list available schemas/paths */
+router.get('/:id/introspect/schemas', requirePermission('CONNECTION_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = getUserId(res);
+        const encKey = process.env['APP_ENCRYPTION_KEY'];
+        if (!encKey) throw new Error('APP_ENCRYPTION_KEY is required');
+        const row = await connectionsRepository.getDecrypted(req.params.id, userId, encKey);
+        if (!row) return res.status(404).json({ success: false, userMessage: 'Connection not found' });
+        const schemas = await metadataIntrospectionService.listSchemas(
+            row.connector_type_code,
+            { ...row.conn_config_json, connector_id: req.params.id },
+            row.conn_secrets_json ?? {},
+        );
+        return res.json({ success: true, data: schemas });
+    } catch (err) { return next(err); }
+});
+
+/** GET /api/connections/:id/introspect/tables?schema= — list tables in a schema */
+router.get('/:id/introspect/tables', requirePermission('CONNECTION_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = getUserId(res);
+        const schema = String(req.query['schema'] ?? '');
+        const encKey = process.env['APP_ENCRYPTION_KEY'];
+        if (!encKey) throw new Error('APP_ENCRYPTION_KEY is required');
+        const row = await connectionsRepository.getDecrypted(req.params.id, userId, encKey);
+        if (!row) return res.status(404).json({ success: false, userMessage: 'Connection not found' });
+        const tables = await metadataIntrospectionService.listTables(
+            row.connector_type_code,
+            { ...row.conn_config_json, connector_id: req.params.id },
+            row.conn_secrets_json ?? {},
+            schema,
+        );
+        return res.json({ success: true, data: tables });
+    } catch (err) { return next(err); }
+});
+
+/** POST /api/connections/:id/introspect/import — import selected tables into catalog */
+router.post('/:id/introspect/import', requirePermission('CONNECTION_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = getUserId(res);
+        const encKey = process.env['APP_ENCRYPTION_KEY'];
+        if (!encKey) throw new Error('APP_ENCRYPTION_KEY is required');
+        const row = await connectionsRepository.getDecrypted(req.params.id, userId, encKey);
+        if (!row) return res.status(404).json({ success: false, userMessage: 'Connection not found' });
+
+        // Body: { selections: [{db?, schema, table}] }  OR  { all: true } for file connections
+        const selections: Array<{ db?: string; schema?: string; table: string }> = req.body.selections ?? [];
+        const result = await metadataIntrospectionService.importMetadata({
+            connectorId: req.params.id,
+            typeCode: row.connector_type_code,
+            config: { ...row.conn_config_json, connector_id: req.params.id },
+            secrets: row.conn_secrets_json ?? {},
+            selections: selections.map(s => ({ db: s.db ?? '', schema: s.schema ?? '', table: s.table })),
+            userId,
+            encryptionKey: encKey,
+        });
+        return res.json({ success: true, data: result });
+    } catch (err) { return next(err); }
+});
 
 export default router;

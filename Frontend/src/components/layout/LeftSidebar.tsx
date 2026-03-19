@@ -24,10 +24,11 @@ import {
   GitBranch, GitMerge,
   LayoutDashboard, Loader2, Pencil, Plug2, Plus,
   RefreshCw, Search, Settings, Shield, Trash2,
-  Users, Workflow, Network, ExternalLink, Play, Layers,
+  Users, Workflow, Network, ExternalLink, Play, Layers, Eye,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { openTab } from '@/store/slices/tabsSlice';
+import { openMetadataPreview } from '@/store/slices/uiSlice';
 import {
   fetchProjects, fetchPipelinesForProject, fetchOrchestratorsForProject,
   fetchFoldersForProject, fetchFolderPipelines, fetchFolderOrchestrators,
@@ -38,7 +39,7 @@ import {
   deletePipeline, renamePipeline, deleteOrchestrator, renameOrchestrator,
   deleteFolder, renameFolder,
 } from '@/store/slices/projectsSlice';
-import { fetchConnectors, fetchConnectorsByTech, evictTechSlot, openCreateConnection, fetchTechnologies } from '@/store/slices/connectionsSlice';
+import { fetchConnectorsByTech, evictTechSlot, openCreateConnection, fetchTechnologies, deleteConnector } from '@/store/slices/connectionsSlice';
 import { connectorCache } from '@/utils/connectorCache';
 import { CreateProjectDialog }      from '@/components/dialogs/CreateProjectDialog';
 import { CreatePipelineDialog }     from '@/components/dialogs/CreatePipelineDialog';
@@ -664,76 +665,24 @@ function ProjectNode({ project }: { project: { projectId: string; projectDisplay
 
 function ConnectionsSection() {
   const dispatch  = useAppDispatch();
-  const activeTab = useAppSelector(s => s.tabs.allTabs.find(t => t.id === s.tabs.activeTabId));
-  const connectorsByTech = useAppSelector(s => s.connections.connectorsByTech);
   const [expanded, setExpanded] = useState(false);
 
-  const allSlot = connectorsByTech['__ALL__'];
-  // items in Arrow cache; slot.count triggers re-render
-  const connectors = allSlot ? connectorCache.get('__ALL__') : [];
-  const isLoading  = allSlot?.isLoading ?? false;
-
   const toggle = () => {
-    if (!expanded && connectors.length === 0) dispatch(fetchConnectors());
+    if (!expanded) dispatch(fetchTechnologies());
     setExpanded(v => !v);
   };
-
-  const openConnection = useCallback((c: { connectorId: string; connectorDisplayName: string }) => {
-    dispatch(openTab({
-      id: `connection-${c.connectorId}`, type: 'connection',
-      objectId: c.connectorId, objectName: c.connectorDisplayName,
-      hierarchyPath: `Connections → ${c.connectorDisplayName}`,
-      unsaved: false, isDirty: false,
-    }));
-  }, [dispatch]);
-
-  const healthDot = (code: string) =>
-    code === 'HEALTHY' ? 'bg-emerald-400' : code === 'DEGRADED' ? 'bg-amber-400' : 'bg-slate-600';
 
   return (
     <>
       <Section
         label="Connections" icon={Plug2} iconColor="text-emerald-400"
         isExpanded={expanded} onToggle={toggle}
-        onRefresh={() => dispatch(fetchConnectors())}
+        onRefresh={() => dispatch(fetchTechnologies())}
         onAdd={() => dispatch(openCreateConnection({}))}
         addTitle="New connection"
       />
       {expanded && (
-        <>
-          {isLoading && (
-            <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600"
-              style={{ paddingLeft: 8 + 1 * 16 + 20 }}>
-              <Loader2 className="w-3 h-3 animate-spin" /> Loading…
-            </div>
-          )}
-          {!isLoading && connectors.length === 0 && (
-            <div className="h-6 flex items-center text-[11px] text-slate-700 italic"
-              style={{ paddingLeft: 8 + 1 * 16 + 20 }}>
-              No connections — click + to add
-            </div>
-          )}
-          {connectors.map(c => {
-            const isConn = activeTab?.objectId === c.connectorId && activeTab?.type === 'connection';
-            return (
-              <TreeItem
-                key={c.connectorId} depth={1}
-                icon={
-                  <span className="relative">
-                    <Network className="w-3.5 h-3.5 text-emerald-500" strokeWidth={1.5} />
-                    <span className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border border-[#0f1117] ${healthDot(c.healthStatusCode)}`} />
-                  </span>
-                }
-                label={c.connectorDisplayName}
-                isActive={isConn}
-                onPrimaryClick={() => openConnection(c)}
-                actions={
-                  <Btn title="Open connection details" onClick={() => openConnection(c)} icon={ExternalLink} />
-                }
-              />
-            );
-          })}
-        </>
+        <TechnologiesSection nested />
       )}
     </>
   );
@@ -934,7 +883,13 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
                 label={c.connectorDisplayName}
                 isActive={isConn}
                 onPrimaryClick={() => openConn(c)}
-                actions={<Btn title="Open" onClick={() => openConn(c)} icon={ExternalLink} />}
+                actions={<>
+                  <Btn title="Open connection" onClick={() => openConn(c)} icon={ExternalLink} />
+                  <Btn title="Delete connection" danger onClick={() => {
+                    if (window.confirm(`Delete connection "${c.connectorDisplayName}"?`))
+                      dispatch(deleteConnector(c.connectorId));
+                  }} icon={Trash2} />
+                </>}
               />
             );
           })}
@@ -953,7 +908,7 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
   );
 }
 
-function TechnologiesSection() {
+function TechnologiesSection({ nested = false }: { nested?: boolean }) {
   const dispatch = useAppDispatch();
   const { technologies, isLoading } = useAppSelector(s => s.connections);
   const [expanded, setExpanded] = useState(false);
@@ -969,6 +924,8 @@ function TechnologiesSection() {
     return acc;
   }, {} as Record<string, typeof technologies>);
 
+  const baseDepth = nested ? 1 : 0;
+
   return (
     <>
       <Section
@@ -981,18 +938,278 @@ function TechnologiesSection() {
         <>
           {isLoading && (
             <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600"
-              style={{ paddingLeft: 8 + 1 * 16 + 20 }}>
+              style={{ paddingLeft: 8 + (baseDepth + 1) * 16 + 20 }}>
               <Loader2 className="w-3 h-3 animate-spin" /> Loading…
             </div>
           )}
           {!isLoading && Object.keys(grouped).map(cat => (
             <React.Fragment key={cat}>
-              <SubLabel label={cat.replace('_', ' ')} depth={0} />
+              <SubLabel label={cat.replace('_', ' ')} depth={baseDepth} />
               {grouped[cat].map(t => (
                 <TechRow key={t.techCode} tech={t} />
               ))}
             </React.Fragment>
           ))}
+        </>
+      )}
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// METADATA SECTION — catalog-only tree: Connection → Schema → Table → Columns
+// Shows ONLY datasets that have been imported into catalog.datasets.
+// No introspect here — introspect is on the Import tab of the connection workspace.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CatalogDataset = {
+  dataset_id: string;
+  connector_id: string;
+  connector_display_name: string;
+  connector_type_code: string;
+  schema_name_text: string;
+  table_name_text: string;
+  dataset_type_code: string;
+};
+
+type CatalogColumn = { columnId: string; name: string; dataType: string; nullable: boolean; ordinal: number };
+
+function MetaTableRow({
+  dataset,
+  connectorDisplayName,
+  schemaName,
+}: {
+  dataset: CatalogDataset;
+  connectorDisplayName: string;
+  schemaName: string;
+}) {
+  const dispatch = useAppDispatch();
+  const [expanded, setExpanded] = useState(false);
+  const [columns, setColumns] = useState<CatalogColumn[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && columns.length === 0) {
+      setLoading(true);
+      try {
+        const res = await api.getProfile(dataset.dataset_id);
+        const p = res.data?.data ?? res.data;
+        setColumns((p?.columns ?? []) as CatalogColumn[]);
+      } catch { /* ignore */ }
+      finally { setLoading(false); }
+    }
+  };
+
+  const openDetail = () => dispatch(openTab({
+    id: `metadata-${dataset.dataset_id}`, type: 'metadata',
+    objectId: dataset.dataset_id, objectName: dataset.table_name_text,
+    hierarchyPath: `Metadata → ${connectorDisplayName} → ${schemaName} → ${dataset.table_name_text}`,
+    unsaved: false, isDirty: false,
+  }));
+
+  const isFile = dataset.connector_type_code?.startsWith('FILE_') || dataset.connector_type_code === 'CSV';
+  const tableIcon = isFile ? '📄' : null;
+
+  return (
+    <>
+      {/* Table row */}
+      <div
+        className="flex items-center group cursor-pointer select-none"
+        style={{ paddingLeft: 8 + 4 * 16, height: 22 }}
+        onClick={toggle}
+      >
+        <span className="w-4 h-4 flex items-center justify-center text-slate-600 flex-shrink-0 mr-1">
+          {expanded ? <ChevronDown className="w-3 h-3" strokeWidth={1.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={1.5} />}
+        </span>
+        {tableIcon
+          ? <span className="text-[11px] mr-1.5 flex-shrink-0">{tableIcon}</span>
+          : <Database className="w-3 h-3 text-violet-400 flex-shrink-0 mr-1.5" strokeWidth={1.5} />}
+        <span className="flex-1 truncate text-[12px] text-slate-300 group-hover:text-slate-100">{dataset.table_name_text}</span>
+        {loading && <Loader2 className="w-2.5 h-2.5 animate-spin text-slate-500 mr-1 flex-shrink-0" />}
+        <span className="flex items-center gap-1 mr-1 flex-shrink-0">
+          <button
+            title="Preview top rows"
+            onClick={e => { e.stopPropagation(); dispatch(openMetadataPreview({ datasetId: dataset.dataset_id, datasetName: dataset.table_name_text })); }}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-violet-800/50 text-slate-500 hover:text-violet-300 transition-colors"
+          >
+            <Eye className="w-3 h-3" strokeWidth={1.5} />
+          </button>
+          <button
+            title="Open table details"
+            onClick={e => { e.stopPropagation(); openDetail(); }}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-700/60 text-slate-500 hover:text-slate-200 transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
+          </button>
+        </span>
+      </div>
+
+      {/* Column rows */}
+      {expanded && !loading && columns.map(col => (
+        <div
+          key={col.columnId}
+          className="flex items-center select-none"
+          style={{ paddingLeft: 8 + 5 * 16 + 4, height: 20 }}
+        >
+          <span className="w-2 h-full border-l border-slate-800 mr-2 flex-shrink-0" />
+          <span className="text-[11px] font-mono text-slate-400 flex-1 truncate">{col.name}</span>
+          <span className={`text-[9px] px-1 py-0.5 rounded border mr-1 flex-shrink-0 ${
+            /^(bigint|int|numeric|double|float)/i.test(col.dataType)
+              ? 'text-blue-400 border-blue-800 bg-blue-900/20'
+              : /^(varchar|text|string|char)/i.test(col.dataType)
+              ? 'text-emerald-400 border-emerald-800 bg-emerald-900/20'
+              : /^(date|time|timestamp)/i.test(col.dataType)
+              ? 'text-amber-400 border-amber-800 bg-amber-900/20'
+              : 'text-slate-500 border-slate-700'
+          }`}>{col.dataType}</span>
+          {!col.nullable && <span className="text-[8px] text-red-400 mr-1 flex-shrink-0">NN</span>}
+        </div>
+      ))}
+      {expanded && !loading && columns.length === 0 && (
+        <div className="h-5 flex items-center text-[10px] text-slate-700 italic" style={{ paddingLeft: 8 + 5 * 16 + 4 }}>
+          No columns
+        </div>
+      )}
+    </>
+  );
+}
+
+function MetadataSection() {
+  const dispatch = useAppDispatch();
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [datasets, setDatasets] = useState<CatalogDataset[]>([]);
+  // Per-connection expansion
+  const [expandedConns, setExpandedConns] = useState<Set<string>>(new Set());
+  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await api.getMetadataTree();
+      const data = res.data?.data ?? res.data;
+      setDatasets((Array.isArray(data) ? data : []) as CatalogDataset[]);
+    } catch { /* ignore */ }
+    finally { setLoading(false); }
+  };
+
+  const toggle = () => {
+    const next = !expanded;
+    setExpanded(next);
+    if (next && datasets.length === 0) void load();
+  };
+
+  const toggleConn = (connId: string) => {
+    setExpandedConns(prev => { const s = new Set(prev); s.has(connId) ? s.delete(connId) : s.add(connId); return s; });
+  };
+
+  const toggleSchema = (key: string) => {
+    setExpandedSchemas(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
+  };
+
+  // Group: connector → schema → tables
+  const byConn = datasets.reduce((acc, d) => {
+    const key = d.connector_id;
+    if (!acc[key]) acc[key] = { name: d.connector_display_name, typeCode: d.connector_type_code, tables: [] };
+    acc[key].tables.push(d);
+    return acc;
+  }, {} as Record<string, { name: string; typeCode: string; tables: CatalogDataset[] }>);
+
+  return (
+    <>
+      <Section
+        label="Metadata Catalog" icon={Database} iconColor="text-violet-400"
+        isExpanded={expanded} onToggle={toggle}
+        onRefresh={load}
+        addTitle={undefined}
+      />
+      {expanded && (
+        <>
+          {loading && (
+            <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600" style={{ paddingLeft: 8 + 16 + 20 }}>
+              <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+            </div>
+          )}
+          {!loading && Object.keys(byConn).length === 0 && (
+            <div className="h-6 flex items-center text-[11px] text-slate-700 italic" style={{ paddingLeft: 8 + 16 + 20 }}>
+              No imported metadata — use Import tab on a connection
+            </div>
+          )}
+          {!loading && Object.entries(byConn).map(([connId, conn]) => {
+            const isConnExpanded = expandedConns.has(connId);
+            // Group tables by schema
+            const bySchema = conn.tables.reduce((acc, t) => {
+              const s = t.schema_name_text || '(root)';
+              if (!acc[s]) acc[s] = [];
+              acc[s].push(t);
+              return acc;
+            }, {} as Record<string, CatalogDataset[]>);
+
+            return (
+              <React.Fragment key={connId}>
+                {/* Connection row */}
+                <div
+                  className="flex items-center group cursor-pointer select-none"
+                  style={{ paddingLeft: 8 + 1 * 16, height: 22 }}
+                  onClick={() => toggleConn(connId)}
+                >
+                  <span className="w-4 h-4 flex items-center justify-center text-slate-600 flex-shrink-0 mr-1">
+                    {isConnExpanded ? <ChevronDown className="w-3 h-3" strokeWidth={1.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={1.5} />}
+                  </span>
+                  <Network className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mr-1.5" strokeWidth={1.5} />
+                  <span className="flex-1 truncate text-[12px] text-slate-300 group-hover:text-slate-100">{conn.name}</span>
+                  <span className="text-[10px] text-slate-600 mr-1">{conn.tables.length}</span>
+                </div>
+
+                {/* Schema rows */}
+                {isConnExpanded && Object.entries(bySchema).map(([schema, tables]) => {
+                  const schemaKey = `${connId}::${schema}`;
+                  const isSchemaExpanded = expandedSchemas.has(schemaKey);
+                  // For file connections, skip the schema level (it's just a directory path)
+                  const isFile = conn.typeCode?.startsWith('FILE_') || conn.typeCode === 'CSV';
+                  if (isFile) {
+                    return tables.map(t => (
+                      <MetaTableRow
+                        key={t.dataset_id}
+                        dataset={t}
+                        connectorDisplayName={conn.name}
+                        schemaName={schema}
+                      />
+                    ));
+                  }
+                  return (
+                    <React.Fragment key={schemaKey}>
+                      {/* Schema row */}
+                      <div
+                        className="flex items-center group cursor-pointer select-none"
+                        style={{ paddingLeft: 8 + 2 * 16, height: 22 }}
+                        onClick={() => toggleSchema(schemaKey)}
+                      >
+                        <span className="w-4 h-4 flex items-center justify-center text-slate-600 flex-shrink-0 mr-1">
+                          {isSchemaExpanded ? <ChevronDown className="w-3 h-3" strokeWidth={1.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={1.5} />}
+                        </span>
+                        <FolderOpen className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mr-1.5" strokeWidth={1.5} />
+                        <span className="flex-1 truncate text-[12px] text-slate-300 group-hover:text-slate-100">{schema}</span>
+                        <span className="text-[10px] text-slate-600 mr-1">{tables.length}</span>
+                      </div>
+                      {/* Table rows */}
+                      {isSchemaExpanded && tables.map(t => (
+                        <MetaTableRow
+                          key={t.dataset_id}
+                          dataset={t}
+                          connectorDisplayName={conn.name}
+                          schemaName={schema}
+                        />
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+
         </>
       )}
     </>
@@ -1198,17 +1415,11 @@ export function LeftSidebar() {
 
           <Divider />
 
-          {/* ── CONNECTIONS ── */}
-          <TechnologiesSection />
-        <Divider />
+          {/* ── CONNECTIONS (Technologies nested inside) ── */}
+          <ConnectionsSection />
 
-        <ConnectionsSection />
-
-          {/* ── METADATA ── */}
-          <NavRow icon={Database} iconColor="text-violet-400" label="Metadata Catalog"
-            isActive={isType('metadata')}
-            onClick={() => openNav('metadata', 'metadata', 'Metadata Catalog')}
-          />
+          {/* ── METADATA (Technologies also accessible here) ── */}
+          <MetadataSection />
 
           {/* ── LINEAGE ── */}
           <NavRow icon={GitBranch} iconColor="text-teal-400" label="Lineage"

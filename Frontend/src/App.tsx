@@ -21,6 +21,7 @@ import { LineageExplorer } from '@/components/views/LineageExplorer';
 import { GovernanceView } from '@/components/views/GovernanceView';
 import { PropertiesPanel } from '@/components/properties/PropertiesPanel';
 import { DataPreviewPanel } from '@/components/preview/DataPreviewPanel';
+import { MetadataPreviewPanel } from '@/components/preview/MetadataPreviewPanel';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { LoginPage } from '@/components/auth/LoginPage';
 import { useAppSelector } from '@/store/hooks';
@@ -38,6 +39,9 @@ function WorkspaceRouter() {
   const activeSubTab   = useAppSelector(s => activeTabId ? (s.ui.subTabMap[activeTabId] ?? 'editor') : 'editor');
   const isEditorTab    = activeSubTab === 'editor';
   const hasSelectedNode = useAppSelector(s => s.pipeline.selectedNodeIds.length > 0);
+  const metadataPreviewId = useAppSelector(s => s.ui.metadataPreviewDatasetId);
+
+  const metaBottom = metadataPreviewId ? <MetadataPreviewPanel /> : undefined;
 
   const shell = (main: React.ReactNode, right?: React.ReactNode, bottom?: React.ReactNode) => (
     <ResizableAppShell
@@ -66,7 +70,9 @@ function WorkspaceRouter() {
           <h2 className="text-base font-semibold text-slate-200 mb-1">ETL1 Platform</h2>
           <p className="text-sm text-slate-500">Select an object from the sidebar to get started.</p>
         </div>
-      </div>
+      </div>,
+      undefined,
+      metaBottom,
     );
   }
 
@@ -75,47 +81,49 @@ function WorkspaceRouter() {
       return shell(
         <PipelineWorkspace tabId={activeTab.id} />,
         isEditorTab && hasSelectedNode ? <PropertiesPanel /> : undefined,
-        isEditorTab && hasSelectedNode ? <DataPreviewPanel /> : undefined,
+        isEditorTab && hasSelectedNode ? <DataPreviewPanel /> : metaBottom,
       );
 
     case 'orchestrator':
-      return shell(<OrchestratorWorkspace tabId={activeTab.id} />);
+      return shell(<OrchestratorWorkspace tabId={activeTab.id} />, undefined, metaBottom);
 
     case 'project':
-      return shell(<ProjectWorkspace tabId={activeTab.id} />);
+      return shell(<ProjectWorkspace tabId={activeTab.id} />, undefined, metaBottom);
 
     case 'folder':
-      return shell(<FolderWorkspace tabId={activeTab.id} />);
+      return shell(<FolderWorkspace tabId={activeTab.id} />, undefined, metaBottom);
 
     case 'connection':
     case 'connections':
-      return shell(<ConnectionWorkspace tabId={activeTab.id} />);
+      return shell(<ConnectionWorkspace tabId={activeTab.id} />, undefined, metaBottom);
 
     case 'metadata':
-      return shell(<MetadataBrowserWorkspace tabId={activeTab.id} />);
+      return shell(<MetadataBrowserWorkspace tabId={activeTab.id} />, undefined, metaBottom);
 
     case 'user':
-      return shell(<UserWorkspace tabId={activeTab.id} />);
+      return shell(<UserWorkspace tabId={activeTab.id} />, undefined, metaBottom);
 
     case 'role':
-      return shell(<RoleWorkspace tabId={activeTab.id} />);
+      return shell(<RoleWorkspace tabId={activeTab.id} />, undefined, metaBottom);
 
     case 'monitor':
-      return shell(<MonitorView />);
+      return shell(<MonitorView />, undefined, metaBottom);
 
     case 'execution':
       return shell(
         <ExecutionDetailTab
           runId={activeTab.objectId}
           executionKind={activeTab.executionKind ?? 'pipeline'}
-        />
+        />,
+        undefined,
+        metaBottom,
       );
 
     case 'dashboard':
-      return shell(<DashboardView />);
+      return shell(<DashboardView />, undefined, metaBottom);
 
     case 'settings':
-      return shell(<SettingsView />);
+      return shell(<SettingsView />, undefined, metaBottom);
 
     case 'lineage':
       return shell(<LineageExplorer />);

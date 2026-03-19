@@ -3,7 +3,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 class APIClient {
   private client: AxiosInstance;
 
-  constructor(baseURL: string = import.meta.env.VITE_API_URL || 'http://localhost:3001/api') {
+  constructor(baseURL: string = import.meta.env.VITE_API_URL || 'http://localhost:3000/api') {
     this.client = axios.create({
       baseURL,
       timeout: 30000,
@@ -267,6 +267,10 @@ class APIClient {
     return this.client.get(`/metadata/${datasetId}/profile`);
   }
 
+  previewDataset(datasetId: string, limit = 50) {
+    return this.client.get(`/metadata/${datasetId}/preview`, { params: { limit } });
+  }
+
   refreshMetadata(datasetId: string) {
     return this.client.post(`/metadata/${datasetId}/refresh`);
   }
@@ -315,6 +319,18 @@ class APIClient {
 
   testConnectionById(id: string) {
     return this.client.post(`/connections/${id}/test`);
+  }
+
+  introspectSchemas(connectorId: string) {
+    return this.client.get(`/connections/${connectorId}/introspect/schemas`);
+  }
+
+  introspectTables(connectorId: string, schema: string) {
+    return this.client.get(`/connections/${connectorId}/introspect/tables`, { params: { schema } });
+  }
+
+  importMetadata(connectorId: string, selections: Array<{ db?: string; schema?: string; table: string }>) {
+    return this.client.post(`/connections/${connectorId}/introspect/import`, { selections });
   }
 
   testConnection(config: unknown) {

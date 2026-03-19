@@ -149,12 +149,10 @@ export type FolderSubTab =
 
 export type ConnectionSubTab =
   | 'properties'
-  | 'authentication'
-  | 'connectivity'
   | 'usage'
   | 'history'
   | 'permissions'
-  | 'security';
+  | 'import';
 
 export type MetadataSubTab =
   | 'overview'

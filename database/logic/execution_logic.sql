@@ -522,4 +522,451 @@ LANGUAGE sql STABLE AS $$
 $$;
 COMMENT ON FUNCTION execution.fn_get_runs_that_wrote_to_dataset(UUID, INTEGER) IS 'Returns the most recent pipeline runs that wrote data to a specific dataset. Enables dataset-level data freshness tracking and lineage investigation.';
 ;
+
+-- ─── UI / API support functions ──────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION execution.fn_get_environment_id_by_name(p_env_display_name text)
+RETURNS uuid LANGUAGE sql STABLE AS $$
+    SELECT e.env_id
+    FROM execution.environments e
+    WHERE lower(e.env_display_name) = lower(p_env_display_name)
+    ORDER BY e.created_dtm DESC
+    LIMIT 1;
+$$;
+COMMENT ON FUNCTION execution.fn_get_environment_id_by_name(text) IS 'Returns environment ID by display name, case-insensitive; NULL when not found.';
+;
+
+CREATE OR REPLACE PROCEDURE execution.pr_set_pipeline_run_options(IN p_pipeline_run_id uuid, IN p_run_options_json jsonb)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE execution.pipeline_runs
+    SET run_options_json = p_run_options_json
+    WHERE pipeline_run_id = p_pipeline_run_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_set_pipeline_run_options(uuid, jsonb) IS 'Stores the original trigger-time options payload for a pipeline run.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_execution_kpis(p_date_from date, p_date_to date, p_project_id uuid DEFAULT NULL::uuid)
+RETURNS TABLE(total_today bigint, running_now bigint, success_rate_today numeric, failed_today bigint, avg_duration_ms_today numeric, sla_breaches_today bigint, data_volume_gb_today numeric, active_pipelines bigint)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        COUNT(*)                                                                           AS total_today,
+        COUNT(*) FILTER (WHERE pr.run_status_code = 'RUNNING')                            AS running_now,
+        ROUND(
+            COUNT(*) FILTER (WHERE pr.run_status_code = 'SUCCESS')::NUMERIC
+            / NULLIF(COUNT(*), 0) * 100, 2
+        )                                                                                  AS success_rate_today,
+        COUNT(*) FILTER (WHERE pr.run_status_code = 'FAILED')                             AS failed_today,
+        AVG(pr.run_duration_ms) FILTER (WHERE pr.run_status_code = 'SUCCESS')             AS avg_duration_ms_today,
+        COUNT(*) FILTER (WHERE pr.sla_status_code = 'BREACHED')                           AS sla_breaches_today,
+        ROUND(
+            COALESCE(
+                SUM(COALESCE(pr.bytes_read_num, 0) + COALESCE(pr.bytes_written_num, 0))::NUMERIC
+                / 1e9, 0
+            ), 4
+        )                                                                                  AS data_volume_gb_today,
+        (
+            SELECT COUNT(*)
+            FROM catalog.pipelines p2
+            WHERE p2.active_version_id IS NOT NULL
+              AND (p_project_id IS NULL OR p2.project_id = p_project_id)
+        )                                                                                  AS active_pipelines
+    FROM execution.pipeline_runs pr
+    LEFT JOIN catalog.pipelines p ON p.pipeline_id = pr.pipeline_id
+    WHERE DATE(COALESCE(pr.start_dtm, pr.created_dtm)) BETWEEN p_date_from AND p_date_to
+      AND (p_project_id IS NULL OR p.project_id = p_project_id);
+$$;
+COMMENT ON FUNCTION execution.fn_get_execution_kpis(date, date, uuid) IS 'Returns execution monitor KPI aggregates for a date range. p_project_id is optional; NULL returns platform-wide metrics.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_list_pipeline_runs(
+    p_pipeline_id   UUID    DEFAULT NULL,
+    p_project_id    UUID    DEFAULT NULL,
+    p_status        TEXT    DEFAULT NULL,
+    p_trigger_type  TEXT    DEFAULT NULL,
+    p_date_from     DATE    DEFAULT NULL,
+    p_date_to       DATE    DEFAULT NULL,
+    p_search        TEXT    DEFAULT NULL,
+    p_my_jobs_only  BOOLEAN DEFAULT FALSE,
+    p_user_id       UUID    DEFAULT NULL,
+    p_limit         INTEGER DEFAULT 50,
+    p_offset        INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+    pipeline_run_id UUID,
+    pipeline_id     UUID,
+    pipeline_name   TEXT,
+    project_id      UUID,
+    project_name    TEXT,
+    version_label   TEXT,
+    run_status      TEXT,
+    trigger_type    TEXT,
+    submitted_by    TEXT,
+    start_dtm       TIMESTAMPTZ,
+    end_dtm         TIMESTAMPTZ,
+    duration_ms     INTEGER,
+    rows_processed  BIGINT,
+    bytes_read      BIGINT,
+    bytes_written   BIGINT,
+    error_message   TEXT,
+    retry_count     INTEGER,
+    sla_status      TEXT
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        pr.pipeline_run_id,
+        pr.pipeline_id,
+        p.pipeline_display_name                     AS pipeline_name,
+        p.project_id,
+        proj.project_display_name                   AS project_name,
+        COALESCE(pv.release_tag_label, 'v' || pv.version_num_seq::text) AS version_label,
+        pr.run_status_code                          AS run_status,
+        pr.trigger_type_code                        AS trigger_type,
+        u.user_full_name                             AS submitted_by,
+        pr.start_dtm,
+        pr.end_dtm,
+        pr.run_duration_ms                          AS duration_ms,
+        pr.rows_processed_num                       AS rows_processed,
+        pr.bytes_read_num                           AS bytes_read,
+        pr.bytes_written_num                        AS bytes_written,
+        pr.error_message_text                       AS error_message,
+        pr.retry_count_num                          AS retry_count,
+        pr.sla_status_code                          AS sla_status
+    FROM execution.pipeline_runs pr
+    JOIN catalog.pipelines p          ON pr.pipeline_id = p.pipeline_id
+    JOIN etl.projects      proj       ON p.project_id   = proj.project_id
+    LEFT JOIN catalog.pipeline_versions pv ON pr.version_id = pv.version_id
+    LEFT JOIN etl.users                 u  ON pr.triggered_by_user_id = u.user_id
+    WHERE (p_pipeline_id   IS NULL OR pr.pipeline_id          = p_pipeline_id)
+      AND (p_project_id    IS NULL OR p.project_id            = p_project_id)
+      AND (p_status        IS NULL OR pr.run_status_code      = p_status)
+      AND (p_trigger_type  IS NULL OR pr.trigger_type_code    = p_trigger_type)
+      AND (p_date_from     IS NULL OR pr.created_dtm::date   >= p_date_from)
+      AND (p_date_to       IS NULL OR pr.created_dtm::date   <= p_date_to)
+      AND (p_search        IS NULL OR p.pipeline_display_name ILIKE '%' || p_search || '%')
+      AND (NOT p_my_jobs_only OR pr.triggered_by_user_id = p_user_id)
+    ORDER BY pr.created_dtm DESC
+    LIMIT p_limit OFFSET p_offset;
+$$;
+COMMENT ON FUNCTION execution.fn_list_pipeline_runs IS 'Paginated pipeline run list with filters for the Monitor Executions tab.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_count_pipeline_runs(
+    p_pipeline_id   UUID    DEFAULT NULL,
+    p_project_id    UUID    DEFAULT NULL,
+    p_status        TEXT    DEFAULT NULL,
+    p_trigger_type  TEXT    DEFAULT NULL,
+    p_date_from     DATE    DEFAULT NULL,
+    p_date_to       DATE    DEFAULT NULL,
+    p_search        TEXT    DEFAULT NULL,
+    p_my_jobs_only  BOOLEAN DEFAULT FALSE,
+    p_user_id       UUID    DEFAULT NULL
+)
+RETURNS BIGINT LANGUAGE sql STABLE AS $$
+    SELECT COUNT(*)
+    FROM execution.pipeline_runs pr
+    JOIN catalog.pipelines p ON pr.pipeline_id = p.pipeline_id
+    WHERE (p_pipeline_id   IS NULL OR pr.pipeline_id          = p_pipeline_id)
+      AND (p_project_id    IS NULL OR p.project_id            = p_project_id)
+      AND (p_status        IS NULL OR pr.run_status_code      = p_status)
+      AND (p_trigger_type  IS NULL OR pr.trigger_type_code    = p_trigger_type)
+      AND (p_date_from     IS NULL OR pr.created_dtm::date   >= p_date_from)
+      AND (p_date_to       IS NULL OR pr.created_dtm::date   <= p_date_to)
+      AND (p_search        IS NULL OR p.pipeline_display_name ILIKE '%' || p_search || '%')
+      AND (NOT p_my_jobs_only OR pr.triggered_by_user_id = p_user_id);
+$$;
+COMMENT ON FUNCTION execution.fn_count_pipeline_runs IS 'Total count of pipeline runs matching the same filters as fn_list_pipeline_runs. Used for pagination.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_pipeline_run_detail(p_run_id UUID)
+RETURNS TABLE (
+    pipeline_run_id  UUID,
+    pipeline_id      UUID,
+    pipeline_name    TEXT,
+    project_name     TEXT,
+    version_label    TEXT,
+    run_status       TEXT,
+    trigger_type     TEXT,
+    submitted_by     TEXT,
+    start_dtm        TIMESTAMPTZ,
+    end_dtm          TIMESTAMPTZ,
+    duration_ms      INTEGER,
+    rows_processed   BIGINT,
+    bytes_read       BIGINT,
+    bytes_written    BIGINT,
+    error_message    TEXT,
+    retry_count      INTEGER,
+    sla_status       TEXT,
+    spark_job_id     TEXT,
+    spark_ui_url     TEXT
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        pr.pipeline_run_id,
+        pr.pipeline_id,
+        p.pipeline_display_name                     AS pipeline_name,
+        proj.project_display_name                   AS project_name,
+        COALESCE(pv.release_tag_label, 'v' || pv.version_num_seq::text) AS version_label,
+        pr.run_status_code                          AS run_status,
+        pr.trigger_type_code                        AS trigger_type,
+        u.user_full_name                             AS submitted_by,
+        pr.start_dtm,
+        pr.end_dtm,
+        pr.run_duration_ms                          AS duration_ms,
+        pr.rows_processed_num                       AS rows_processed,
+        pr.bytes_read_num                           AS bytes_read,
+        pr.bytes_written_num                        AS bytes_written,
+        pr.error_message_text                       AS error_message,
+        pr.retry_count_num                          AS retry_count,
+        pr.sla_status_code                          AS sla_status,
+        pr.external_engine_job_id                   AS spark_job_id,
+        pr.spark_ui_url_text                        AS spark_ui_url
+    FROM execution.pipeline_runs pr
+    JOIN catalog.pipelines p          ON pr.pipeline_id = p.pipeline_id
+    JOIN etl.projects      proj       ON p.project_id   = proj.project_id
+    LEFT JOIN catalog.pipeline_versions pv ON pr.version_id = pv.version_id
+    LEFT JOIN etl.users                 u  ON pr.triggered_by_user_id = u.user_id
+    WHERE pr.pipeline_run_id = p_run_id;
+$$;
+COMMENT ON FUNCTION execution.fn_get_pipeline_run_detail(UUID) IS 'Returns the full detail record for a single pipeline run including display names for all FK references.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_pipeline_run_nodes_detail(p_run_id UUID)
+RETURNS TABLE (
+    node_run_id        UUID,
+    node_id_in_ir_text TEXT,
+    node_display_name  TEXT,
+    node_status        TEXT,
+    start_dtm          TIMESTAMPTZ,
+    end_dtm            TIMESTAMPTZ,
+    rows_in            BIGINT,
+    rows_out           BIGINT,
+    error_message      TEXT,
+    node_metrics_json  JSONB
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        node_run_id,
+        node_id_in_ir_text,
+        node_display_name,
+        node_status_code   AS node_status,
+        start_dtm,
+        end_dtm,
+        rows_in_num        AS rows_in,
+        rows_out_num       AS rows_out,
+        error_message_text AS error_message,
+        node_metrics_json
+    FROM execution.pipeline_node_runs
+    WHERE pipeline_run_id = p_run_id
+    ORDER BY start_dtm NULLS LAST;
+$$;
+COMMENT ON FUNCTION execution.fn_get_pipeline_run_nodes_detail(UUID) IS 'Returns per-node telemetry for all DAG nodes within a pipeline run, ordered by execution start time.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_pipeline_run_logs_paginated(
+    p_run_id UUID,
+    p_level  TEXT    DEFAULT NULL,
+    p_limit           INTEGER DEFAULT 500,
+    p_offset          INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+    log_id           BIGINT,
+    log_level_code   TEXT,
+    log_source_code  TEXT,
+    log_message_text TEXT,
+    created_dtm      TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT log_id, log_level_code, log_source_code, log_message_text, created_dtm
+    FROM execution.pipeline_run_logs
+    WHERE pipeline_run_id = p_run_id
+      AND (p_level IS NULL OR log_level_code = p_level)
+    ORDER BY log_id
+    LIMIT p_limit OFFSET p_offset;
+$$;
+COMMENT ON FUNCTION execution.fn_get_pipeline_run_logs_paginated(UUID, TEXT, INTEGER, INTEGER) IS 'Paginated log stream for a pipeline run with optional level filter. Ordered by insertion sequence.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_list_orchestrator_runs(p_project_id uuid DEFAULT NULL::uuid, p_orch_id uuid DEFAULT NULL::uuid, p_status text DEFAULT NULL::text, p_trigger_type text DEFAULT NULL::text, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
+RETURNS TABLE(orch_run_id uuid, orchestrator_name text, orch_id uuid, project_id uuid, project_name text, run_status text, trigger_type text, start_dtm timestamp with time zone, end_dtm timestamp with time zone, duration_ms integer, error_message text, retry_count integer)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        orch.orch_run_id,
+        o.orch_display_name                 AS orchestrator_name,
+        orch.orch_id,
+        o.project_id,
+        proj.project_display_name           AS project_name,
+        orch.run_status_code,
+        orch.trigger_type_code,
+        orch.start_dtm,
+        orch.end_dtm,
+        orch.run_duration_ms,
+        orch.error_message_text,
+        orch.retry_count_num
+    FROM execution.orchestrator_runs orch
+    LEFT JOIN catalog.orchestrators o ON o.orch_id    = orch.orch_id
+    LEFT JOIN etl.projects proj       ON proj.project_id = o.project_id
+    WHERE (p_project_id   IS NULL OR o.project_id         = p_project_id)
+      AND (p_orch_id      IS NULL OR orch.orch_id          = p_orch_id)
+      AND (p_status       IS NULL OR orch.run_status_code  = p_status)
+      AND (p_trigger_type IS NULL OR orch.trigger_type_code = p_trigger_type)
+    ORDER BY orch.start_dtm DESC NULLS LAST, orch.created_dtm DESC
+    LIMIT  GREATEST(COALESCE(p_limit,  50), 1)
+    OFFSET GREATEST(COALESCE(p_offset,  0), 0);
+$$;
+COMMENT ON FUNCTION execution.fn_list_orchestrator_runs(uuid, uuid, text, text, integer, integer) IS 'Paginated orchestrator-run list with optional project/orchestrator/status/trigger filters.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_count_orchestrator_runs(p_project_id uuid DEFAULT NULL::uuid, p_orch_id uuid DEFAULT NULL::uuid, p_status text DEFAULT NULL::text, p_trigger_type text DEFAULT NULL::text)
+RETURNS bigint LANGUAGE sql STABLE AS $$
+    SELECT COUNT(*)
+    FROM execution.orchestrator_runs orch
+    LEFT JOIN catalog.orchestrators o ON o.orch_id = orch.orch_id
+    WHERE (p_project_id   IS NULL OR o.project_id         = p_project_id)
+      AND (p_orch_id      IS NULL OR orch.orch_id          = p_orch_id)
+      AND (p_status       IS NULL OR orch.run_status_code  = p_status)
+      AND (p_trigger_type IS NULL OR orch.trigger_type_code = p_trigger_type);
+$$;
+COMMENT ON FUNCTION execution.fn_count_orchestrator_runs(uuid, uuid, text, text) IS 'Returns total row count for orchestrator-run list with same filter set as fn_list_orchestrator_runs.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_orchestrator_run_detail(p_orch_run_id uuid)
+RETURNS TABLE (
+    orch_run_id              uuid,
+    orch_id                  uuid,
+    orch_display_name        text,
+    project_id               uuid,
+    project_display_name     text,
+    run_status_code          text,
+    trigger_type_code        text,
+    triggered_by_user_id     uuid,
+    submitted_by_full_name   text,
+    start_dtm                timestamp with time zone,
+    end_dtm                  timestamp with time zone,
+    run_duration_ms          integer,
+    error_message_text       text,
+    retry_count_num          integer,
+    env_display_name         text,
+    run_options_json         jsonb,
+    created_dtm              timestamp with time zone
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        orr.orch_run_id,
+        orr.orch_id,
+        o.orch_display_name,
+        o.project_id,
+        proj.project_display_name,
+        orr.run_status_code,
+        orr.trigger_type_code,
+        orr.triggered_by_user_id,
+        u.user_full_name         AS submitted_by_full_name,
+        orr.start_dtm,
+        orr.end_dtm,
+        orr.run_duration_ms,
+        orr.error_message_text,
+        orr.retry_count_num,
+        e.env_display_name,
+        orr.run_options_json,
+        orr.created_dtm
+    FROM execution.orchestrator_runs orr
+    JOIN catalog.orchestrators o  ON orr.orch_id   = o.orch_id
+    JOIN etl.projects proj        ON o.project_id  = proj.project_id
+    LEFT JOIN etl.users u         ON orr.triggered_by_user_id = u.user_id
+    LEFT JOIN execution.environments e ON orr.env_id = e.env_id
+    WHERE orr.orch_run_id = p_orch_run_id;
+$$;
+COMMENT ON FUNCTION execution.fn_get_orchestrator_run_detail(uuid) IS 'Returns the full detail record for a single orchestrator run with resolved display names including environment.';
+;
+
+CREATE OR REPLACE FUNCTION execution.fn_get_orchestrator_run_pipeline_map(p_orch_run_id uuid)
+RETURNS TABLE (
+    pipeline_run_id      uuid,
+    pipeline_id          uuid,
+    pipeline_display_name text,
+    dag_node_id_text     text,
+    execution_order_num  integer,
+    run_status_code      text,
+    start_dtm            timestamp with time zone,
+    end_dtm              timestamp with time zone,
+    run_duration_ms      integer,
+    error_message_text   text
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        pr.pipeline_run_id,
+        pr.pipeline_id,
+        p.pipeline_display_name,
+        m.dag_node_id_text,
+        m.execution_order_num,
+        pr.run_status_code,
+        pr.start_dtm,
+        pr.end_dtm,
+        pr.run_duration_ms,
+        pr.error_message_text
+    FROM execution.orchestrator_pipeline_run_map m
+    JOIN execution.pipeline_runs pr  ON m.pipeline_run_id = pr.pipeline_run_id
+    JOIN catalog.pipelines       p   ON pr.pipeline_id    = p.pipeline_id
+    WHERE m.orch_run_id = p_orch_run_id
+    ORDER BY m.execution_order_num, pr.start_dtm NULLS LAST;
+$$;
+COMMENT ON FUNCTION execution.fn_get_orchestrator_run_pipeline_map(uuid) IS 'Returns all pipeline runs spawned within a given orchestrator run with DAG position and status.';
+;
+
+CREATE OR REPLACE PROCEDURE execution.pr_retry_pipeline_run(IN p_original_run_id uuid, IN p_user_id uuid, OUT p_new_run_id uuid)
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_pipeline_id UUID;
+    v_version_id  UUID;
+    v_retry_count INTEGER;
+BEGIN
+    SELECT pipeline_id, version_id, retry_count_num
+    INTO v_pipeline_id, v_version_id, v_retry_count
+    FROM execution.pipeline_runs
+    WHERE pipeline_run_id = p_original_run_id;
+
+    IF v_pipeline_id IS NULL THEN
+        RAISE EXCEPTION 'Pipeline run not found' USING ERRCODE = 'P0002';
+    END IF;
+
+    INSERT INTO execution.pipeline_runs
+        (pipeline_id, version_id, run_status_code, trigger_type_code,
+         triggered_by_user_id, retry_count_num)
+    VALUES
+        (v_pipeline_id, v_version_id, 'PENDING', 'MANUAL',
+         p_user_id, COALESCE(v_retry_count, 0) + 1)
+    RETURNING pipeline_run_id INTO p_new_run_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_retry_pipeline_run(uuid, uuid, uuid) IS 'Creates a new PENDING pipeline run as a retry of the given original run. Increments retry_count_num. Returns the new run ID via OUT param.';
+;
+
+CREATE OR REPLACE PROCEDURE execution.pr_retry_orchestrator_run(IN p_original_run_id uuid, IN p_user_id uuid, OUT p_new_run_id uuid)
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_orch_id     UUID;
+    v_retry_count INTEGER;
+BEGIN
+    SELECT orch_id, retry_count_num
+    INTO v_orch_id, v_retry_count
+    FROM execution.orchestrator_runs
+    WHERE orch_run_id = p_original_run_id;
+
+    IF v_orch_id IS NULL THEN
+        RAISE EXCEPTION 'Orchestrator run not found' USING ERRCODE = 'P0002';
+    END IF;
+
+    INSERT INTO execution.orchestrator_runs
+        (orch_id, run_status_code, trigger_type_code,
+         triggered_by_user_id, retry_count_num)
+    VALUES
+        (v_orch_id, 'PENDING', 'MANUAL',
+         p_user_id, COALESCE(v_retry_count, 0) + 1)
+    RETURNING orch_run_id INTO p_new_run_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_retry_orchestrator_run(uuid, uuid, uuid) IS 'Creates a new PENDING orchestrator run as a retry of the given original. Increments retry_count_num. Returns new run ID via OUT param.';
+;
+
 COMMIT;

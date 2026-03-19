@@ -13,7 +13,9 @@
       "Bash(timeout 30 npm run dev)",
       "Bash(npm install lucide-react)",
       "Bash(timeout 25 npm run dev)",
-      "Bash(PATH=\"/home/venkateswarlu/.nvm/versions/node/v24.14.0/bin:$PATH\" npm install --prefix /home/venkateswarlu/Documents/ETL1/Backend)"
+      "Bash(PATH=\"/home/venkateswarlu/.nvm/versions/node/v24.14.0/bin:$PATH\" npm install --prefix /home/venkateswarlu/Documents/ETL1/Backend)",
+      "Bash(PGPASSWORD=admin123 psql -h localhost -U postgres -d etl_db -c \"SELECT tech_id, tech_code, display_name FROM meta.technology_types WHERE tech_code ILIKE ''%postgres%'' OR tech_code ILIKE ''%jdbc%'';\")",
+      "Bash(git push:*)"
     ]
   }
 }

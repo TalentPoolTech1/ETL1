@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Database, Table2, Columns, Search } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { RefreshCw, Database, Table2, Columns } from 'lucide-react';
 import { useAppSelector } from '@/store/hooks';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
@@ -16,16 +16,6 @@ const SUB_TABS = [
   { id: 'history',     label: 'History',     shortcut: '5' },
   { id: 'permissions', label: 'Permissions', shortcut: '6' },
 ] satisfies { id: MetadataSubTab; label: string; shortcut: string }[];
-
-type DatasetTreeRow = {
-  dataset_id: string;
-  connector_display_name: string;
-  connector_type_code: string;
-  db_name_text: string;
-  schema_name_text: string;
-  table_name_text: string;
-  dataset_type_code: string;
-};
 
 type DatasetProfile = {
   datasetId: string;
@@ -76,67 +66,6 @@ function TypeBadge({ type }: { type: string }) {
     : 'text-slate-400 bg-slate-800 border-slate-700';
   return (
     <span className={`px-1.5 py-0.5 rounded border text-[10px] font-mono ${color}`}>{type || '?'}</span>
-  );
-}
-
-function DatasetSelector({
-  datasets,
-  selectedDatasetId,
-  onSelect,
-}: {
-  datasets: DatasetTreeRow[];
-  selectedDatasetId: string;
-  onSelect: (datasetId: string) => void;
-}) {
-  const [search, setSearch] = useState('');
-  const filtered = useMemo(() => {
-    const s = search.trim().toLowerCase();
-    if (!s) return datasets;
-    return datasets.filter(dataset =>
-      dataset.table_name_text?.toLowerCase().includes(s)
-      || dataset.schema_name_text?.toLowerCase().includes(s)
-      || dataset.db_name_text?.toLowerCase().includes(s)
-      || dataset.connector_display_name?.toLowerCase().includes(s),
-    );
-  }, [datasets, search]);
-
-  return (
-    <div className="w-80 border-r border-slate-800 flex flex-col bg-[#0a0c15]">
-      <div className="p-3 border-b border-slate-800">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 pointer-events-none" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search metadata objects..."
-            className="w-full h-8 pl-7 pr-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500"
-          />
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto">
-        {filtered.map(dataset => {
-          const key = dataset.dataset_id;
-          const active = key === selectedDatasetId;
-          return (
-            <button
-              key={key}
-              onClick={() => onSelect(key)}
-              className={`w-full text-left px-3 py-2 border-b border-slate-800/50 transition-colors ${
-                active ? 'bg-blue-900/25' : 'hover:bg-slate-800/40'
-              }`}
-            >
-              <div className="text-[12px] text-slate-200 truncate">{dataset.table_name_text}</div>
-              <div className="text-[11px] text-slate-500 truncate">
-                {dataset.connector_display_name} · {dataset.db_name_text}.{dataset.schema_name_text}
-              </div>
-            </button>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className="p-4 text-[12px] text-slate-500">No metadata objects match your filter.</div>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -266,10 +195,12 @@ function LineageTab({ rows }: { rows: LineageRow[] }) {
 
 export function MetadataBrowserWorkspace({ tabId }: { tabId: string }) {
   const tab = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
-  const subTab = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'overview') as MetadataSubTab;
+  const subTab = (useAppSelector(s => s.ui.subTabMap[tabId]) ?? 'structure') as MetadataSubTab;
 
-  const [datasets, setDatasets] = useState<DatasetTreeRow[]>([]);
-  const [selectedDatasetId, setSelectedDatasetId] = useState<string>(tab?.objectId ?? '');
+  const datasetId = tab?.objectId ?? '';
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isValidId = UUID_RE.test(datasetId);
+
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
   const [lineage, setLineage] = useState<LineageRow[]>([]);
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
@@ -278,49 +209,25 @@ export function MetadataBrowserWorkspace({ tabId }: { tabId: string }) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedName = profile?.tableName ?? tab?.objectName ?? 'Metadata Catalog';
-  const selectedPath = profile ? `${profile.connectorDisplayName} → ${profile.dbName}.${profile.schemaName}.${profile.tableName}` : tab?.hierarchyPath;
+  const objectName = profile?.tableName ?? tab?.objectName ?? 'Table';
+  const hierarchyPath = profile
+    ? `Metadata → ${profile.connectorDisplayName} → ${profile.schemaName} → ${profile.tableName}`
+    : tab?.hierarchyPath ?? 'Metadata Catalog';
 
-  const loadTree = async () => {
-    const treeRes = await api.getMetadataTree();
-    const treeData = treeRes.data?.data ?? treeRes.data;
-    const rows = (Array.isArray(treeData) ? treeData : []) as DatasetTreeRow[];
-    setDatasets(rows);
-    if (!selectedDatasetId && rows.length > 0) {
-      setSelectedDatasetId(rows[0].dataset_id);
-    } else if (selectedDatasetId && !rows.some(row => row.dataset_id === selectedDatasetId) && rows.length > 0) {
-      setSelectedDatasetId(rows[0].dataset_id);
-    }
-  };
-
-  const loadDatasetData = async (datasetId: string) => {
-    const [profileRes, lineageRes, historyRes, permissionsRes] = await Promise.all([
-      api.getProfile(datasetId),
-      api.getMetadataLineage(datasetId),
-      api.getMetadataHistory(datasetId, { limit: 100 }),
-      api.getMetadataPermissions(datasetId),
-    ]);
-
-    const p = profileRes.data?.data ?? profileRes.data;
-    const l = lineageRes.data?.data ?? lineageRes.data;
-    const h = historyRes.data?.data ?? historyRes.data;
-    const perms = permissionsRes.data?.data ?? permissionsRes.data;
-
-    setProfile(p as DatasetProfile);
-    setLineage((Array.isArray(l) ? l : []) as LineageRow[]);
-    setHistoryRows((Array.isArray(h) ? h : []) as HistoryRow[]);
-    setPermissionRows((Array.isArray(perms) ? perms : []) as PermissionRow[]);
-  };
-
-  const loadAll = async (datasetId?: string) => {
+  const load = async (id: string) => {
     setIsLoading(true);
     setError(null);
     try {
-      await loadTree();
-      const targetId = datasetId ?? selectedDatasetId;
-      if (targetId) {
-        await loadDatasetData(targetId);
-      }
+      const [profileRes, lineageRes, historyRes, permissionsRes] = await Promise.all([
+        api.getProfile(id),
+        api.getMetadataLineage(id),
+        api.getMetadataHistory(id, { limit: 100 }),
+        api.getMetadataPermissions(id),
+      ]);
+      setProfile((profileRes.data?.data ?? profileRes.data) as DatasetProfile);
+      setLineage((Array.isArray(lineageRes.data?.data ?? lineageRes.data) ? lineageRes.data?.data ?? lineageRes.data : []) as LineageRow[]);
+      setHistoryRows((Array.isArray(historyRes.data?.data ?? historyRes.data) ? historyRes.data?.data ?? historyRes.data : []) as HistoryRow[]);
+      setPermissionRows((Array.isArray(permissionsRes.data?.data ?? permissionsRes.data) ? permissionsRes.data?.data ?? permissionsRes.data : []) as PermissionRow[]);
     } catch (err: unknown) {
       setError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load metadata');
     } finally {
@@ -329,31 +236,15 @@ export function MetadataBrowserWorkspace({ tabId }: { tabId: string }) {
   };
 
   useEffect(() => {
-    void loadAll();
-  }, []);
-
-  useEffect(() => {
-    if (!selectedDatasetId) return;
-    void (async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await loadDatasetData(selectedDatasetId);
-      } catch (err: unknown) {
-        setError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load metadata object');
-      } finally {
-        setIsLoading(false);
-      }
-    })();
-  }, [selectedDatasetId]);
+    if (isValidId) void load(datasetId);
+  }, [datasetId]);
 
   const refreshMetadata = async () => {
-    if (!selectedDatasetId || isRefreshing) return;
+    if (!isValidId || isRefreshing) return;
     setIsRefreshing(true);
-    setError(null);
     try {
-      await api.refreshMetadata(selectedDatasetId);
-      await loadAll(selectedDatasetId);
+      await api.refreshMetadata(datasetId);
+      await load(datasetId);
     } catch (err: unknown) {
       setError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Metadata refresh failed');
     } finally {
@@ -361,17 +252,26 @@ export function MetadataBrowserWorkspace({ tabId }: { tabId: string }) {
     }
   };
 
+  if (!isValidId) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center bg-[#0d0f1a] text-slate-500 gap-3">
+        <Database className="w-10 h-10 opacity-30" />
+        <p className="text-[13px]">Select a table from the Metadata Catalog in the left sidebar to view its details.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full overflow-hidden bg-[#0d0f1a]">
       <ObjectHeader
         type="metadata"
-        name={selectedName}
-        hierarchyPath={selectedPath}
+        name={objectName}
+        hierarchyPath={hierarchyPath}
         status="published"
         actions={
           <button
             onClick={refreshMetadata}
-            disabled={!selectedDatasetId || isRefreshing}
+            disabled={isRefreshing}
             className="flex items-center gap-1.5 h-7 px-3 bg-slate-700 hover:bg-slate-600 border border-slate-600 text-slate-300 rounded text-[12px] transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
@@ -379,37 +279,28 @@ export function MetadataBrowserWorkspace({ tabId }: { tabId: string }) {
           </button>
         }
       />
-      <SubTabBar tabId={tabId} tabs={SUB_TABS} defaultTab="overview" />
+      <SubTabBar tabId={tabId} tabs={SUB_TABS} defaultTab="structure" />
 
-      {error && (
-        <div className="px-5 pt-3 text-[12px] text-red-400">{error}</div>
-      )}
+      {error && <div className="px-5 pt-3 text-[12px] text-red-400">{error}</div>}
 
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-sm text-slate-500">Loading metadata…</div>
+        <div className="flex-1 flex items-center justify-center text-sm text-slate-500">Loading…</div>
       ) : (
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          <DatasetSelector
-            datasets={datasets}
-            selectedDatasetId={selectedDatasetId}
-            onSelect={setSelectedDatasetId}
-          />
-          <div className="flex-1 min-w-0 overflow-hidden">
-            {subTab === 'overview' && <OverviewTab profile={profile} />}
-            {subTab === 'structure' && <StructureTab profile={profile} />}
-            {subTab === 'profiling' && <ProfilingTab profile={profile} />}
-            {subTab === 'lineage' && <LineageTab rows={lineage} />}
-            {subTab === 'history' && (
-              <div className="flex-1 overflow-hidden">
-                <ObjectHistoryGrid rows={historyRows} emptyMessage="No metadata history records." />
-              </div>
-            )}
-            {subTab === 'permissions' && (
-              <div className="flex-1 overflow-hidden">
-                <ObjectPermissionsGrid rows={permissionRows} readOnly />
-              </div>
-            )}
-          </div>
+        <div className="flex-1 overflow-hidden min-h-0">
+          {subTab === 'overview' && <OverviewTab profile={profile} />}
+          {subTab === 'structure' && <StructureTab profile={profile} />}
+          {subTab === 'profiling' && <ProfilingTab profile={profile} />}
+          {subTab === 'lineage' && <LineageTab rows={lineage} />}
+          {subTab === 'history' && (
+            <div className="flex-1 overflow-hidden">
+              <ObjectHistoryGrid rows={historyRows} emptyMessage="No metadata history records." />
+            </div>
+          )}
+          {subTab === 'permissions' && (
+            <div className="flex-1 overflow-hidden">
+              <ObjectPermissionsGrid rows={permissionRows} readOnly />
+            </div>
+          )}
         </div>
       )}
     </div>

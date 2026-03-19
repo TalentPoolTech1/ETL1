@@ -15,6 +15,8 @@ import { db } from '../../db/connection';
 import { userIdMiddleware } from '../middleware/user-id.middleware';
 import { requirePermission } from '../middleware/rbac.middleware';
 import { TechnologyService } from '../../metadata/TechnologyService';
+import { metadataIntrospectionService } from '../../metadata/MetadataIntrospectionService';
+import { connectionsRepository } from '../../db/repositories/connections.repository';
 
 const router = Router();
 router.use(userIdMiddleware);
@@ -31,6 +33,9 @@ router.get('/technologies', requirePermission('CONNECTION_VIEW'), async (_req: R
     return next(err);
   }
 });
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUID(id: string): boolean { return UUID_RE.test(id); }
 
 async function setSession(client: any, userId: string) {
   const key = process.env['APP_ENCRYPTION_KEY'];
@@ -98,6 +103,7 @@ router.get('/tree/search', requirePermission('CONNECTION_VIEW'), async (req: Req
 });
 
 router.get('/:id/profile', requirePermission('CONNECTION_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  if (!isValidUUID(req.params.id)) return res.status(400).json({ success: false, userMessage: 'Invalid dataset ID' });
   try {
     const userId = getUserId(res);
     const data = await db.transaction(async client => {
@@ -165,6 +171,7 @@ router.get('/:id/profile', requirePermission('CONNECTION_VIEW'), async (req: Req
 });
 
 router.get('/:id/lineage', requirePermission('CONNECTION_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  if (!isValidUUID(req.params.id)) return res.status(400).json({ success: false, userMessage: 'Invalid dataset ID' });
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
@@ -183,6 +190,7 @@ router.get('/:id/lineage', requirePermission('CONNECTION_VIEW'), async (req: Req
 });
 
 router.get('/:id/history', requirePermission('AUDIT_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  if (!isValidUUID(req.params.id)) return res.status(400).json({ success: false, userMessage: 'Invalid dataset ID' });
   try {
     const userId = getUserId(res);
     const limit = Math.min(Math.max(parseInt(String(req.query['limit'] ?? '50'), 10) || 50, 1), 200);
@@ -222,6 +230,7 @@ router.get('/:id/history', requirePermission('AUDIT_VIEW'), async (req: Request,
 });
 
 router.get('/:id/permissions', requirePermission('CONNECTION_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  if (!isValidUUID(req.params.id)) return res.status(400).json({ success: false, userMessage: 'Invalid dataset ID' });
   try {
     const userId = getUserId(res);
     const rows = await db.transaction(async client => {
@@ -262,7 +271,48 @@ router.get('/:id/permissions', requirePermission('CONNECTION_VIEW'), async (req:
   }
 });
 
+/** GET /api/metadata/:id/preview?limit=50 — fetch top N rows from the source system */
+router.get('/:id/preview', requirePermission('CONNECTION_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
+  if (!isValidUUID(req.params.id)) return res.status(400).json({ success: false, userMessage: 'Invalid dataset ID' });
+  try {
+    const userId = getUserId(res);
+    // Hard cap at 50 — backend enforces this regardless of query param
+    const limit = Math.min(Math.max(parseInt(String(req.query['limit'] ?? '50'), 10) || 50, 1), 50);
+    const encKey = process.env['APP_ENCRYPTION_KEY'];
+    if (!encKey) throw new Error('APP_ENCRYPTION_KEY is required');
+
+    // 1. Load dataset profile from catalog
+    const dataset = await db.transaction(async client => {
+      await setSession(client, userId);
+      const r = await client.query(
+        `SELECT connector_id, connector_type_code, schema_name_text, table_name_text
+           FROM catalog.fn_get_metadata_profile($1::uuid)`,
+        [req.params.id],
+      );
+      return r.rows[0] ?? null;
+    });
+    if (!dataset) return res.status(404).json({ success: false, userMessage: 'Dataset not found' });
+
+    // 2. Load decrypted connector credentials
+    const conn = await connectionsRepository.getDecrypted(dataset.connector_id, userId, encKey);
+    if (!conn) return res.status(404).json({ success: false, userMessage: 'Connection not found' });
+
+    // 3. Execute live preview query
+    const result = await metadataIntrospectionService.previewDataset({
+      typeCode: dataset.connector_type_code,
+      config: { ...conn.conn_config_json, connector_id: dataset.connector_id },
+      secrets: conn.conn_secrets_json ?? {},
+      schemaName: dataset.schema_name_text ?? '',
+      tableName: dataset.table_name_text ?? '',
+      limit,
+    });
+
+    return res.json({ success: true, data: result });
+  } catch (err) { return next(err); }
+});
+
 router.post('/:id/refresh', requirePermission('CONNECTION_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
+  if (!isValidUUID(req.params.id)) return res.status(400).json({ success: false, userMessage: 'Invalid dataset ID' });
   try {
     const userId = getUserId(res);
     await db.transaction(async client => {

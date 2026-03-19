@@ -76,6 +76,8 @@ export interface ConnectorSummary {
     createdByFullName: string | null;
     updatedDtm: string;
     technologyId?: string | null;
+    configJson?: Record<string, unknown> | null;
+    secretsUsername?: string;
 }
 
 export interface ConnectorPageResult {
@@ -176,9 +178,19 @@ export class ConnectionsService {
     async getConnector(connectorId: string, userId: string): Promise<ConnectorSummary> {
         log.debug('connections.get', 'Getting connector', { connectorId });
         try {
-            const row = await connectionsRepository.getById(connectorId, userId, getEncryptionKey());
-            if (!row) throw connErrors.notFound(connectorId);
-            return this.toSummary(row);
+            const encKey = getEncryptionKey();
+            const [summary, decrypted] = await Promise.all([
+                connectionsRepository.getById(connectorId, userId, encKey),
+                connectionsRepository.getDecrypted(connectorId, userId, encKey),
+            ]);
+            if (!summary) throw connErrors.notFound(connectorId);
+            const base = this.toSummary(summary as any);
+            base.configJson = (decrypted?.conn_config_json as Record<string, unknown>) ?? null;
+            // Expose only the username (never the password) so the UI can populate the credentials field
+            const secrets = (decrypted?.conn_secrets_json ?? {}) as Record<string, unknown>;
+            const username = secrets['username'] ?? secrets['user'] ?? secrets['jdbc_username'] ?? secrets['jdbc_user'] ?? null;
+            if (username !== null) base.secretsUsername = String(username);
+            return base;
         } catch (err) {
             if (err instanceof AppError) throw err;
             throw connErrors.unexpected(err as Error);

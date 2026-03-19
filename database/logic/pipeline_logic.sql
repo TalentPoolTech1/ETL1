@@ -470,4 +470,380 @@ LANGUAGE sql STABLE AS $$
 $$;
 COMMENT ON FUNCTION catalog.fn_get_pipelines_for_orchestrator(UUID) IS 'Returns all pipelines coordinated by a given orchestrator in dependency order. Answers: which pipelines does this orchestrator run?';
 ;
+
+-- ─── UI / API support functions ──────────────────────────────────────────────
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_by_id(p_pipeline_id UUID)
+RETURNS TABLE (
+    pipeline_id           UUID,
+    project_id            UUID,
+    folder_id             UUID,
+    pipeline_display_name TEXT,
+    pipeline_desc_text    TEXT,
+    active_version_id     UUID,
+    version_num_seq       INTEGER,
+    release_tag_label     TEXT,
+    ir_payload_json       JSONB,
+    ui_layout_json        JSONB,
+    created_dtm           TIMESTAMPTZ,
+    updated_dtm           TIMESTAMPTZ,
+    created_by_user_id    UUID,
+    updated_by_user_id    UUID
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        p.pipeline_id,
+        p.project_id,
+        p.folder_id,
+        p.pipeline_display_name,
+        p.pipeline_desc_text,
+        p.active_version_id,
+        pv.version_num_seq,
+        pv.release_tag_label,
+        pc.ir_payload_json,
+        pc.ui_layout_json,
+        p.created_dtm,
+        p.updated_dtm,
+        p.created_by_user_id,
+        p.updated_by_user_id
+    FROM catalog.pipelines p
+    LEFT JOIN catalog.pipeline_versions  pv ON p.active_version_id = pv.version_id
+    LEFT JOIN catalog.pipeline_contents  pc ON pv.version_id       = pc.version_id
+    WHERE p.pipeline_id = p_pipeline_id;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_pipeline_by_id(UUID) IS 'Returns the full pipeline record with its active version body. Used by the pipeline workspace loader and API GET /pipelines/:id.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_list_pipelines(
+    p_project_id  UUID    DEFAULT NULL::UUID,
+    p_folder_id   UUID    DEFAULT NULL::UUID,
+    p_search_text TEXT    DEFAULT NULL::TEXT,
+    p_limit       INTEGER DEFAULT 50,
+    p_offset      INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+    pipeline_id           UUID,
+    pipeline_display_name TEXT,
+    pipeline_desc_text    TEXT,
+    active_version_id     UUID,
+    has_active_version    BOOLEAN,
+    folder_id             UUID,
+    updated_dtm           TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        pipeline_id, pipeline_display_name, pipeline_desc_text,
+        active_version_id, (active_version_id IS NOT NULL) AS has_active_version,
+        folder_id, updated_dtm
+    FROM catalog.pipelines
+    WHERE project_id = p_project_id
+      AND (p_folder_id IS NULL OR folder_id = p_folder_id)
+      AND (p_search_text IS NULL OR pipeline_display_name ILIKE '%' || p_search_text || '%'
+           OR pipeline_desc_text ILIKE '%' || p_search_text || '%')
+    ORDER BY pipeline_display_name ASC
+    LIMIT p_limit OFFSET p_offset;
+$$;
+COMMENT ON FUNCTION catalog.fn_list_pipelines(UUID, UUID, TEXT, INTEGER, INTEGER) IS 'Project-scoped paginated pipeline list with optional folder and search filters.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_list_pipelines(
+    p_project_id  UUID    DEFAULT NULL::UUID,
+    p_search_text TEXT    DEFAULT NULL::TEXT,
+    p_limit       INTEGER DEFAULT 200,
+    p_offset      INTEGER DEFAULT 0,
+    p_order_by    TEXT    DEFAULT 'updated_dtm',
+    p_order_dir   TEXT    DEFAULT 'DESC'
+)
+RETURNS TABLE (
+    pipeline_id           UUID,
+    project_id            UUID,
+    folder_id             UUID,
+    pipeline_display_name TEXT,
+    pipeline_desc_text    TEXT,
+    active_version_id     UUID,
+    created_dtm           TIMESTAMPTZ,
+    updated_dtm           TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    WITH filtered AS (
+        SELECT p.pipeline_id, p.project_id, p.folder_id,
+               p.pipeline_display_name, p.pipeline_desc_text,
+               p.active_version_id, p.created_dtm, p.updated_dtm
+        FROM catalog.pipelines p
+        WHERE (p_project_id IS NULL OR p.project_id = p_project_id)
+          AND (p_search_text IS NULL
+               OR p.pipeline_display_name ILIKE '%' || p_search_text || '%'
+               OR COALESCE(p.pipeline_desc_text,'') ILIKE '%' || p_search_text || '%')
+    )
+    SELECT f.pipeline_id, f.project_id, f.folder_id,
+           f.pipeline_display_name, f.pipeline_desc_text,
+           f.active_version_id, f.created_dtm, f.updated_dtm
+    FROM filtered f
+    ORDER BY
+        CASE WHEN lower(p_order_by)='pipeline_display_name' AND upper(p_order_dir)='ASC'  THEN f.pipeline_display_name END ASC NULLS LAST,
+        CASE WHEN lower(p_order_by)='pipeline_display_name' AND upper(p_order_dir)='DESC' THEN f.pipeline_display_name END DESC NULLS LAST,
+        CASE WHEN lower(p_order_by)='created_dtm'           AND upper(p_order_dir)='ASC'  THEN f.created_dtm END ASC NULLS LAST,
+        CASE WHEN lower(p_order_by)='created_dtm'           AND upper(p_order_dir)='DESC' THEN f.created_dtm END DESC NULLS LAST,
+        CASE WHEN lower(p_order_by)='updated_dtm'           AND upper(p_order_dir)='ASC'  THEN f.updated_dtm END ASC NULLS LAST,
+        CASE WHEN lower(p_order_by)='updated_dtm'           AND upper(p_order_dir)='DESC' THEN f.updated_dtm END DESC NULLS LAST,
+        f.updated_dtm DESC
+    LIMIT GREATEST(COALESCE(p_limit,200),1)
+    OFFSET GREATEST(COALESCE(p_offset,0),0);
+$$;
+COMMENT ON FUNCTION catalog.fn_list_pipelines(UUID, TEXT, INTEGER, INTEGER, TEXT, TEXT) IS 'Global/cross-project paginated pipeline list with sort and search. Used by the global pipelines API.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_root_pipelines(p_project_id UUID)
+RETURNS TABLE (
+    pipeline_id           UUID,
+    project_id            UUID,
+    folder_id             UUID,
+    pipeline_display_name TEXT,
+    pipeline_desc_text    TEXT,
+    active_version_id     UUID,
+    created_dtm           TIMESTAMPTZ,
+    updated_dtm           TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT pipeline_id, project_id, folder_id, pipeline_display_name,
+           pipeline_desc_text, active_version_id, created_dtm, updated_dtm
+    FROM catalog.pipelines
+    WHERE project_id = p_project_id AND folder_id IS NULL
+    ORDER BY pipeline_display_name;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_root_pipelines(UUID) IS 'Returns project-root pipelines (folder_id IS NULL) for the left sidebar tree.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_root_orchestrators(p_project_id UUID)
+RETURNS TABLE (
+    orch_id           UUID,
+    project_id        UUID,
+    folder_id         UUID,
+    orch_display_name TEXT,
+    orch_desc_text    TEXT,
+    created_dtm       TIMESTAMPTZ,
+    updated_dtm       TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT orch_id, project_id, folder_id, orch_display_name,
+           orch_desc_text, created_dtm, updated_dtm
+    FROM catalog.orchestrators
+    WHERE project_id = p_project_id AND folder_id IS NULL
+    ORDER BY orch_display_name;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_root_orchestrators(UUID) IS 'Returns project-root orchestrators (folder_id IS NULL) for the left sidebar tree.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_runtime_info(p_pipeline_id UUID)
+RETURNS TABLE (pipeline_id UUID, active_version_id UUID)
+LANGUAGE sql STABLE AS $$
+    SELECT p.pipeline_id, p.active_version_id
+    FROM catalog.pipelines p
+    WHERE p.pipeline_id = p_pipeline_id;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_pipeline_runtime_info(UUID) IS 'Returns minimal pipeline identity info needed to check existence and active version before initialising a run.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_codegen_source(p_pipeline_id UUID)
+RETURNS TABLE (
+    pipeline_id           UUID,
+    pipeline_display_name TEXT,
+    pipeline_desc_text    TEXT,
+    version_id            UUID,
+    version_num_seq       INTEGER,
+    release_tag_label     TEXT,
+    ir_payload_json       JSONB,
+    ui_layout_json        JSONB
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        p.pipeline_id,
+        p.pipeline_display_name,
+        p.pipeline_desc_text,
+        pv.version_id,
+        pv.version_num_seq,
+        pv.release_tag_label,
+        pc.ir_payload_json,
+        pc.ui_layout_json
+    FROM catalog.pipelines p
+    LEFT JOIN catalog.pipeline_versions pv ON pv.version_id = p.active_version_id
+    LEFT JOIN catalog.pipeline_contents pc ON pc.version_id = pv.version_id
+    WHERE p.pipeline_id = p_pipeline_id;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_pipeline_codegen_source(UUID) IS 'Returns the IR and UI layout for the active version of a pipeline. This is the source contract for code generation engines.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_lineage_edges(p_pipeline_id UUID)
+RETURNS TABLE (
+    from_pipeline_id           UUID,
+    from_pipeline_display_name TEXT,
+    to_pipeline_id             UUID,
+    to_pipeline_display_name   TEXT
+)
+LANGUAGE sql STABLE AS $$
+    WITH upstream_edges AS (
+        SELECT DISTINCT
+            up.pipeline_id AS from_pipeline_id,
+            up_p.pipeline_display_name AS from_pipeline_display_name,
+            cur.pipeline_id AS to_pipeline_id,
+            cur_p.pipeline_display_name AS to_pipeline_display_name
+        FROM catalog.pipeline_dataset_map cur
+        JOIN catalog.pipelines cur_p ON cur_p.pipeline_id = cur.pipeline_id AND cur_p.active_version_id = cur.version_id
+        JOIN catalog.pipeline_dataset_map up ON up.dataset_id = cur.dataset_id
+        JOIN catalog.pipelines up_p ON up_p.pipeline_id = up.pipeline_id AND up_p.active_version_id = up.version_id
+        WHERE cur.pipeline_id = p_pipeline_id
+          AND cur.access_mode_code IN ('READ', 'READ_WRITE')
+          AND up.access_mode_code IN ('WRITE', 'READ_WRITE')
+          AND up.pipeline_id <> cur.pipeline_id
+    ),
+    downstream_edges AS (
+        SELECT DISTINCT
+            cur.pipeline_id AS from_pipeline_id,
+            cur_p.pipeline_display_name AS from_pipeline_display_name,
+            dn.pipeline_id AS to_pipeline_id,
+            dn_p.pipeline_display_name AS to_pipeline_display_name
+        FROM catalog.pipeline_dataset_map cur
+        JOIN catalog.pipelines cur_p ON cur_p.pipeline_id = cur.pipeline_id AND cur_p.active_version_id = cur.version_id
+        JOIN catalog.pipeline_dataset_map dn ON dn.dataset_id = cur.dataset_id
+        JOIN catalog.pipelines dn_p ON dn_p.pipeline_id = dn.pipeline_id AND dn_p.active_version_id = dn.version_id
+        WHERE cur.pipeline_id = p_pipeline_id
+          AND cur.access_mode_code IN ('WRITE', 'READ_WRITE')
+          AND dn.access_mode_code IN ('READ', 'READ_WRITE')
+          AND dn.pipeline_id <> cur.pipeline_id
+    )
+    SELECT * FROM upstream_edges
+    UNION
+    SELECT * FROM downstream_edges;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_pipeline_lineage_edges(UUID) IS 'Returns pipeline-to-pipeline lineage edges derived from shared dataset dependencies. Used in the Dependencies sub-tab.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_permission_context(p_pipeline_id UUID)
+RETURNS TABLE (pipeline_id UUID, project_id UUID)
+LANGUAGE sql STABLE AS $$
+    SELECT p.pipeline_id, p.project_id
+    FROM catalog.pipelines p
+    WHERE p.pipeline_id = p_pipeline_id;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_pipeline_permission_context(UUID) IS 'Returns the project context of a pipeline for permission inheritance resolution.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_permission_grants(p_pipeline_id UUID)
+RETURNS TABLE (
+    project_id        UUID,
+    user_id           UUID,
+    role_id           UUID,
+    user_full_name    TEXT,
+    email_address     TEXT,
+    role_display_name TEXT,
+    granted_dtm       TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT p.project_id, pur.user_id, pur.role_id,
+           u.user_full_name, u.email_address,
+           r.role_display_name, pur.granted_dtm
+    FROM catalog.pipelines p
+    JOIN gov.project_user_roles pur ON pur.project_id = p.project_id
+    JOIN etl.users u ON u.user_id = pur.user_id
+    JOIN gov.roles r ON r.role_id = pur.role_id
+    WHERE p.pipeline_id = p_pipeline_id
+    ORDER BY u.user_full_name, r.role_display_name;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_pipeline_permission_grants(UUID) IS 'Returns all project-level permission grants for a pipeline including user and role details.';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_update_pipeline_metadata(
+    p_pipeline_id           UUID,
+    p_pipeline_display_name TEXT,
+    p_pipeline_desc_text    TEXT,
+    p_updated_by_user_id    UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE catalog.pipelines
+    SET pipeline_display_name = COALESCE(p_pipeline_display_name, pipeline_display_name),
+        pipeline_desc_text    = COALESCE(p_pipeline_desc_text,    pipeline_desc_text),
+        updated_dtm           = CURRENT_TIMESTAMP,
+        updated_by_user_id    = p_updated_by_user_id
+    WHERE pipeline_id = p_pipeline_id;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Pipeline % not found', p_pipeline_id;
+    END IF;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_update_pipeline_metadata(UUID, TEXT, TEXT, UUID) IS 'Updates pipeline display name and/or description without touching version history.';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_clear_pipeline_parameters(p_pipeline_id UUID)
+LANGUAGE plpgsql AS $$
+BEGIN
+    DELETE FROM catalog.pipeline_parameters WHERE pipeline_id = p_pipeline_id;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_clear_pipeline_parameters(UUID) IS 'Removes all declared runtime parameters for a pipeline prior to a full re-sync from the UI.';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_grant_pipeline_permission(
+    p_pipeline_id        UUID,
+    p_user_id            UUID,
+    p_role_id            UUID,
+    p_granted_by_user_id UUID
+)
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_project_id UUID;
+BEGIN
+    SELECT project_id INTO v_project_id FROM catalog.pipelines WHERE pipeline_id = p_pipeline_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Pipeline % not found', p_pipeline_id; END IF;
+    INSERT INTO gov.project_user_roles (project_id, user_id, role_id, granted_by_user_id)
+    VALUES (v_project_id, p_user_id, p_role_id, p_granted_by_user_id)
+    ON CONFLICT (project_id, user_id, role_id) DO NOTHING;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_grant_pipeline_permission(UUID, UUID, UUID, UUID) IS 'Grants a project-level role to a user, giving them access to all pipelines within the project.';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_revoke_pipeline_permission(
+    p_pipeline_id UUID,
+    p_user_id     UUID,
+    p_role_id     UUID
+)
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_project_id UUID;
+BEGIN
+    SELECT project_id INTO v_project_id FROM catalog.pipelines WHERE pipeline_id = p_pipeline_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Pipeline % not found', p_pipeline_id; END IF;
+    DELETE FROM gov.project_user_roles
+    WHERE project_id = v_project_id AND user_id = p_user_id AND role_id = p_role_id;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_revoke_pipeline_permission(UUID, UUID, UUID) IS 'Revokes a project-level role from a user.';
+;
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_audit_logs(
+    p_pipeline_id UUID,
+    p_limit       INTEGER DEFAULT 50,
+    p_offset      INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+    id          BIGINT,
+    action_dtm  TIMESTAMPTZ,
+    user_id     UUID,
+    action_code CHAR(1)
+)
+LANGUAGE sql STABLE AS $$
+    SELECT h.hist_id        AS id,
+           h.hist_action_dtm AS action_dtm,
+           h.hist_action_by  AS user_id,
+           h.hist_action_cd  AS action_code
+    FROM history.pipelines_history h
+    WHERE h.pipeline_id = p_pipeline_id
+    ORDER BY h.hist_action_dtm DESC
+    LIMIT  GREATEST(COALESCE(p_limit,  50), 1)
+    OFFSET GREATEST(COALESCE(p_offset,  0), 0);
+$$;
+COMMENT ON FUNCTION catalog.fn_get_pipeline_audit_logs(UUID, INTEGER, INTEGER) IS 'Returns paginated audit history for a pipeline from the history shadow table. action_code: I=Insert U=Update D=Delete.';
+;
+
 COMMIT;

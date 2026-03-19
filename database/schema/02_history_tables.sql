@@ -72,6 +72,9 @@ CREATE TABLE history.pipelines_history (
     hist_action_by  UUID
 );
 
+-- Global pipelines have no project_id; history must accept NULL to mirror source row
+ALTER TABLE history.pipelines_history ALTER COLUMN project_id DROP NOT NULL;
+
 COMMENT ON TABLE history.pipelines_history IS 'Immutable row-image history for catalog.pipelines.';
 COMMENT ON COLUMN history.pipelines_history.hist_id IS 'Sequential audit record identifier.';
 COMMENT ON COLUMN history.pipelines_history.hist_action_cd IS 'I=Insert, U=Update, D=Delete.';

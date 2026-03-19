@@ -14,6 +14,9 @@ interface UIState {
   canvasPan: { x: number; y: number };
   /** Active sub-tab per workspace tab, keyed by Tab.id. */
   subTabMap: Record<string, string>;
+  /** Dataset being previewed in the bottom panel (null = closed). */
+  metadataPreviewDatasetId: string | null;
+  metadataPreviewDatasetName: string;
 }
 
 const initialState: UIState = {
@@ -29,6 +32,8 @@ const initialState: UIState = {
   canvasZoom: 1,
   canvasPan: { x: 0, y: 0 },
   subTabMap: {},
+  metadataPreviewDatasetId: null,
+  metadataPreviewDatasetName: '',
 };
 
 const uiSlice = createSlice({
@@ -86,6 +91,16 @@ const uiSlice = createSlice({
     removeSubTab: (state, action: PayloadAction<string>) => {
       delete state.subTabMap[action.payload];
     },
+
+    openMetadataPreview: (state, action: PayloadAction<{ datasetId: string; datasetName: string }>) => {
+      state.metadataPreviewDatasetId = action.payload.datasetId;
+      state.metadataPreviewDatasetName = action.payload.datasetName;
+    },
+
+    closeMetadataPreview: (state) => {
+      state.metadataPreviewDatasetId = null;
+      state.metadataPreviewDatasetName = '';
+    },
   },
 });
 
@@ -103,6 +118,8 @@ export const {
   setCanvasPan,
   setSubTab,
   removeSubTab,
+  openMetadataPreview,
+  closeMetadataPreview,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

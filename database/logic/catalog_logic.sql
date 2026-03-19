@@ -211,20 +211,20 @@ BEGIN
     UPDATE catalog.connectors SET
         connector_display_name        = COALESCE(p_connector_display_name, connector_display_name),
         conn_config_json_encrypted    = CASE WHEN p_conn_config_plain IS NOT NULL
-                                            THEN pgp_sym_encrypt(p_conn_config_plain::TEXT, v_enc_key)
+                                            THEN pgp_sym_encrypt(p_conn_config_plain::TEXT, v_enc_key)::TEXT
                                             ELSE conn_config_json_encrypted END,
         conn_secrets_json_encrypted   = CASE WHEN p_conn_secrets_plain IS NOT NULL
-                                            THEN pgp_sym_encrypt(p_conn_secrets_plain::TEXT, v_enc_key)
+                                            THEN pgp_sym_encrypt(p_conn_secrets_plain::TEXT, v_enc_key)::TEXT
                                             ELSE conn_secrets_json_encrypted END,
         conn_jdbc_driver_class        = COALESCE(p_conn_jdbc_driver_class, conn_jdbc_driver_class),
         conn_test_query               = COALESCE(p_conn_test_query, conn_test_query),
         conn_spark_config_json        = COALESCE(p_conn_spark_config_json, conn_spark_config_json),
         conn_ssl_mode                 = COALESCE(p_conn_ssl_mode, conn_ssl_mode),
         conn_ssh_tunnel_json_encrypted = CASE WHEN p_conn_ssh_tunnel_plain IS NOT NULL
-                                             THEN pgp_sym_encrypt(p_conn_ssh_tunnel_plain::TEXT, v_enc_key)
+                                             THEN pgp_sym_encrypt(p_conn_ssh_tunnel_plain::TEXT, v_enc_key)::TEXT
                                              ELSE conn_ssh_tunnel_json_encrypted END,
         conn_proxy_json_encrypted     = CASE WHEN p_conn_proxy_plain IS NOT NULL
-                                            THEN pgp_sym_encrypt(p_conn_proxy_plain::TEXT, v_enc_key)
+                                            THEN pgp_sym_encrypt(p_conn_proxy_plain::TEXT, v_enc_key)::TEXT
                                             ELSE conn_proxy_json_encrypted END,
         conn_max_pool_size_num        = COALESCE(p_conn_max_pool_size_num, conn_max_pool_size_num),
         conn_idle_timeout_sec         = COALESCE(p_conn_idle_timeout_sec, conn_idle_timeout_sec),
