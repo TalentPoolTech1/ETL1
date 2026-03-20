@@ -146,7 +146,8 @@ export class PipelineValidator {
     const c = node.config as Record<string, unknown>;
     switch (node.sourceType) {
       case 'jdbc':
-        if (!c['url']) errors.push({ nodeId: node.id, field: 'url', code: 'JDBC_NO_URL', message: `JDBC source "${node.name}" missing url.` });
+        // connectionId is a design-time reference resolved at runtime — url not required when connectionId present
+        if (!c['url'] && !c['connectionId']) errors.push({ nodeId: node.id, field: 'url', code: 'JDBC_NO_URL', message: `JDBC source "${node.name}" missing url or connectionId.` });
         if (!c['table'] && !c['query']) errors.push({ nodeId: node.id, code: 'JDBC_NO_TABLE_OR_QUERY', message: `JDBC source "${node.name}" requires table or query.` });
         break;
       case 'file':
@@ -199,7 +200,7 @@ export class PipelineValidator {
     const c = node.config as Record<string, unknown>;
     switch (node.sinkType) {
       case 'jdbc':
-        if (!c['url']) errors.push({ nodeId: node.id, code: 'SINK_JDBC_NO_URL', message: `JDBC sink "${node.name}" missing url.` });
+        if (!c['url'] && !c['connectionId']) errors.push({ nodeId: node.id, code: 'SINK_JDBC_NO_URL', message: `JDBC sink "${node.name}" missing url or connectionId.` });
         if (!c['table']) errors.push({ nodeId: node.id, code: 'SINK_JDBC_NO_TABLE', message: `JDBC sink "${node.name}" missing table.` });
         break;
       case 'file':

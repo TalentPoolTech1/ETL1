@@ -8,14 +8,18 @@ import { DataType, PipelineNode } from '../core/types/pipeline.types';
  * e.g. "My Source 1" → "my_source_1_df"
  */
 export function toVarName(name: string, suffix = 'df'): string {
-  const base = name
+  // Strip path components — use only the final segment (basename without extension)
+  const basename = name.replace(/\\/g, '/').split('/').pop() ?? name;
+  const stripped = basename.replace(/\.[^.]+$/, ''); // remove extension
+  const base = stripped
     .toLowerCase()
     .replace(/\s+/g, '_')
     .replace(VAR_NAME_SANITIZE_RE, '_')
     .replace(/^_+|_+$/g, '')
-    .replace(/_+/g, '_');
+    .replace(/_+/g, '_')
+    .slice(0, 32); // cap at 32 chars
 
-  const safe = RESERVED_PYTHON_KEYWORDS.has(base) ? `_${base}` : base;
+  const safe = !base || RESERVED_PYTHON_KEYWORDS.has(base) ? `_${base || 'node'}` : base;
   return suffix ? `${safe}_${suffix}` : safe;
 }
 

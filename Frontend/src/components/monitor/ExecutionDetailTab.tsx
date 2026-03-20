@@ -64,9 +64,9 @@ function fmtBytes(b: number | null): string {
 
 function Metric({ label, value }: { label: string; value: string | number | null }) {
   return (
-    <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-3">
-      <div className="text-[10px] text-slate-500 mb-1">{label}</div>
-      <div className="text-[14px] font-semibold text-slate-100">{value ?? '—'}</div>
+    <div className="flex items-center justify-between py-2 border-b border-slate-800/60">
+      <span className="text-[12px] text-slate-500">{label}</span>
+      <span className="text-[12px] font-medium text-slate-200">{value ?? '—'}</span>
     </div>
   );
 }
@@ -416,22 +416,26 @@ export function ExecutionDetailTab({ runId, executionKind }: {
       <div className="flex-1 overflow-auto p-5 min-h-0">
 
         {subTab === 'summary' && (
-          <div className="max-w-3xl space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Metric label="Status"         value={detail.runStatus} />
-              <Metric label="Trigger"        value={detail.triggerType} />
-              <Metric label="Submitted By"   value={detail.submittedBy} />
-              <Metric label="Version"        value={detail.versionLabel} />
-              <Metric label="Started"        value={fmtDt(detail.startDtm)} />
-              <Metric label="Ended"          value={fmtDt(detail.endDtm)} />
-              <Metric label="Duration"       value={fmtDur(detail.durationMs)} />
-              <Metric label="Retries"        value={detail.retryCount} />
-              <Metric label="SLA Status"     value={detail.slaStatus} />
-              <Metric label="Error Category" value={detail.errorCategory} />
-              <Metric label="Rows Processed" value={detail.rowsProcessed?.toLocaleString() ?? null} />
-              <Metric label="Data Read"      value={fmtBytes(detail.bytesRead)} />
-              <Metric label="Data Written"   value={fmtBytes(detail.bytesWritten)} />
-              {detail.sparkJobId && <Metric label="Spark Job ID" value={detail.sparkJobId} />}
+          <div className="max-w-2xl space-y-4">
+            <div className="grid grid-cols-2 gap-x-12">
+              <div>
+                <Metric label="Status"         value={detail.runStatus} />
+                <Metric label="Trigger"        value={detail.triggerType} />
+                <Metric label="Submitted By"   value={detail.submittedBy} />
+                <Metric label="Version"        value={detail.versionLabel} />
+                <Metric label="Started"        value={fmtDt(detail.startDtm)} />
+                <Metric label="Ended"          value={fmtDt(detail.endDtm)} />
+                <Metric label="Duration"       value={fmtDur(detail.durationMs)} />
+              </div>
+              <div>
+                <Metric label="Retries"        value={detail.retryCount} />
+                <Metric label="SLA Status"     value={detail.slaStatus} />
+                <Metric label="Error Category" value={detail.errorCategory} />
+                <Metric label="Rows Processed" value={detail.rowsProcessed?.toLocaleString() ?? null} />
+                <Metric label="Data Read"      value={fmtBytes(detail.bytesRead)} />
+                <Metric label="Data Written"   value={fmtBytes(detail.bytesWritten)} />
+                {detail.sparkJobId && <Metric label="Spark Job ID" value={detail.sparkJobId} />}
+              </div>
             </div>
             {detail.errorMessage && (
               <div className="bg-red-950/40 border border-red-800 rounded-lg p-4">
@@ -503,17 +507,18 @@ export function ExecutionDetailTab({ runId, executionKind }: {
                 <p className="text-sm">No node metrics captured for this run.</p>
               </div>
             ) : nodes.map(node => (
-              <div key={node.nodeRunId} className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
+              <div key={node.nodeRunId} className="border-b border-slate-800 pb-3">
+                <div className="flex items-center justify-between py-2">
                   <span className="text-[12px] font-medium text-slate-200 font-mono">{node.nodeDisplayName || node.nodeIdInIrText}</span>
-                  <StatusBadge status={node.runStatus} />
+                  <div className="flex items-center gap-4">
+                    <span className="text-[12px] text-slate-500">{fmtDur(node.durationMs)}</span>
+                    <span className="text-[12px] text-slate-500">↓{node.rowsIn?.toLocaleString() ?? '—'} ↑{node.rowsOut?.toLocaleString() ?? '—'}</span>
+                    <StatusBadge status={node.runStatus} />
+                  </div>
                 </div>
-                <div className="grid grid-cols-4 gap-3">
-                  <Metric label="Duration" value={fmtDur(node.durationMs)} />
-                  <Metric label="Rows In"  value={node.rowsIn?.toLocaleString() ?? null} />
-                  <Metric label="Rows Out" value={node.rowsOut?.toLocaleString() ?? null} />
-                  {node.errorMessage && <Metric label="Error" value={node.errorMessage.slice(0, 60)} />}
-                </div>
+                {node.errorMessage && (
+                  <div className="text-[11px] text-red-400 pl-2 border-l border-red-800">{node.errorMessage.slice(0, 120)}</div>
+                )}
                 {Object.keys(node.metrics).length > 0 && (
                   <details className="mt-2">
                     <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-300">Raw metrics</summary>

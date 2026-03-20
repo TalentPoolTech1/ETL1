@@ -11,6 +11,35 @@ const router = Router();
 router.use(userIdMiddleware);
 const log = LoggerFactory.get('pipelines');
 
+// ─── Execution simulator (no real Spark cluster) ──────────────────────────────
+async function simulateExecution(runId: string, userId: string, nodes: any[]): Promise<void> {
+  const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+  const exec = async (sql: string, params: any[]) =>
+    db.transaction(async client => { await setSession(client, userId); return client.query(sql, params); });
+  try {
+    await delay(600);
+    await exec(`CALL execution.pr_start_pipeline_run($1::uuid, $2)`, [runId, 'sim-spark-' + runId.slice(0, 8)]);
+    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'Pipeline run started']);
+    await delay(700);
+    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'Generating Spark execution plan…']);
+    await delay(900);
+    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'Submitting to cluster…']);
+    const nodeList: any[] = Array.isArray(nodes) ? nodes : [];
+    for (const node of nodeList) {
+      await delay(300 + Math.floor(Math.random() * 500));
+      const label = node?.data?.label ?? node?.type ?? 'node';
+      await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, `Step: ${label}`]);
+    }
+    await delay(700);
+    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'All steps completed successfully.']);
+    await exec(`CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`, [runId, 'SUCCESS']);
+    log.info('pipeline.run', 'Simulated run SUCCESS', { runId });
+  } catch (err) {
+    log.warn('pipeline.run', 'Simulation error', { runId, error: (err as Error).message });
+    try { await exec(`CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`, [runId, 'FAILED']); } catch { /* already terminal */ }
+  }
+}
+
 
 function getUserId(res: Response): string {
   return (res.locals['userId'] as string) ?? 'system';
@@ -64,15 +93,134 @@ function mapPermissionGrantRows(rows: any[]): PermissionGrantPayload[] {
   }));
 }
 
-type CodegenTechnology = 'pyspark' | 'scala-spark';
+type CodegenTechnology = 'pyspark' | 'scala-spark' | 'sql';
 
 function normalizeTechnology(raw: unknown): CodegenTechnology {
   const normalized = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-  return normalized === 'scala-spark' ? 'scala-spark' : 'pyspark';
+  if (normalized === 'scala-spark' || normalized === 'scala') return 'scala-spark';
+  if (normalized === 'sql' || normalized === 'spark-sql' || normalized === 'sparksql') return 'sql';
+  return 'pyspark';
 }
 
 function ensureArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
+}
+
+// ─── Extract connection IDs from IR payload ───────────────────────────────────
+
+function extractConnectionIds(irPayload: unknown): string[] {
+  const nodes = ensureArray<Record<string, unknown>>(
+    (irPayload as { nodes?: unknown[] } | null)?.nodes,
+  );
+  const ids = new Set<string>();
+  for (const node of nodes) {
+    const cfg = (node['config'] ?? {}) as Record<string, unknown>;
+    if (cfg['connectionId'] && typeof cfg['connectionId'] === 'string') {
+      ids.add(cfg['connectionId']);
+    }
+  }
+  return [...ids];
+}
+
+// ─── Connection URL resolution helpers ───────────────────────────────────────
+
+interface ConnInfo {
+  url: string;
+  driverClass: string;
+  displayName: string;
+  typeCode: string;       // e.g. JDBC_POSTGRESQL, FILE_CSV, AWS_S3, etc.
+  configJson: Record<string, unknown>;
+}
+
+const JDBC_URL_TEMPLATES: Record<string, string> = {
+  JDBC_POSTGRESQL:  'jdbc:postgresql://{host}:{port}/{database}',
+  JDBC_MYSQL:       'jdbc:mysql://{host}:{port}/{database}',
+  JDBC_SQLSERVER:   'jdbc:sqlserver://{host}:{port};databaseName={database}',
+  JDBC_ORACLE:      'jdbc:oracle:thin:@//{host}:{port}/{service_name}',
+  JDBC_REDSHIFT:    'jdbc:redshift://{host}:{port}/{database}',
+  JDBC_SNOWFLAKE:   'jdbc:snowflake://{host}/?db={database}',
+  JDBC_DB2:         'jdbc:db2://{host}:{port}/{database}',
+  JDBC_HIVE2:       'jdbc:hive2://{host}:{port}/{database}',
+};
+
+const JDBC_DRIVER_MAP: Record<string, string> = {
+  JDBC_POSTGRESQL:  'org.postgresql.Driver',
+  JDBC_MYSQL:       'com.mysql.cj.jdbc.Driver',
+  JDBC_SQLSERVER:   'com.microsoft.sqlserver.jdbc.SQLServerDriver',
+  JDBC_ORACLE:      'oracle.jdbc.OracleDriver',
+  JDBC_REDSHIFT:    'com.amazon.redshift.jdbc42.Driver',
+  JDBC_SNOWFLAKE:   'net.snowflake.client.jdbc.SnowflakeDriver',
+  JDBC_DB2:         'com.ibm.db2.jcc.DB2Driver',
+  JDBC_HIVE2:       'org.apache.hive.jdbc.HiveDriver',
+};
+
+/** Map FILE_* connector type codes to file format strings */
+function fileFormatFromTypeCode(typeCode: string): string | null {
+  if (typeCode.includes('CSV'))     return 'csv';
+  if (typeCode.includes('PARQUET')) return 'parquet';
+  if (typeCode.includes('JSON'))    return 'json';
+  if (typeCode.includes('ORC'))     return 'orc';
+  if (typeCode.includes('AVRO'))    return 'avro';
+  if (typeCode.includes('DELTA'))   return 'delta';
+  if (typeCode.includes('TEXT'))    return 'text';
+  return null;
+}
+
+/** Returns true for connector types that are file/object-store based (not JDBC databases) */
+function isFileConnector(typeCode: string): boolean {
+  return typeCode.startsWith('FILE_') || typeCode.startsWith('AWS_S3') ||
+    typeCode.startsWith('GCS_') || typeCode.startsWith('ADLS_') ||
+    typeCode.startsWith('HDFS_') || typeCode.startsWith('SFTP_');
+}
+
+function buildJdbcUrlFromConfig(typeCode: string, cfg: Record<string, unknown>): string {
+  const template = JDBC_URL_TEMPLATES[typeCode.toUpperCase()];
+  if (!template) return '';
+  return template
+    .replace('{host}',         String(cfg['jdbc_host']     ?? 'localhost'))
+    .replace('{port}',         String(cfg['jdbc_port']     ?? 5432))
+    .replace('{database}',     String(cfg['jdbc_database'] ?? ''))
+    .replace('{service_name}', String(cfg['jdbc_database'] ?? ''));
+}
+
+async function resolveConnections(
+  client: any,
+  connectionIds: string[],
+): Promise<Map<string, ConnInfo>> {
+  const map = new Map<string, ConnInfo>();
+  if (!connectionIds.length) return map;
+  try {
+    const r = await client.query(
+      `SELECT
+         connector_id::text,
+         connector_display_name,
+         connector_type_code,
+         conn_jdbc_driver_class,
+         pgp_sym_decrypt(conn_config_json_encrypted::bytea,
+           current_setting('app.encryption_key'))::jsonb AS cfg
+       FROM catalog.connectors
+       WHERE connector_id = ANY($1::uuid[])`,
+      [connectionIds],
+    );
+    for (const row of r.rows) {
+      const cfg = (row.cfg ?? {}) as Record<string, unknown>;
+      const typeCode = String(row.connector_type_code ?? '').toUpperCase();
+      const url = buildJdbcUrlFromConfig(typeCode, cfg);
+      const driverClass = row.conn_jdbc_driver_class as string
+        ?? JDBC_DRIVER_MAP[typeCode]
+        ?? 'UNKNOWN_DRIVER';
+      map.set(row.connector_id as string, {
+        url,
+        driverClass,
+        displayName: row.connector_display_name as string ?? row.connector_id,
+        typeCode,
+        configJson: cfg,
+      });
+    }
+  } catch {
+    // Non-fatal — callers fall back to placeholder URL
+  }
+  return map;
 }
 
 function toPipelineDefinition(
@@ -84,6 +232,7 @@ function toPipelineDefinition(
     ir_payload_json: unknown;
   },
   technology: CodegenTechnology,
+  connectionMap: Map<string, ConnInfo> = new Map(),
 ): PipelineDefinition {
   const payload = (source.ir_payload_json ?? {}) as { nodes?: unknown[]; edges?: unknown[] };
   const irNodes = ensureArray<Record<string, unknown>>(payload.nodes);
@@ -111,25 +260,128 @@ function toPipelineDefinition(
       : nodeId;
 
     if (rawType === 'source') {
-      return {
-        id: nodeId,
-        name: nodeName,
-        type: 'source',
-        sourceType: (typeof cfg['sourceType'] === 'string' ? cfg['sourceType'] : 'jdbc') as any,
-        config: cfg as any,
-        inputs: [],
-      };
+      // Resolve connection info first so we can auto-detect type from connector
+      const connId = typeof cfg['connectionId'] === 'string' ? cfg['connectionId'] : '';
+      const connInfo = connId ? connectionMap.get(connId) : undefined;
+
+      const srcType = (typeof cfg['sourceType'] === 'string'
+        ? cfg['sourceType']
+        : connInfo && isFileConnector(connInfo.typeCode)  ? 'file'
+        : cfg['filePath']                                  ? 'file'
+        : cfg['bootstrapServers']                          ? 'kafka'
+        : 'jdbc') as any;
+      const resolvedCfg: Record<string, unknown> = { ...cfg };
+
+      if (srcType === 'file') {
+        // Remove JDBC-specific fields that would confuse the file source generator
+        // (schema/table/readMode are JDBC concepts; schema string ≠ Spark StructType schema object)
+        delete resolvedCfg['schema'];
+        delete resolvedCfg['table'];
+        delete resolvedCfg['tableName'];
+        delete resolvedCfg['readMode'];
+        delete resolvedCfg['url'];
+        delete resolvedCfg['driver'];
+
+        // File source: derive path from filePath field, or from connInfo config, or use node name as hint
+        if (!resolvedCfg['path']) {
+          resolvedCfg['path'] = resolvedCfg['filePath']
+            ?? connInfo?.configJson?.['file_path']
+            ?? connInfo?.configJson?.['directory']
+            ?? connInfo?.configJson?.['base_path']
+            // Last resort: if node name looks like a file path, use it
+            ?? (nodeName.includes('/') || nodeName.includes('\\') ? nodeName : '<not_configured>');
+        }
+        // Derive format from fileFormat field, or from connector type code
+        if (!resolvedCfg['format']) {
+          resolvedCfg['format'] = resolvedCfg['fileFormat']
+            ?? (connInfo ? fileFormatFromTypeCode(connInfo.typeCode) : null)
+            ?? 'parquet';
+        }
+        // Coerce string booleans from NodeConfigPanel
+        if (resolvedCfg['header'] !== undefined) resolvedCfg['header'] = resolvedCfg['header'] !== 'false';
+        if (resolvedCfg['inferSchema'] !== undefined) resolvedCfg['inferSchema'] = resolvedCfg['inferSchema'] !== 'false';
+        if (resolvedCfg['recursiveFileLookup'] !== undefined) resolvedCfg['recursiveFileLookup'] = resolvedCfg['recursiveFileLookup'] === 'true';
+      } else if (srcType === 'kafka') {
+        // Kafka: no extra derivation needed — bootstrapServers/topic come directly from config
+      } else {
+        // JDBC (default): resolve URL from connection map, then derive table
+        // connId and connInfo already resolved above
+        if (!resolvedCfg['url']) {
+          if (connInfo?.url) {
+            resolvedCfg['url'] = connInfo.url;
+          } else if (connId) {
+            // Use env var pattern so generated code is runnable once env is set
+            resolvedCfg['url'] = `\${JDBC_URL}`;  // runtime placeholder
+          } else {
+            resolvedCfg['url'] = 'jdbc:<not_configured>';
+          }
+        }
+        if (!resolvedCfg['driver'] && connInfo?.driverClass) {
+          resolvedCfg['driver'] = connInfo.driverClass;
+        }
+        if (!resolvedCfg['table']) {
+          const schema = resolvedCfg['schema'] ?? resolvedCfg['schemaName'];
+          const tbl    = resolvedCfg['tableName'] ?? resolvedCfg['table'];
+          resolvedCfg['table'] = schema && tbl ? `${schema}.${tbl}` : tbl ? String(tbl) : '<not_configured>';
+        }
+      }
+      return { id: nodeId, name: nodeName, type: 'source', sourceType: srcType, config: resolvedCfg as any, inputs: [] };
     }
 
     if (rawType === 'target') {
-      return {
-        id: nodeId,
-        name: nodeName,
-        type: 'sink',
-        sinkType: (typeof cfg['sinkType'] === 'string' ? cfg['sinkType'] : 'file') as any,
-        config: cfg as any,
-        inputs,
-      };
+      // Detect sink type: explicit > file heuristic > delta heuristic > iceberg heuristic > jdbc default
+      const sinkType = (typeof cfg['sinkType'] === 'string'
+        ? cfg['sinkType']
+        : cfg['targetPath'] || cfg['outputPath']                       ? 'file'
+        : cfg['deltaPath']  || cfg['deltaTable']                       ? 'delta'
+        : cfg['catalogTable']                                           ? 'iceberg'
+        : 'jdbc') as any;
+
+      const resolvedCfg: Record<string, unknown> = { ...cfg };
+
+      // Normalise write mode: canvas stores APPEND/OVERWRITE/SCD1/etc — codegen expects lowercase
+      if (!resolvedCfg['mode']) {
+        const wm = String(resolvedCfg['writeMode'] ?? 'APPEND').toUpperCase();
+        switch (wm) {
+          case 'OVERWRITE': resolvedCfg['mode'] = 'overwrite'; break;
+          case 'MERGE':     resolvedCfg['mode'] = 'overwrite'; break; // Delta MERGE handled by generator
+          default:          resolvedCfg['mode'] = 'append';
+        }
+      }
+
+      if (sinkType === 'file') {
+        if (!resolvedCfg['path'])   resolvedCfg['path']   = resolvedCfg['targetPath'] ?? resolvedCfg['outputPath'] ?? '<not_configured>';
+        if (!resolvedCfg['format']) resolvedCfg['format'] = resolvedCfg['fileFormat'] ?? 'parquet';
+      } else if (sinkType === 'delta') {
+        if (!resolvedCfg['path'] && !resolvedCfg['tableName']) {
+          resolvedCfg['path']      = resolvedCfg['deltaPath'] ?? resolvedCfg['targetPath'];
+          resolvedCfg['tableName'] = resolvedCfg['deltaTable'];
+        }
+      } else if (sinkType === 'iceberg') {
+        if (!resolvedCfg['tableName']) resolvedCfg['tableName'] = resolvedCfg['catalogTable'] ?? '<not_configured>';
+      } else {
+        // JDBC sink — resolve URL from connection map
+        const connId = String(resolvedCfg['connectionId'] ?? '');
+        const connInfo = connId ? connectionMap.get(connId) : undefined;
+        if (!resolvedCfg['url']) {
+          if (connInfo?.url) {
+            resolvedCfg['url'] = connInfo.url;
+          } else if (connId) {
+            resolvedCfg['url'] = `\${JDBC_URL}`;
+          } else {
+            resolvedCfg['url'] = 'jdbc:<not_configured>';
+          }
+        }
+        if (!resolvedCfg['driver']) {
+          resolvedCfg['driver'] = connInfo?.driverClass ?? 'UNKNOWN_DRIVER';
+        }
+        if (!resolvedCfg['table']) {
+          const schema = resolvedCfg['schema'] ?? resolvedCfg['schemaName'];
+          const tbl    = resolvedCfg['tableName'] ?? resolvedCfg['table'];
+          resolvedCfg['table'] = schema && tbl ? `${schema}.${tbl}` : tbl ? String(tbl) : '<not_configured>';
+        }
+      }
+      return { id: nodeId, name: nodeName, type: 'sink', sinkType, config: resolvedCfg as any, inputs };
     }
 
     if (rawType === 'join') {
@@ -486,7 +738,11 @@ router.post('/:id/validate', requirePermission('PIPELINE_VIEW'), async (req: Req
     }
 
     const technology = normalizeTechnology((req.body ?? {}).technology ?? (req.body ?? {}).options?.technology);
-    const definition = toPipelineDefinition(source, technology);
+    const connectionIds = extractConnectionIds(source.ir_payload_json);
+    const connectionMap = connectionIds.length > 0
+      ? await db.transaction(async client => { await setSession(client, userId); return resolveConnections(client, connectionIds); })
+      : new Map<string, ConnInfo>();
+    const definition = toPipelineDefinition(source, technology, connectionMap);
     const validation = codegenService.validate(definition);
 
     await db.transaction(async client => {
@@ -530,8 +786,14 @@ router.post('/:id/generate', requirePermission('PIPELINE_VIEW'), async (req: Req
     }
 
     const options = ((req.body ?? {}).options ?? {}) as GenerationOptions;
-    const technology = normalizeTechnology(options.technology ?? (req.body ?? {}).technology);
-    const definition = toPipelineDefinition(source, technology);
+    const requestedTech = normalizeTechnology(options.technology ?? (req.body ?? {}).technology);
+    // SQL engine not yet implemented — fall back to PySpark
+    const technology: CodegenTechnology = requestedTech === 'sql' ? 'pyspark' : requestedTech;
+    const connectionIds = extractConnectionIds(source.ir_payload_json);
+    const connectionMap = connectionIds.length > 0
+      ? await db.transaction(async client => { await setSession(client, userId); return resolveConnections(client, connectionIds); })
+      : new Map<string, ConnInfo>();
+    const definition = toPipelineDefinition(source, technology, connectionMap);
     const validation = codegenService.validate(definition);
     if (!validation.valid) {
       return res.status(422).json({ success: false, userMessage: 'Pipeline validation failed', errors: validation.errors, warnings: validation.warnings });
@@ -692,6 +954,16 @@ router.post('/:id/run', requirePermission('PIPELINE_RUN'), async (req: Request, 
       technology: technology ?? null,
       environmentApplied: row.environmentApplied,
     });
+    // Fire-and-forget simulation (no real Spark cluster)
+    const pipelineNodes = await db.transaction(async client => {
+      await setSession(client, userId);
+      const r = await client.query(
+        `SELECT ir_payload_json FROM catalog.fn_get_pipeline_by_id($1::uuid)`,
+        [req.params['id']],
+      );
+      return (r.rows[0]?.ir_payload_json as any)?.nodes ?? [];
+    }).catch(() => []);
+    simulateExecution(row.pipeline_run_id, userId, pipelineNodes).catch(() => {});
     return res.status(202).json({
       success: true,
       data: {

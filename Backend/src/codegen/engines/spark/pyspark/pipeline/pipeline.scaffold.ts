@@ -191,28 +191,17 @@ export class PySparkPipelineScaffold {
         b2.blank();
       }
 
-      b2.line(`spark = builder.enableHiveSupport().getOrCreate() if _hive_available() else builder.getOrCreate()`);
+      // Only enable Hive metastore integration when Hudi or explicit Hive is needed
+      if (env.enableHudi) {
+        b2.line(`spark = builder.enableHiveSupport().getOrCreate()`);
+      } else {
+        b2.line(`spark = builder.getOrCreate()`);
+      }
       b2.blank();
       b2.line(`spark.sparkContext.setLogLevel(args.log_level)`);
       b2.blank();
       b2.line(`logger.info(f"SparkSession created: {spark.version} | App: {spark.sparkContext.appName}")`);
       b2.line(`return spark`);
-    });
-    b.blank(2);
-
-    // Hive availability check
-    b.line(`def _hive_available() -> bool:`);
-    b.indent(b2 => {
-      b2.line(`try:`);
-      b2.indent(b3 => {
-        b3.line(`import subprocess`);
-        b3.line(`subprocess.run(["hive", "--version"], capture_output=True, timeout=2)`);
-        b3.line(`return True`);
-      });
-      b2.line(`except Exception:`);
-      b2.indent(b3 => {
-        b3.line(`return False`);
-      });
     });
     b.blank(2);
 

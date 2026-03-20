@@ -10,6 +10,7 @@ import { markTabUnsaved, markTabSaved } from '@/store/slices/tabsSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
 import { PipelineCanvas }             from '@/components/canvas/PipelineCanvas';
+import { NodeConfigPanel }           from '@/components/canvas/NodeConfigPanel';
 import { PipelinePropertiesSubTab }   from './sub-tabs/PipelinePropertiesSubTab';
 import { PipelineParametersSubTab }   from './sub-tabs/PipelineParametersSubTab';
 import { PipelineValidationSubTab }   from './sub-tabs/PipelineValidationSubTab';
@@ -39,12 +40,15 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
   const activeSubTab = PIPELINE_SUB_TABS.some(t => t.id === selectedSubTab) ? selectedSubTab : 'editor';
   const unsavedChanges = useAppSelector(s => s.pipeline.unsavedChanges);
   const activePipeline = useAppSelector(s => s.pipeline.activePipeline);
+  const canvasNodes    = useAppSelector(s => Object.values(s.pipeline.nodes));
+  const canvasEdges    = useAppSelector(s => Object.values(s.pipeline.edges));
   const tab            = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
   const pipelineId     = tab?.objectId ?? '';
 
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving]   = useState(false);
+  const [configNodeId, setConfigNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!pipelineId) return;
@@ -82,8 +86,8 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
       await api.savePipeline(activePipeline.id, {
         pipelineDisplayName: activePipeline.name,
         pipelineDescText: activePipeline.description,
-        nodes: activePipeline.nodes,
-        edges: activePipeline.edges,
+        nodes: canvasNodes,
+        edges: canvasEdges,
         changeSummary: 'Saved from Pipeline workspace',
       });
       dispatch(markSaved());
@@ -91,7 +95,7 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
     } catch (err: unknown) {
       alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Save failed');
     } finally { setIsSaving(false); }
-  }, [activePipeline, isSaving, tabId, dispatch]);
+  }, [activePipeline, canvasNodes, canvasEdges, isSaving, tabId, dispatch]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -136,7 +140,8 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
 
       {/* Designer: always mounted, hidden when not active */}
       <div className={`flex-1 overflow-hidden ${activeSubTab === 'editor' ? 'flex' : 'hidden'}`}>
-        <PipelineCanvas />
+        <PipelineCanvas onNodeDoubleClick={setConfigNodeId} pipelineId={pipelineId} />
+        <NodeConfigPanel nodeId={configNodeId} onClose={() => setConfigNodeId(null)} />
       </div>
 
       {activeSubTab === 'properties'   && <PipelinePropertiesSubTab pipelineId={pipelineId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}

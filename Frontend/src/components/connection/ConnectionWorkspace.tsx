@@ -917,11 +917,14 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
       const res = await api.testConnectionById(connectionId);
       const data = res.data?.data ?? res.data;
       const responseMs = Number(data?.latencyMs ?? data?.responseMs ?? 0);
-      setTestStatus('success');
+      const passed = data?.success !== false;
+      const failStep = !passed ? (data?.steps ?? []).find((s: { passed: boolean; message: string }) => !s.passed) : null;
+      setTestStatus(passed ? 'success' : 'failed');
       setLastTestResult({
         testedBy: 'You',
         testedOn: new Date().toLocaleString(),
         responseMs: Number.isFinite(responseMs) ? responseMs : undefined,
+        error: !passed ? (failStep?.message ?? 'Connection test failed') : undefined,
       });
       await loadConnection();
     } catch (err: unknown) {

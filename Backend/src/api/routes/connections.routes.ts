@@ -87,6 +87,29 @@ function getUserId(res: Response): string {
     return (res.locals['userId'] as string) ?? 'system';
 }
 
+/** Maps raw driver/network errors from introspect calls into user-readable 503 responses. */
+function introspectErrResponse(err: unknown, res: Response): Response {
+    const msg = err instanceof Error ? err.message : String(err);
+    const pgCode = (err as Record<string, unknown>)?.['pgCode'] ?? (err as Record<string, unknown>)?.['code'];
+
+    let userMessage: string;
+    if (/password authentication failed/i.test(msg) || pgCode === '28P01') {
+        userMessage = 'Authentication failed — the stored username or password is incorrect. Edit the connection credentials and try again.';
+    } else if (/ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH/i.test(msg) || pgCode === 'ECONNREFUSED') {
+        userMessage = 'Cannot reach the database server — check the host, port, and network/firewall settings.';
+    } else if (/database .* does not exist/i.test(msg) || pgCode === '3D000') {
+        userMessage = 'Database not found — verify the database name in the connection properties.';
+    } else if (/SSL/i.test(msg)) {
+        userMessage = 'SSL/TLS handshake failed — check the SSL mode and certificate settings.';
+    } else if (/role .* does not exist/i.test(msg) || pgCode === '28000') {
+        userMessage = 'Database user not found — the username stored in this connection does not exist on the server.';
+    } else {
+        userMessage = `Could not connect to the data source: ${msg}`;
+    }
+
+    return res.status(503).json({ success: false, userMessage });
+}
+
 /** GET /api/connections/:id/introspect/schemas — list available schemas/paths */
 router.get('/:id/introspect/schemas', requirePermission('CONNECTION_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -101,7 +124,7 @@ router.get('/:id/introspect/schemas', requirePermission('CONNECTION_VIEW'), asyn
             row.conn_secrets_json ?? {},
         );
         return res.json({ success: true, data: schemas });
-    } catch (err) { return next(err); }
+    } catch (err) { return introspectErrResponse(err, res); }
 });
 
 /** GET /api/connections/:id/introspect/tables?schema= — list tables in a schema */
@@ -120,7 +143,7 @@ router.get('/:id/introspect/tables', requirePermission('CONNECTION_VIEW'), async
             schema,
         );
         return res.json({ success: true, data: tables });
-    } catch (err) { return next(err); }
+    } catch (err) { return introspectErrResponse(err, res); }
 });
 
 /** POST /api/connections/:id/introspect/import — import selected tables into catalog */
@@ -144,7 +167,7 @@ router.post('/:id/introspect/import', requirePermission('CONNECTION_EDIT'), asyn
             encryptionKey: encKey,
         });
         return res.json({ success: true, data: result });
-    } catch (err) { return next(err); }
+    } catch (err) { return introspectErrResponse(err, res); }
 });
 
 export default router;

@@ -799,6 +799,13 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
   const loading   = slot?.isLoading ?? false;
   const cursor    = slot?.nextCursor ?? null;
 
+  // Re-fetch when slot is evicted (e.g. after create/delete) while node is expanded
+  useEffect(() => {
+    if (expanded && !slot && !loading) {
+      dispatch(fetchConnectorsByTech({ techCode: tech.techCode }));
+    }
+  }, [expanded, slot, loading, dispatch, tech.techCode]);
+
   const toggle = () => {
     const next = !expanded;
     if (next && items.length === 0) {

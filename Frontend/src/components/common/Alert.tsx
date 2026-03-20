@@ -46,7 +46,7 @@ export function Alert({ variant = 'info', title, children, onClose }: AlertProps
         <span className="text-lg flex-shrink-0">{themed.icon}</span>
         <div className="flex-1">
           {title && <p className="font-semibold text-sm mb-1">{title}</p>}
-          <p className="text-sm">{children}</p>
+          <div className="text-sm">{children}</div>
         </div>
         {onClose && (
           <button onClick={onClose} className="text-lg hover:opacity-70">

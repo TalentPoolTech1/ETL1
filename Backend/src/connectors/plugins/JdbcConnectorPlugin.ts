@@ -8,6 +8,7 @@
  * Drivers are loaded dynamically from a configurable driver library path.
  */
 
+import { Client as PgClient } from 'pg';
 import {
     IConnectorPlugin,
     ConnectorCategory,
@@ -104,41 +105,56 @@ abstract class AbstractJdbcPlugin implements IConnectorPlugin {
     async test(config: ConnectorConfig, secrets: ConnectorSecrets): Promise<TestResult> {
         const startMs = Date.now();
         const steps: TestStep[] = [];
-        const host = String(config['jdbc_host'] ?? '');
-        const port = Number(config['jdbc_port'] ?? this.defaultPort);
+        const host    = String(config['jdbc_host'] ?? 'localhost');
+        const port    = Number(config['jdbc_port'] ?? this.defaultPort);
+        const database = String(config['jdbc_database'] ?? 'postgres');
+        const user     = String(secrets['jdbc_username'] ?? secrets['username'] ?? '');
+        const password = String(secrets['jdbc_password'] ?? secrets['password'] ?? '');
+        const sslMode  = String(config['jdbc_ssl_mode'] ?? 'DISABLE');
+        const ssl      = ['REQUIRE', 'VERIFY_CA', 'VERIFY_FULL'].includes(sslMode)
+            ? { rejectUnauthorized: false }
+            : false;
 
-        // Step 1: Network reachability
-        steps.push({
-            stepName: 'network',
-            passed: true, // actual TCP check done at service layer
-            message: `TCP connect to ${host}:${port}`,
-            durationMs: 0,
-        });
+        // For non-PostgreSQL JDBC types, skip real connect (drivers not bundled)
+        const isPostgres = this.typeCode === 'JDBC_POSTGRESQL' || this.typeCode === 'JDBC_GREENPLUM';
 
-        // Step 2: Authentication — JDBC connect
-        steps.push({
-            stepName: 'authentication',
-            passed: true,
-            message: `JDBC authentication via ${this.defaultJdbcDriverClass}`,
-            durationMs: 0,
-        });
+        if (isPostgres) {
+            const client = new PgClient({ host, port, database, user, password, ssl, connectionTimeoutMillis: 8000 });
+            let connectErr: Error | null = null;
+            const t0 = Date.now();
+            try { await client.connect(); } catch (e) { connectErr = e as Error; }
+            finally { client.end().catch(() => undefined); }
+            const connMs = Date.now() - t0;
 
-        // Step 3: Authorisation — test query
-        steps.push({
-            stepName: 'authorization',
-            passed: true,
-            message: `Executed: ${this.defaultTestQuery}`,
-            durationMs: 0,
-        });
+            steps.push({
+                stepName: 'network',
+                passed: !connectErr || !/ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH/i.test(connectErr.message),
+                message: connectErr
+                    ? (/ECONNREFUSED|ETIMEDOUT|EHOSTUNREACH/i.test(connectErr.message)
+                        ? `Cannot reach ${host}:${port} — check host/port/firewall`
+                        : `TCP connect to ${host}:${port}`)
+                    : `TCP connect to ${host}:${port}`,
+                durationMs: connMs,
+            });
+            steps.push({
+                stepName: 'authentication',
+                passed: !connectErr,
+                message: connectErr
+                    ? (/password authentication failed|role .* does not exist/i.test(connectErr.message)
+                        ? 'Authentication failed — incorrect username or password'
+                        : connectErr.message)
+                    : `Authenticated as ${user}`,
+                durationMs: connMs,
+            });
+        } else {
+            // Non-PostgreSQL JDBC: structural checks only (drivers not bundled in ETL1 backend)
+            const credentialsPresent = !!user && !!password;
+            steps.push({ stepName: 'network',         passed: true,               message: `Host: ${host}:${port}`,                    durationMs: 0 });
+            steps.push({ stepName: 'authentication',  passed: credentialsPresent, message: credentialsPresent ? `Credentials present for ${user}` : 'Username or password is missing', durationMs: 0 });
+        }
 
-        // Step 4: SSL
-        const sslMode = String(config['jdbc_ssl_mode'] ?? 'REQUIRE');
-        steps.push({
-            stepName: 'ssl',
-            passed: true,
-            message: `SSL mode: ${sslMode}`,
-            durationMs: 0,
-        });
+        // SSL step
+        steps.push({ stepName: 'ssl', passed: true, message: `SSL mode: ${sslMode}`, durationMs: 0 });
 
         return {
             success: steps.every(s => s.passed),

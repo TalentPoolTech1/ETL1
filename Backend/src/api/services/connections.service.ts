@@ -273,7 +273,7 @@ export class ConnectionsService {
 
             if (input.config) {
                 const plugin = ConnectorRegistry.get(existing.connector_type_code)!;
-                this.validateConfig(plugin, input.config, input.secrets);
+                this.validateConfig(plugin, input.config, input.secrets, false);
             }
 
             await connectionsRepository.update({
@@ -645,15 +645,19 @@ export class ConnectionsService {
         if (!valid.includes(mode)) throw connErrors.connectionStringInvalid();
     }
 
-    private validateConfig(plugin: IConnectorPlugin, config: ConnectorConfig, secrets?: ConnectorSecrets): void {
+    private validateConfig(plugin: IConnectorPlugin, config: ConnectorConfig, secrets?: ConnectorSecrets, requireSecrets = true): void {
         for (const field of plugin.configSchema.required ?? []) {
             if (config[field] === undefined || config[field] === null || config[field] === '') {
                 throw connErrors.hostRequired();
             }
         }
-        for (const field of plugin.secretsSchema.required ?? []) {
-            if (!secrets || secrets[field] === undefined || secrets[field] === null || secrets[field] === '') {
-                throw connErrors.authFailed('new', new Error(`Missing required secret: ${field}`));
+        // On update, secrets are optional — only validate them if the caller is supplying new ones
+        const hasSecrets = secrets && Object.keys(secrets).length > 0;
+        if (requireSecrets || hasSecrets) {
+            for (const field of plugin.secretsSchema.required ?? []) {
+                if (!secrets || secrets[field] === undefined || secrets[field] === null || secrets[field] === '') {
+                    throw connErrors.authFailed('new', new Error(`Missing required secret: ${field}`));
+                }
             }
         }
         if (config['jdbc_port'] !== undefined) {

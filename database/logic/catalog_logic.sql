@@ -66,7 +66,9 @@ LANGUAGE sql STABLE AS $$
     LEFT JOIN etl.users u ON c.created_by_user_id = u.user_id
     LEFT JOIN catalog.connector_health h ON c.connector_id = h.connector_id
     LEFT JOIN meta.technology_types t ON c.technology_id = t.tech_id
-    WHERE (p_tech_code IS NULL OR t.tech_code = p_tech_code)
+    WHERE (p_tech_code IS NULL
+           OR t.tech_code = p_tech_code
+           OR (c.technology_id IS NULL AND c.connector_type_code ILIKE '%' || p_tech_code || '%'))
       AND (p_after_id IS NULL OR c.connector_id > p_after_id)
     ORDER BY c.connector_id
     LIMIT p_limit;
@@ -188,6 +190,7 @@ END;
 $$;
 COMMENT ON PROCEDURE catalog.pr_create_connector(TEXT, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID) IS 'Law 3: Registers a new connector with config, secrets, SSH tunnel, and proxy all encrypted via pgcrypto before storage. Initializes a health record in UNKNOWN state.';
 ;
+DROP PROCEDURE IF EXISTS catalog.pr_update_connector(UUID, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID);
 CREATE OR REPLACE PROCEDURE catalog.pr_update_connector(
     p_connector_id               UUID,
     p_connector_display_name     TEXT,
@@ -233,7 +236,7 @@ BEGIN
     WHERE connector_id = p_connector_id;
 END;
 $$;
-COMMENT ON PROCEDURE catalog.pr_update_connector(UUID, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID) IS 'Updates an existing connector. Only non-NULL parameters overwrite existing values. Re-encrypts config, secrets, SSH tunnel, and proxy if new plaintext is provided.';
+COMMENT ON PROCEDURE catalog.pr_update_connector(UUID, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID, UUID) IS 'Updates an existing connector. Only non-NULL parameters overwrite existing values. Re-encrypts config, secrets, SSH tunnel, and proxy if new plaintext is provided.';
 ;
 CREATE OR REPLACE PROCEDURE catalog.pr_delete_connector(p_connector_id UUID)
 LANGUAGE plpgsql AS $$
