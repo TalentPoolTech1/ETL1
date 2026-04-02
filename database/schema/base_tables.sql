@@ -340,6 +340,7 @@ CREATE TABLE catalog.pipelines (
     updated_dtm             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by_user_id      UUID  REFERENCES etl.users(user_id) ON DELETE SET NULL,
     updated_by_user_id      UUID  REFERENCES etl.users(user_id) ON DELETE SET NULL,
+    inherit_project_permissions BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (project_id, pipeline_display_name)
 );
 
@@ -354,6 +355,7 @@ COMMENT ON COLUMN catalog.pipelines.created_dtm           IS 'Record creation ti
 COMMENT ON COLUMN catalog.pipelines.updated_dtm           IS 'Timestamp of the last metadata update (not version commit).';
 COMMENT ON COLUMN catalog.pipelines.created_by_user_id    IS 'FK to the user who originally created this pipeline.';
 COMMENT ON COLUMN catalog.pipelines.updated_by_user_id    IS 'FK to the last user who modified the pipeline metadata.';
+COMMENT ON COLUMN catalog.pipelines.inherit_project_permissions IS 'When TRUE (default), all project-level role grants automatically apply to this pipeline. When FALSE, only explicit per-pipeline grants apply — the pipeline has its own isolated access list.';
 
 
 CREATE TABLE catalog.pipeline_versions (
@@ -416,6 +418,7 @@ CREATE TABLE catalog.orchestrators (
     created_dtm             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_dtm             TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by_user_id      UUID  REFERENCES etl.users(user_id) ON DELETE SET NULL,
+    inherit_project_permissions BOOLEAN NOT NULL DEFAULT TRUE,
     UNIQUE (project_id, orch_display_name)
 );
 
@@ -429,6 +432,7 @@ COMMENT ON COLUMN catalog.orchestrators.dag_definition_json IS 'JSONB DAG struct
 COMMENT ON COLUMN catalog.orchestrators.created_dtm         IS 'Record creation timestamp.';
 COMMENT ON COLUMN catalog.orchestrators.updated_dtm         IS 'Timestamp of the last DAG or metadata update.';
 COMMENT ON COLUMN catalog.orchestrators.created_by_user_id  IS 'FK to the user who created this orchestrator.';
+COMMENT ON COLUMN catalog.orchestrators.inherit_project_permissions IS 'When TRUE (default), all project-level role grants automatically apply to this orchestrator. When FALSE, only explicit per-orchestrator grants apply.';
 
 
 -- ============================================================================

@@ -718,14 +718,17 @@ $$;
 COMMENT ON FUNCTION catalog.fn_get_pipeline_lineage_edges(UUID) IS 'Returns pipeline-to-pipeline lineage edges derived from shared dataset dependencies. Used in the Dependencies sub-tab.';
 ;
 
+-- Drop before recreating — return type changed to include inherit_project_permissions
+DROP FUNCTION IF EXISTS catalog.fn_get_pipeline_permission_context(UUID) CASCADE;
+
 CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_permission_context(p_pipeline_id UUID)
-RETURNS TABLE (pipeline_id UUID, project_id UUID)
+RETURNS TABLE (pipeline_id UUID, project_id UUID, inherit_project_permissions BOOLEAN)
 LANGUAGE sql STABLE AS $$
-    SELECT p.pipeline_id, p.project_id
+    SELECT p.pipeline_id, p.project_id, p.inherit_project_permissions
     FROM catalog.pipelines p
     WHERE p.pipeline_id = p_pipeline_id;
 $$;
-COMMENT ON FUNCTION catalog.fn_get_pipeline_permission_context(UUID) IS 'Returns the project context of a pipeline for permission inheritance resolution.';
+COMMENT ON FUNCTION catalog.fn_get_pipeline_permission_context(UUID) IS 'Returns the project context and inheritance flag of a pipeline for permission resolution.';
 ;
 
 CREATE OR REPLACE FUNCTION catalog.fn_get_pipeline_permission_grants(p_pipeline_id UUID)
@@ -739,6 +742,9 @@ RETURNS TABLE (
     granted_dtm       TIMESTAMPTZ
 )
 LANGUAGE sql STABLE AS $$
+    -- When inherit_project_permissions=TRUE, return all project-level grants.
+    -- When FALSE, the pipeline has an isolated access list — return nothing here;
+    -- explicit grants are still stored in gov.project_user_roles but filtered out.
     SELECT p.project_id, pur.user_id, pur.role_id,
            u.user_full_name, u.email_address,
            r.role_display_name, pur.granted_dtm
@@ -747,9 +753,28 @@ LANGUAGE sql STABLE AS $$
     JOIN etl.users u ON u.user_id = pur.user_id
     JOIN gov.roles r ON r.role_id = pur.role_id
     WHERE p.pipeline_id = p_pipeline_id
+      AND p.inherit_project_permissions = TRUE
     ORDER BY u.user_full_name, r.role_display_name;
 $$;
-COMMENT ON FUNCTION catalog.fn_get_pipeline_permission_grants(UUID) IS 'Returns all project-level permission grants for a pipeline including user and role details.';
+COMMENT ON FUNCTION catalog.fn_get_pipeline_permission_grants(UUID) IS 'Returns effective grants for a pipeline. When inherit_project_permissions=TRUE, returns all project-level grants. When FALSE, returns empty set (pipeline has isolated access).';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_set_pipeline_inherit_permissions(
+    p_pipeline_id UUID,
+    p_inherit     BOOLEAN,
+    p_user_id     UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE catalog.pipelines
+    SET inherit_project_permissions = p_inherit,
+        updated_dtm                 = CURRENT_TIMESTAMP,
+        updated_by_user_id          = p_user_id
+    WHERE pipeline_id = p_pipeline_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Pipeline % not found', p_pipeline_id; END IF;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_set_pipeline_inherit_permissions(UUID, BOOLEAN, UUID) IS 'Toggles the project-permission inheritance flag for a pipeline. TRUE = inherits project grants (default). FALSE = pipeline has its own isolated access list.';
 ;
 
 CREATE OR REPLACE PROCEDURE catalog.pr_update_pipeline_metadata(
@@ -844,6 +869,100 @@ LANGUAGE sql STABLE AS $$
     OFFSET GREATEST(COALESCE(p_offset,  0), 0);
 $$;
 COMMENT ON FUNCTION catalog.fn_get_pipeline_audit_logs(UUID, INTEGER, INTEGER) IS 'Returns paginated audit history for a pipeline from the history shadow table. action_code: I=Insert U=Update D=Delete.';
+;
+
+-- ============================================================================
+-- ORCHESTRATOR PERMISSIONS (canonical source — previously only in BKP/V_0.sql)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_orchestrator_permission_context(p_orch_id UUID)
+RETURNS TABLE (orch_id UUID, project_id UUID, inherit_project_permissions BOOLEAN)
+LANGUAGE sql STABLE AS $$
+    SELECT o.orch_id, o.project_id, o.inherit_project_permissions
+    FROM catalog.orchestrators o
+    WHERE o.orch_id = p_orch_id;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_orchestrator_permission_context(UUID) IS 'Returns the project context and inheritance flag of an orchestrator for permission resolution.';
+;
+
+DROP FUNCTION IF EXISTS catalog.fn_get_orchestrator_permission_grants(UUID);
+
+CREATE OR REPLACE FUNCTION catalog.fn_get_orchestrator_permission_grants(p_orch_id UUID)
+RETURNS TABLE (
+    project_id        UUID,
+    user_id           UUID,
+    role_id           UUID,
+    user_full_name    TEXT,
+    email_address     TEXT,
+    role_display_name TEXT,
+    granted_dtm       TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT o.project_id, pur.user_id, pur.role_id,
+           u.user_full_name, u.email_address,
+           r.role_display_name, pur.granted_dtm
+    FROM catalog.orchestrators o
+    JOIN gov.project_user_roles pur ON pur.project_id = o.project_id
+    JOIN etl.users u ON u.user_id = pur.user_id
+    JOIN gov.roles r ON r.role_id = pur.role_id
+    WHERE o.orch_id = p_orch_id
+      AND o.inherit_project_permissions = TRUE
+    ORDER BY u.user_full_name, r.role_display_name;
+$$;
+COMMENT ON FUNCTION catalog.fn_get_orchestrator_permission_grants(UUID) IS 'Returns effective grants for an orchestrator. Respects inherit_project_permissions flag.';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_set_orchestrator_inherit_permissions(
+    p_orch_id UUID,
+    p_inherit BOOLEAN,
+    p_user_id UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE catalog.orchestrators
+    SET inherit_project_permissions = p_inherit,
+        updated_dtm                 = CURRENT_TIMESTAMP
+    WHERE orch_id = p_orch_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Orchestrator % not found', p_orch_id; END IF;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_set_orchestrator_inherit_permissions(UUID, BOOLEAN, UUID) IS 'Toggles the project-permission inheritance flag for an orchestrator.';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_grant_orchestrator_permission(
+    p_orch_id            UUID,
+    p_user_id            UUID,
+    p_role_id            UUID,
+    p_granted_by_user_id UUID
+)
+LANGUAGE plpgsql AS $$
+DECLARE v_project_id UUID;
+BEGIN
+    SELECT project_id INTO v_project_id FROM catalog.orchestrators WHERE orch_id = p_orch_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Orchestrator % not found', p_orch_id; END IF;
+    INSERT INTO gov.project_user_roles (project_id, user_id, role_id, granted_by_user_id)
+    VALUES (v_project_id, p_user_id, p_role_id, p_granted_by_user_id)
+    ON CONFLICT (project_id, user_id, role_id) DO NOTHING;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_grant_orchestrator_permission(UUID, UUID, UUID, UUID) IS 'Grants a project-scoped role for the orchestrator parent project.';
+;
+
+CREATE OR REPLACE PROCEDURE catalog.pr_revoke_orchestrator_permission(
+    p_orch_id UUID,
+    p_user_id UUID,
+    p_role_id UUID
+)
+LANGUAGE plpgsql AS $$
+DECLARE v_project_id UUID;
+BEGIN
+    SELECT project_id INTO v_project_id FROM catalog.orchestrators WHERE orch_id = p_orch_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Orchestrator % not found', p_orch_id; END IF;
+    DELETE FROM gov.project_user_roles
+    WHERE project_id = v_project_id AND user_id = p_user_id AND role_id = p_role_id;
+END;
+$$;
+COMMENT ON PROCEDURE catalog.pr_revoke_orchestrator_permission(UUID, UUID, UUID) IS 'Revokes a project-scoped role assignment for the orchestrator parent project.';
 ;
 
 COMMIT;

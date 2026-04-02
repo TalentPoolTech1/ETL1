@@ -92,7 +92,7 @@ export class PySparkJdbcSourceGenerator implements INodeGenerator {
 
     if (context.options.includeLogging) {
       b.blank();
-      b.line(`logger.info(f"Loaded JDBC source '${node.name}': {${varName}.count()} rows")`);
+      b.line(`logger.info(${pyStringLiteral(`Configured JDBC source '${node.name}' using ${cfg.table ?? 'custom query'}`)})`);
     }
 
     return {

@@ -52,6 +52,48 @@ const CHANNEL_COLORS: Record<AlertChannel, string> = {
   pagerduty: 'text-red-300 bg-red-900/30 border-red-700',
 };
 
+function CompactIconButton({
+  onClick,
+  title,
+  children,
+  tone = 'default',
+  disabled = false,
+}: {
+  onClick: () => void;
+  title: string;
+  children: React.ReactNode;
+  tone?: 'default' | 'danger';
+  disabled?: boolean;
+}) {
+  const toneClass = tone === 'danger'
+    ? 'border-slate-700 text-slate-400 hover:border-red-500/50 hover:text-red-300'
+    : 'border-slate-700 text-slate-400 hover:border-blue-500/50 hover:text-blue-300';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      disabled={disabled}
+      className={`flex h-5 w-5 items-center justify-center rounded border bg-[#161b2e] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${toneClass}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ZebraList({ children }: { children: React.ReactNode }) {
+  return <div className="overflow-hidden rounded border border-slate-800">{children}</div>;
+}
+
+function ZebraRow({ children, index, className = '' }: { children: React.ReactNode; index: number; className?: string }) {
+  return (
+    <div className={`${index > 0 ? 'border-t border-slate-800' : ''} ${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-2 py-1.5 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [showAdd, setShowAdd] = useState(false);
@@ -209,47 +251,58 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
       {/* Add rule form */}
       {showAdd && (
         <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/30 flex-shrink-0">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">Rule Name *</label>
-              <input value={newRule.name ?? ''} onChange={e => setNewRule(p => ({ ...p, name: e.target.value }))}
-                className="w-full h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+          <ZebraList>
+            <ZebraRow index={0}>
+              <div className="grid grid-cols-[92px,1fr] items-center gap-2">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Rule Name</label>
+                <input value={newRule.name ?? ''} onChange={e => setNewRule(p => ({ ...p, name: e.target.value }))}
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500" />
+              </div>
+            </ZebraRow>
+            <ZebraRow index={1}>
+              <div className="grid grid-cols-[92px,1fr] items-center gap-2">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Event</label>
+                <select value={newRule.event} onChange={e => setNewRule(p => ({ ...p, event: e.target.value as AlertEvent }))}
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500">
+                  {(Object.keys(EVENT_LABELS) as AlertEvent[]).map(e => (
+                    <option key={e} value={e}>{EVENT_LABELS[e]}</option>
+                  ))}
+                </select>
+              </div>
+            </ZebraRow>
+            <ZebraRow index={2}>
+              <div className="grid grid-cols-[92px,1fr] items-center gap-2">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Channel</label>
+                <select value={newRule.channel} onChange={e => setNewRule(p => ({ ...p, channel: e.target.value as AlertChannel }))}
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500">
+                  <option value="email">Email</option>
+                  <option value="slack">Slack</option>
+                  <option value="webhook">Webhook</option>
+                  <option value="pagerduty">PagerDuty</option>
+                </select>
+              </div>
+            </ZebraRow>
+            <ZebraRow index={3}>
+              <div className="grid grid-cols-[92px,1fr] items-center gap-2">
+                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Target</label>
+                <input value={newRule.target ?? ''} onChange={e => setNewRule(p => ({ ...p, target: e.target.value }))}
+                  placeholder={newRule.channel === 'email' ? 'email@example.com' : newRule.channel === 'slack' ? '#channel' : 'https://…'}
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500" />
+              </div>
+            </ZebraRow>
+          </ZebraList>
+          <div className="mt-2 flex items-center justify-between px-1">
+            <span className="text-[10px] text-slate-500">New alert rule</span>
+            <div className="flex items-center gap-1.5">
+              <button onClick={addRule}
+                className="h-6 px-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-medium transition-colors">
+                Add
+              </button>
+              <button onClick={() => setShowAdd(false)}
+                className="h-6 px-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded text-[10px] transition-colors">
+                Cancel
+              </button>
             </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">Event</label>
-              <select value={newRule.event} onChange={e => setNewRule(p => ({ ...p, event: e.target.value as AlertEvent }))}
-                className="w-full h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500">
-                {(Object.keys(EVENT_LABELS) as AlertEvent[]).map(e => (
-                  <option key={e} value={e}>{EVENT_LABELS[e]}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">Channel</label>
-              <select value={newRule.channel} onChange={e => setNewRule(p => ({ ...p, channel: e.target.value as AlertChannel }))}
-                className="w-full h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500">
-                <option value="email">Email</option>
-                <option value="slack">Slack</option>
-                <option value="webhook">Webhook</option>
-                <option value="pagerduty">PagerDuty</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-[10px] text-slate-500 mb-1">Target *</label>
-              <input value={newRule.target ?? ''} onChange={e => setNewRule(p => ({ ...p, target: e.target.value }))}
-                placeholder={newRule.channel === 'email' ? 'email@example.com' : newRule.channel === 'slack' ? '#channel' : 'https://…'}
-                className="w-full h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={addRule}
-              className="h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors">
-              Add
-            </button>
-            <button onClick={() => setShowAdd(false)}
-              className="h-7 px-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded text-[12px] transition-colors">
-              Cancel
-            </button>
           </div>
         </div>
       )}
@@ -262,50 +315,39 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
             <p className="text-sm">No alert rules configured.</p>
           </div>
         ) : (
-          <div className="space-y-2 max-w-3xl">
-            {rules.map(rule => (
-              <div key={rule.id}
-                className={`flex items-center gap-4 px-4 py-3 rounded-lg border transition-colors ${
-                  rule.enabled ? 'border-slate-700 bg-slate-800/30' : 'border-slate-800 bg-slate-900/20 opacity-60'
-                }`}>
-                {/* Enable toggle */}
-                <button onClick={() => toggleRule(rule.id)}
-                  className={`flex-shrink-0 transition-colors ${rule.enabled ? 'text-emerald-400' : 'text-slate-600'}`}
-                  title={rule.enabled ? 'Disable' : 'Enable'}>
-                  {rule.enabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
-                </button>
-
-                {/* Event icon + name */}
-                <div className="flex items-center gap-2 flex-shrink-0 min-w-[160px]">
-                  {EVENT_ICONS[rule.event]}
-                  <span className="text-[12px] font-medium text-slate-200">{rule.name}</span>
-                </div>
-
-                {/* Event */}
-                <span className="text-[11px] text-slate-500 flex-1">{EVENT_LABELS[rule.event]}</span>
-
-                {/* Channel */}
-                <span className={`px-2 py-0.5 rounded border text-[11px] font-medium capitalize ${CHANNEL_COLORS[rule.channel]}`}>
-                  {rule.channel}
-                </span>
-
-                {/* Target */}
-                <span className="text-[11px] text-slate-400 font-mono truncate max-w-[200px]" title={rule.target}>
-                  {rule.target}
-                </span>
-
-                {/* Silence */}
-                {rule.silenceMinutes && (
-                  <span className="text-[10px] text-slate-600 whitespace-nowrap">Silence {rule.silenceMinutes}m</span>
-                )}
-
-                {/* Delete */}
-                <button onClick={() => deleteRule(rule.id)}
-                  className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded text-slate-600 hover:text-red-400 hover:bg-red-900/30 transition-colors">
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+          <div className="max-w-3xl">
+            <ZebraList>
+              {rules.map((rule, index) => (
+                <ZebraRow key={rule.id} index={index} className={`${!rule.enabled ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => toggleRule(rule.id)}
+                      className={`flex-shrink-0 transition-colors ${rule.enabled ? 'text-emerald-400' : 'text-slate-600'}`}
+                      title={rule.enabled ? 'Disable' : 'Enable'}>
+                      {rule.enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
+                    </button>
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      {EVENT_ICONS[rule.event]}
+                      <span className="truncate text-[10px] font-medium text-slate-200">{rule.name}</span>
+                    </div>
+                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium capitalize ${CHANNEL_COLORS[rule.channel]}`}>
+                      {rule.channel}
+                    </span>
+                    <span className="truncate max-w-[220px] text-[10px] text-slate-400 font-mono" title={rule.target}>
+                      {rule.target}
+                    </span>
+                    {rule.silenceMinutes && (
+                      <span className="text-[9px] text-slate-600 whitespace-nowrap">Silence {rule.silenceMinutes}m</span>
+                    )}
+                    <CompactIconButton title="Delete alert rule" tone="danger" onClick={() => deleteRule(rule.id)}>
+                      <Trash2 className="w-3 h-3" />
+                    </CompactIconButton>
+                  </div>
+                  <div className="mt-1 pl-5 text-[9px] uppercase tracking-[0.12em] text-slate-500">
+                    {EVENT_LABELS[rule.event]}
+                  </div>
+                </ZebraRow>
+              ))}
+            </ZebraList>
           </div>
         )}
       </div>

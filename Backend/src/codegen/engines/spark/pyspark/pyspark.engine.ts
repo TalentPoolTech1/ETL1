@@ -38,7 +38,8 @@ import {
 
 // Transformations - extra
 import {
-  PySparkSampleGenerator, PySparkLookupGenerator, PySparkCustomUdfGenerator
+  PySparkSampleGenerator, PySparkLookupGenerator, PySparkCustomUdfGenerator,
+  PySparkAddAuditColumnsGenerator, PySparkCaseWhenGenerator
 } from './transformations/extra.transformation.generators';
 
 // Sinks
@@ -111,6 +112,8 @@ export class PySparkEngine implements ICodeEngine {
       new PySparkSampleGenerator(),
       new PySparkLookupGenerator(),
       new PySparkCustomUdfGenerator(),
+      new PySparkAddAuditColumnsGenerator(),
+      new PySparkCaseWhenGenerator(),
 
       // Sinks
       new PySparkJdbcSinkGenerator(),
@@ -358,6 +361,7 @@ export class PySparkEngine implements ICodeEngine {
   private generateSubmitScript(pipeline: PipelineDefinition, opts: GenerationOptions): string {
     const sc = pipeline.sparkConfig;
     const scriptName = this.sanitizeFileName(pipeline.name);
+    const packages = this.collectSparkPackages(pipeline);
     const lines = [
       `#!/usr/bin/env bash`,
       `# Auto-generated spark-submit script for: ${pipeline.name}`,
@@ -375,18 +379,45 @@ export class PySparkEngine implements ICodeEngine {
     if (sc.executorMemory) lines.push(`  --executor-memory ${sc.executorMemory} \\`);
     if (sc.executorCores) lines.push(`  --executor-cores ${sc.executorCores} \\`);
     if (sc.numExecutors && !sc.dynamicAllocation) lines.push(`  --num-executors ${sc.numExecutors} \\`);
-    if (pipeline.environment.enableDeltaLake) {
-      lines.push(`  --packages io.delta:delta-core_2.12:2.4.0 \\`);
-    }
-    if (pipeline.environment.enableIceberg) {
-      lines.push(`  --packages org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.3.1 \\`);
-    }
+    if (packages.length) lines.push(`  --packages ${packages.join(',')} \\`);
 
     lines.push(`  "${`$PIPELINE_SCRIPT`}" \\`);
     lines.push(`  --env ${`${opts.targetPlatform ?? 'prod'}`} \\`);
     lines.push(`  "$@"`);
 
     return lines.join('\n');
+  }
+
+  private collectSparkPackages(pipeline: PipelineDefinition): string[] {
+    const packages = new Set<string>();
+
+    if (pipeline.environment.enableDeltaLake) {
+      packages.add('io.delta:delta-core_2.12:2.4.0');
+    }
+    if (pipeline.environment.enableIceberg) {
+      packages.add('org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.3.1');
+    }
+
+    pipeline.nodes.forEach(node => {
+      if (node.sourceType !== 'jdbc' && node.sinkType !== 'jdbc') return;
+      const cfg = node.config as { driver?: string; url?: string };
+      const jdbcPackage = this.inferJdbcPackage(cfg.driver, cfg.url);
+      if (jdbcPackage) packages.add(jdbcPackage);
+    });
+
+    return [...packages];
+  }
+
+  private inferJdbcPackage(driver?: string, url?: string): string | null {
+    const signature = `${driver ?? ''} ${url ?? ''}`.toLowerCase();
+    if (signature.includes('postgresql')) return 'org.postgresql:postgresql:42.7.2';
+    if (signature.includes('mysql')) return 'com.mysql:mysql-connector-j:8.3.0';
+    if (signature.includes('sqlserver') || signature.includes('mssql')) return 'com.microsoft.sqlserver:mssql-jdbc:12.6.1.jre11';
+    if (signature.includes('oracle')) return 'com.oracle.database.jdbc:ojdbc8:23.3.0.23.09';
+    if (signature.includes('redshift')) return 'com.amazon.redshift:redshift-jdbc42:2.1.0.29';
+    if (signature.includes('snowflake')) return 'net.snowflake:snowflake-jdbc:3.15.1';
+    if (signature.includes('db2')) return 'com.ibm.db2:jcc:11.5.9.0';
+    return null;
   }
 
   private generateSparkConfig(pipeline: PipelineDefinition): string {

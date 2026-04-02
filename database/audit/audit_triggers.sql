@@ -25,15 +25,29 @@ AS $$
 DECLARE
     v_action_by UUID := NULLIF(current_setting('app.user_id', TRUE), '')::UUID;
     v_action_cd CHAR(1);
+    v_base_columns TEXT;
+    v_base_values  TEXT;
 BEGIN
     -- Law 7: Capture old row image into the corresponding history table
     v_action_cd := LEFT(TG_OP, 1); -- 'I', 'U', or 'D'
 
+    SELECT
+        string_agg(format('%I', a.attname), ', ' ORDER BY a.attnum),
+        string_agg(format('($1).%I', a.attname), ', ' ORDER BY a.attnum)
+    INTO v_base_columns, v_base_values
+    FROM pg_attribute a
+    WHERE a.attrelid = TG_RELID
+      AND a.attnum > 0
+      AND NOT a.attisdropped;
+
     IF TG_OP = 'DELETE' THEN
         -- Before a physical delete, snapshot the row into the history table
         EXECUTE format(
-            'INSERT INTO history.%I SELECT $1.*, nextval(''history.%I_hist_id_seq''), $2, CURRENT_TIMESTAMP, $3',
+            'INSERT INTO history.%I (%s, hist_id, hist_action_cd, hist_action_dtm, hist_action_by)
+             VALUES (%s, nextval(''history.%I_hist_id_seq''), $2, CURRENT_TIMESTAMP, $3)',
             TG_TABLE_NAME || '_history',
+            v_base_columns,
+            v_base_values,
             TG_TABLE_NAME || '_history'
         ) USING OLD, v_action_cd, v_action_by;
 
@@ -42,8 +56,11 @@ BEGIN
     ELSIF TG_OP = 'UPDATE' THEN
         -- On update, snapshot the BEFORE image
         EXECUTE format(
-            'INSERT INTO history.%I SELECT $1.*, nextval(''history.%I_hist_id_seq''), $2, CURRENT_TIMESTAMP, $3',
+            'INSERT INTO history.%I (%s, hist_id, hist_action_cd, hist_action_dtm, hist_action_by)
+             VALUES (%s, nextval(''history.%I_hist_id_seq''), $2, CURRENT_TIMESTAMP, $3)',
             TG_TABLE_NAME || '_history',
+            v_base_columns,
+            v_base_values,
             TG_TABLE_NAME || '_history'
         ) USING OLD, v_action_cd, v_action_by;
 

@@ -101,50 +101,54 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
     : { sql: '', warnings: ['Unknown transform'], isValid: false };
 
   return (
-    <div className="p-4 border border-gray-300 rounded-lg bg-white">
-      {/* Header: Enable toggle + Transform selector */}
-      <div className="flex items-center gap-4 mb-4">
-        <label className="flex items-center gap-2">
+    <div className="rounded-xl border border-slate-700 bg-[#15182c] p-4 shadow-[0_8px_24px_rgba(2,6,23,0.24)]">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
           <input
             type="checkbox"
             checked={step.enabled}
             onChange={e => handleEnableChange(e.target.checked)}
             disabled={disabled}
-            className="w-4 h-4"
+            className="h-4 w-4 rounded border-slate-500 bg-[#0f1222] text-blue-500"
           />
-          <span className="text-sm font-medium text-gray-700">Step enabled</span>
+          <span>{step.enabled ? 'Enabled' : 'Disabled'}</span>
         </label>
-
-        <button
-          onClick={() => setShowCatalog(!showCatalog)}
-          disabled={disabled}
-          className="flex-1 px-4 py-2 text-left bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-300 rounded-md hover:border-blue-500 transition"
-        >
-          <div className="font-medium text-sm">{primitive?.label || 'Select a transformation'}</div>
-          {primitive && (
-            <div className="text-xs text-gray-600">{primitive.description}</div>
-          )}
-        </button>
-
         <button
           onClick={onRemove}
           disabled={disabled}
-          className="px-4 py-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 transition disabled:opacity-50"
+          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
         >
           Remove
         </button>
       </div>
 
+      {/* Header: Transform selector */}
+      <div className="mb-4">
+        <button
+          onClick={() => setShowCatalog(!showCatalog)}
+          disabled={disabled}
+          className="w-full rounded-lg border border-slate-600 bg-[#101426] px-4 py-3 text-left transition hover:border-blue-500 hover:bg-[#141934]"
+        >
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">
+            Transformation
+          </div>
+          <div className="font-semibold text-[13px] text-slate-100">{primitive?.label || 'Select a transformation'}</div>
+          {primitive && (
+            <div className="mt-1 text-[11px] text-slate-400">{primitive.description}</div>
+          )}
+        </button>
+      </div>
+
       {/* Catalog modal (if open) */}
       {showCatalog && (
-        <div className="mb-4 p-4 border border-gray-300 rounded-md bg-gray-50">
-          <div className="flex gap-2 mb-4">
+        <div className="mb-4 rounded-lg border border-slate-700 bg-[#101426] p-4">
+          <div className="mb-4 flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={`px-3 py-1 rounded text-sm transition ${
+              className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
                 selectedCategory === null
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'border border-slate-600 bg-[#171b31] text-slate-300 hover:border-slate-400 hover:text-white'
               }`}
             >
               All
@@ -153,10 +157,10 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1 rounded text-sm transition ${
+                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
                   selectedCategory === cat
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    : 'border border-slate-600 bg-[#171b31] text-slate-300 hover:border-slate-400 hover:text-white'
                 }`}
               >
                 {cat}
@@ -164,20 +168,20 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
             ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+          <div className="grid grid-cols-1 gap-3 max-h-96 overflow-y-auto">
             {Object.values(TRANSFORM_REGISTRY)
               .filter(t => selectedCategory === null || t.category === selectedCategory)
               .map(primitive => (
                 <button
                   key={primitive.id}
                   onClick={() => handleTransformChange(primitive.id)}
-                  className="text-left p-3 border border-gray-300 rounded-md hover:bg-blue-50 hover:border-blue-500 transition"
+                  className="rounded-lg border border-slate-700 bg-[#171b31] p-3 text-left transition hover:border-blue-500 hover:bg-[#1a2141]"
                 >
                   <div className="flex items-start gap-2">
                     <span className="text-lg">{primitive.icon}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-sm">{primitive.label}</div>
-                      <div className="text-xs text-gray-600 truncate">{primitive.description}</div>
+                      <div className="font-medium text-[12px] text-slate-100">{primitive.label}</div>
+                      <div className="text-[11px] text-slate-400">{primitive.description}</div>
                     </div>
                   </div>
                 </button>
@@ -191,7 +195,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
         <div className="space-y-6">
           {primitive.parameters.length > 0 && (
             <div>
-              <h4 className="font-semibold text-sm text-gray-700 mb-3">Configuration</h4>
+              <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Configuration</h4>
               <ParameterPanel
                 primitive={primitive}
                 values={step.params}
@@ -203,14 +207,14 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
           )}
 
           {/* Error handling */}
-          <div className="border-t pt-4">
-            <h4 className="font-semibold text-sm text-gray-700 mb-3">If this step fails</h4>
+          <div className="border-t border-slate-700 pt-4">
+            <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">If This Step Fails</h4>
             <div className="space-y-3">
               <select
                 value={step.onError}
                 onChange={e => handleErrorPolicyChange(e.target.value)}
                 disabled={!step.enabled || disabled}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                className="h-10 w-full rounded-md border border-slate-600 bg-[#1e2035] px-3 text-[12px] text-slate-100 focus:outline-none focus:border-blue-400"
               >
                 <option value="FAIL">Stop the entire pipeline</option>
                 <option value="RETURN_NULL">Skip to next step (use blank)</option>
@@ -224,24 +228,24 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
                   value={step.defaultValue || ''}
                   onChange={e => handleDefaultValueChange(e.target.value)}
                   disabled={!step.enabled || disabled}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="h-10 w-full rounded-md border border-slate-600 bg-[#1e2035] px-3 text-[12px] text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-400"
                 />
               )}
             </div>
           </div>
 
           {/* Code preview */}
-          <div className="border-t pt-4">
-            <h4 className="font-semibold text-sm text-gray-700 mb-2">Generated Code ({engine})</h4>
-            <div className="p-3 bg-gray-900 text-gray-100 rounded-md font-mono text-sm overflow-x-auto whitespace-nowrap">
+          <div className="border-t border-slate-700 pt-4">
+            <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Generated Code ({engine})</h4>
+            <div className="overflow-x-auto rounded-md border border-slate-800 bg-[#070910] p-3 font-mono text-[11px] text-slate-100 whitespace-nowrap">
               {codePreview.sql || 'Select parameters to generate code'}
             </div>
 
             {codePreview.warnings.length > 0 && (
-              <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+              <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
                 {codePreview.warnings.map((warn, i) => (
-                  <div key={i} className="text-sm text-yellow-800">
-                    ⚠️ {warn}
+                  <div key={i} className="text-[11px] text-amber-300">
+                    {warn}
                   </div>
                 ))}
               </div>
@@ -312,7 +316,9 @@ export const StepList: React.FC<StepListProps> = ({
   return (
     <div className="space-y-3">
       {steps.length === 0 && (
-        <p className="text-sm text-gray-500 text-center py-4">No transformation steps yet.</p>
+        <p className="rounded-lg border border-dashed border-slate-700 bg-[#111320] py-4 text-center text-[12px] text-slate-400">
+          No transformation steps yet.
+        </p>
       )}
 
       {steps.map((step, index) => (
@@ -325,7 +331,7 @@ export const StepList: React.FC<StepListProps> = ({
           className={`transition ${draggedIndex === index ? 'opacity-50' : ''}`}
         >
           <div className="flex gap-3">
-            <div className="flex items-center justify-center w-8 h-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-700 flex-shrink-0">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border border-slate-600 bg-[#101426] text-[12px] font-semibold text-slate-200">
               {index + 1}
             </div>
             <div className="flex-1 min-w-0">

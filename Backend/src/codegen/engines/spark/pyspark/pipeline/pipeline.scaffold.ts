@@ -89,6 +89,8 @@ export class PySparkPipelineScaffold {
       // Standard args
       b2.line(`parser.add_argument("--env", default="prod", help="Execution environment")`);
       b2.line(`parser.add_argument("--log-level", default="INFO", help="Logging level")`);
+      b2.line(`parser.add_argument("--run-id", default="", help="Pipeline run UUID from the orchestrator")`);
+      b2.line(`parser.add_argument("--run-user", default="system", help="User or service account that triggered this run")`);
 
       // Pipeline variables as args
       if (pipeline.variables) {
@@ -278,7 +280,7 @@ export class PySparkPipelineScaffold {
       b2.line(`logging.getLogger().setLevel(getattr(logging, args.log_level.upper(), logging.INFO))`);
       b2.blank();
       b2.line(`logger.info(f"Starting pipeline: ${pipeline.name} v${pipeline.version}")`);
-      b2.line(`logger.info(f"Environment: {args.env}")`);
+      b2.line(`logger.info(f"Environment: {args.env} | run_id: {args.run_id} | run_user: {args.run_user}")`);
       b2.blank();
       b2.line(`spark = _create_spark_session(args)`);
       b2.line(`start_time = datetime.now()`);

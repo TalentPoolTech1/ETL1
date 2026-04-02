@@ -436,14 +436,13 @@ router.get('/:id/permissions', requirePermission('PIPELINE_VIEW'), async (req: R
     const result = await db.transaction(async client => {
       await setSession(client, userId);
       const contextResult = await client.query(
-        `SELECT orch_id, project_id
-         FROM catalog.fn_get_orchestrator_by_id($1::uuid)`,
+        `SELECT orch_id, project_id, inherit_project_permissions FROM catalog.fn_get_orchestrator_permission_context($1::uuid)`,
         [req.params.id],
       );
       const context = contextResult.rows[0] ?? null;
       if (!context) throw Object.assign(new Error('Orchestrator not found'), { status: 404 });
       if (!context.project_id) {
-        return { projectScoped: false, grants: [] as PermissionGrantPayload[] };
+        return { projectScoped: false, inheritFromProject: false, grants: [] as PermissionGrantPayload[] };
       }
 
       const grantsResult = await client.query(
@@ -451,14 +450,14 @@ router.get('/:id/permissions', requirePermission('PIPELINE_VIEW'), async (req: R
          FROM catalog.fn_get_orchestrator_permission_grants($1::uuid)`,
         [req.params.id],
       );
-      return { projectScoped: true, grants: mapPermissionGrantRows(grantsResult.rows) };
+      return { projectScoped: true, inheritFromProject: context.inherit_project_permissions as boolean, grants: mapPermissionGrantRows(grantsResult.rows) };
     });
 
     return res.json({
       success: true,
       data: {
         grants: result.grants,
-        inheritFromProject: result.projectScoped,
+        inheritFromProject: result.inheritFromProject,
         projectScoped: result.projectScoped,
       },
     });
@@ -471,13 +470,14 @@ router.get('/:id/permissions', requirePermission('PIPELINE_VIEW'), async (req: R
 router.put('/:id/permissions', requirePermission('PIPELINE_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = getUserId(res);
-    const desiredGrants = normalizePermissionGrants((req.body ?? {}).grants);
-    const desiredMap = new Map(desiredGrants.map(g => [`${g.userId}:${g.roleId}`, g]));
+    const body = req.body ?? {};
+    const desiredGrants = normalizePermissionGrants(body.grants);
+    const inheritFromProject: boolean | undefined = typeof body.inheritFromProject === 'boolean' ? body.inheritFromProject : undefined;
+    const desiredMap = new Map(desiredGrants.map((g: { userId: string; roleId: string }) => [`${g.userId}:${g.roleId}`, g]));
     const result = await db.transaction(async client => {
       await setSession(client, userId);
       const contextResult = await client.query(
-        `SELECT orch_id, project_id
-         FROM catalog.fn_get_orchestrator_by_id($1::uuid)`,
+        `SELECT orch_id, project_id, inherit_project_permissions FROM catalog.fn_get_orchestrator_permission_context($1::uuid)`,
         [req.params.id],
       );
       const context = contextResult.rows[0] ?? null;
@@ -486,33 +486,43 @@ router.put('/:id/permissions', requirePermission('PIPELINE_EDIT'), async (req: R
         if (desiredGrants.length > 0) {
           throw Object.assign(new Error('Global orchestrators do not support project-member permission changes'), { status: 409 });
         }
-        return { projectScoped: false, grants: [] as PermissionGrantPayload[] };
+        return { projectScoped: false, inheritFromProject: false, grants: [] as PermissionGrantPayload[] };
       }
 
-      const currentResult = await client.query(
-        `SELECT project_id, user_id, role_id, user_full_name, email_address, role_display_name, granted_dtm
-         FROM catalog.fn_get_orchestrator_permission_grants($1::uuid)`,
-        [req.params.id],
-      );
-      const currentRows = currentResult.rows;
-      const currentMap = new Map(currentRows.map((row: any) => [`${row.user_id}:${row.role_id}`, row]));
+      // Persist inheritance flag change if explicitly supplied
+      if (inheritFromProject !== undefined && inheritFromProject !== context.inherit_project_permissions) {
+        await client.query(
+          `CALL catalog.pr_set_orchestrator_inherit_permissions($1::uuid, $2::boolean, $3::uuid)`,
+          [req.params.id, inheritFromProject, userId],
+        );
+      }
+      const effectiveInherit = inheritFromProject ?? (context.inherit_project_permissions as boolean);
 
-      for (const desired of desiredGrants) {
-        if (!currentMap.has(`${desired.userId}:${desired.roleId}`)) {
-          await client.query(
-            `CALL catalog.pr_grant_orchestrator_permission($1::uuid, $2::uuid, $3::uuid, $4::uuid)`,
-            [req.params.id, desired.userId, desired.roleId, userId],
-          );
+      if (effectiveInherit) {
+        const currentResult = await client.query(
+          `SELECT project_id, user_id, role_id, user_full_name, email_address, role_display_name, granted_dtm
+           FROM catalog.fn_get_orchestrator_permission_grants($1::uuid)`,
+          [req.params.id],
+        );
+        const currentRows = currentResult.rows;
+        const currentMap = new Map(currentRows.map((row: any) => [`${row.user_id}:${row.role_id}`, row]));
+
+        for (const desired of desiredGrants) {
+          if (!currentMap.has(`${desired.userId}:${desired.roleId}`)) {
+            await client.query(
+              `CALL catalog.pr_grant_orchestrator_permission($1::uuid, $2::uuid, $3::uuid, $4::uuid)`,
+              [req.params.id, desired.userId, desired.roleId, userId],
+            );
+          }
         }
-      }
 
-      for (const row of currentRows) {
-        const key = `${row.user_id}:${row.role_id}`;
-        if (!desiredMap.has(key)) {
-          await client.query(
-            `CALL catalog.pr_revoke_orchestrator_permission($1::uuid, $2::uuid, $3::uuid)`,
-            [req.params.id, row.user_id, row.role_id],
-          );
+        for (const row of currentRows) {
+          if (!desiredMap.has(`${row.user_id}:${row.role_id}`)) {
+            await client.query(
+              `CALL catalog.pr_revoke_orchestrator_permission($1::uuid, $2::uuid, $3::uuid)`,
+              [req.params.id, row.user_id, row.role_id],
+            );
+          }
         }
       }
 
@@ -521,14 +531,14 @@ router.put('/:id/permissions', requirePermission('PIPELINE_EDIT'), async (req: R
          FROM catalog.fn_get_orchestrator_permission_grants($1::uuid)`,
         [req.params.id],
       );
-      return { projectScoped: true, grants: mapPermissionGrantRows(finalResult.rows) };
+      return { projectScoped: true, inheritFromProject: effectiveInherit, grants: mapPermissionGrantRows(finalResult.rows) };
     });
 
     return res.json({
       success: true,
       data: {
         grants: result.grants,
-        inheritFromProject: result.projectScoped,
+        inheritFromProject: result.inheritFromProject,
         projectScoped: result.projectScoped,
       },
     });

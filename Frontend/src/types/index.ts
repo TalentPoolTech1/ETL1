@@ -33,7 +33,28 @@ export interface Node {
     | 'filter'
     | 'custom'
     | 'custom_sql'
-    | 'union';
+    | 'union'
+    | 'add_audit_columns'
+    | 'scd1'
+    | 'scd2'
+    | 'window'
+    | 'select'
+    | 'cast_rename_drop'
+    | 'derive'
+    | 'pivot'
+    | 'data_quality'
+    | 'mask'
+    | 'lookup'
+    | 'surrogate_key'
+    | 'case_when'
+    | 'dedup'
+    | 'sort'
+    | 'limit'
+    | 'sample'
+    | 'cache'
+    | 'repartition'
+    | 'fillna'
+    | 'dropna';
   name: string;
   x: number;
   y: number;
@@ -102,6 +123,8 @@ export interface Tab {
 
 export type PipelineSubTab =
   | 'editor'
+  | 'overview'
+  | 'optimize'
   | 'properties'
   | 'parameters'
   | 'validation'
@@ -113,10 +136,11 @@ export type PipelineSubTab =
   | 'logs'
   | 'dependencies'
   | 'permissions'
-  | 'activity';
+  | 'activity'
+  | 'lineage';
 
-// PipelineSubTab covers all ids used across old + new sub-tabs
-export type PipelineSubTabLegacy = PipelineSubTab | 'overview' | 'execution-history' | 'lineage' | 'audit-logs' | 'execution';
+// Legacy alias — keep for any old references
+export type PipelineSubTabLegacy = PipelineSubTab | 'overview' | 'execution-history' | 'audit-logs' | 'execution';
 
 export type OrchestratorSubTab =
   | 'editor'

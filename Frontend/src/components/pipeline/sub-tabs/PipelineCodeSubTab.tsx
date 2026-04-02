@@ -2,7 +2,7 @@
  * Pipeline > Code sub-tab — Generated SQL / PySpark code viewer
  */
 import React, { useState, useCallback } from 'react';
-import { Copy, Download, RefreshCw, CheckCircle2, Code2, ChevronDown } from 'lucide-react';
+import { Copy, Download, RefreshCw, CheckCircle2, Code2, Share2 } from 'lucide-react';
 import api from '@/services/api';
 
 type CodeLang = 'pyspark' | 'scala' | 'sql';
@@ -68,7 +68,23 @@ export function PipelineCodeSubTab({ pipelineId }: { pipelineId: string }) {
   const [target, setTarget]         = useState<CodeLang>('pyspark');
   const [generated, setGenerated]   = useState<GeneratedCode | null>(null);
   const [isGenerating, setGenerating] = useState(false);
+  const [isExporting, setExporting]   = useState(false);
   const [error, setError]           = useState<string | null>(null);
+
+  // F-17: Export pipeline IR as JSON download
+  const handleExport = useCallback(async (fmt: 'json' | 'yaml') => {
+    if (!pipelineId || isExporting) return;
+    setExporting(true);
+    try {
+      const res = await api.exportPipeline(pipelineId, fmt);
+      const blob = res.data instanceof Blob ? res.data : new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = Object.assign(document.createElement('a'), { href: url, download: `pipeline.${fmt}` });
+      a.click(); URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError((e as any)?.response?.data?.userMessage ?? `Export failed`);
+    } finally { setExporting(false); }
+  }, [pipelineId, isExporting]);
 
   const generate = useCallback(async () => {
     setGenerating(true);
@@ -108,6 +124,18 @@ export function PipelineCodeSubTab({ pipelineId }: { pipelineId: string }) {
         {generated && (
           <span className="text-[11px] text-slate-600">Generated {generated.generatedAt} · v{generated.version}</span>
         )}
+        <div className="flex-1" />
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-slate-600">Export IR:</span>
+          <button onClick={() => handleExport('json')} disabled={isExporting}
+            className="flex items-center gap-1 h-7 px-2.5 bg-[#1e2035] border border-slate-700 hover:border-slate-500 text-slate-300 rounded text-[11px] transition-colors disabled:opacity-50">
+            <Share2 className="w-3 h-3" /> JSON
+          </button>
+          <button onClick={() => handleExport('yaml')} disabled={isExporting}
+            className="flex items-center gap-1 h-7 px-2.5 bg-[#1e2035] border border-slate-700 hover:border-slate-500 text-slate-300 rounded text-[11px] transition-colors disabled:opacity-50">
+            <Share2 className="w-3 h-3" /> YAML
+          </button>
+        </div>
       </div>
 
       {/* Code output */}

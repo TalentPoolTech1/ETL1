@@ -74,7 +74,7 @@ export function OrchestratorAuditLogsSubTab({ orchId }: { orchId: string }) {
       e.timestamp,
       e.user,
       e.action,
-      (e.summary ?? '').replaceAll('"', '""'),
+      (e.summary ?? '').replace(/"/g, '""'),
     ].map(v => `"${String(v ?? '')}"`).join(','))].join('\n');
     downloadText(`orchestrator-audit-${orchId}.csv`, csv, 'text/csv');
   };

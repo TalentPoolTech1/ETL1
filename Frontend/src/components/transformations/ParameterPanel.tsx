@@ -48,15 +48,16 @@ function ParameterInput({
     case 'text':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">{def.label}</label>
-          {def.description && <p className="text-xs text-gray-500">{def.description}</p>}
+          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
           <input
             type="text"
             placeholder={def.placeholder}
             value={value || ''}
             onChange={e => handleChange(e.target.value)}
             disabled={disabled}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-10 px-3 rounded-md bg-[#1e2035] border border-slate-600 text-slate-100 text-[12px]
+                       placeholder-slate-500 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30"
           />
         </div>
       );
@@ -64,15 +65,16 @@ function ParameterInput({
     case 'number':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">{def.label}</label>
-          {def.description && <p className="text-xs text-gray-500">{def.description}</p>}
+          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
           <input
             type="number"
             placeholder={def.placeholder}
             value={value ?? ''}
             onChange={e => handleChange(e.target.value ? Number(e.target.value) : null)}
             disabled={disabled}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-10 px-3 rounded-md bg-[#1e2035] border border-slate-600 text-slate-100 text-[12px]
+                       placeholder-slate-500 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30"
           />
         </div>
       );
@@ -80,13 +82,14 @@ function ParameterInput({
     case 'select':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">{def.label}</label>
-          {def.description && <p className="text-xs text-gray-500">{def.description}</p>}
+          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
           <select
             value={value ?? ''}
             onChange={e => handleChange(e.target.value)}
             disabled={disabled}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-10 px-3 rounded-md bg-[#1e2035] border border-slate-600 text-slate-100 text-[12px]
+                       focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30"
           >
             <option value="">-- Select --</option>
             {def.options?.map(opt => (
@@ -100,7 +103,7 @@ function ParameterInput({
 
     case 'toggle':
       return (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 rounded-md border border-slate-700 bg-[#111320] px-3 py-2">
           <input
             type="checkbox"
             checked={Boolean(value)}
@@ -108,21 +111,22 @@ function ParameterInput({
             disabled={disabled}
             className="w-4 h-4 rounded"
           />
-          <label className="text-sm font-medium text-gray-700">{def.label}</label>
+          <label className="text-[12px] font-medium text-slate-200">{def.label}</label>
         </div>
       );
 
     case 'date':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">{def.label}</label>
-          {def.description && <p className="text-xs text-gray-500">{def.description}</p>}
+          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
           <input
             type="date"
             value={value || ''}
             onChange={e => handleChange(e.target.value)}
             disabled={disabled}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-10 px-3 rounded-md bg-[#1e2035] border border-slate-600 text-slate-100 text-[12px]
+                       focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30"
           />
         </div>
       );
@@ -130,15 +134,16 @@ function ParameterInput({
     case 'expression':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">{def.label}</label>
-          {def.description && <p className="text-xs text-gray-500">{def.description}</p>}
+          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
           <textarea
             placeholder={def.placeholder}
             value={value || ''}
             onChange={e => handleChange(e.target.value)}
             disabled={disabled}
             rows={3}
-            className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+            className="px-3 py-2 rounded-md bg-[#1e2035] border border-slate-600 text-slate-100 text-[12px]
+                       font-mono placeholder-slate-500 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30"
           />
         </div>
       );
@@ -146,8 +151,8 @@ function ParameterInput({
     case 'list':
       return (
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-700">{def.label}</label>
-          {def.description && <p className="text-xs text-gray-500">{def.description}</p>}
+          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
           <div className="space-y-2">
             {(value || []).map((item: any, idx: number) => (
               <div key={idx} className="flex gap-2">
@@ -160,7 +165,8 @@ function ParameterInput({
                     handleChange(newList);
                   }}
                   disabled={disabled}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                  className="flex-1 h-10 px-3 rounded-md bg-[#1e2035] border border-slate-600 text-slate-100 text-[12px]
+                             placeholder-slate-500 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30"
                 />
                 <button
                   onClick={() => {
@@ -168,7 +174,7 @@ function ParameterInput({
                     handleChange(newList);
                   }}
                   disabled={disabled}
-                  className="px-3 py-2 bg-red-100 text-red-600 rounded-md hover:bg-red-200 disabled:opacity-50"
+                  className="px-3 py-2 rounded-md border border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-50"
                 >
                   Remove
                 </button>
@@ -179,7 +185,7 @@ function ParameterInput({
                 handleChange([...(value || []), '']);
               }}
               disabled={disabled}
-              className="px-3 py-2 bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 disabled:opacity-50"
+              className="px-3 py-2 rounded-md border border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 disabled:opacity-50"
             >
               + Add Item
             </button>
@@ -227,11 +233,11 @@ export const ParameterPanel: React.FC<ParameterPanelProps> = ({
   );
 
   if (primitive.parameters.length === 0) {
-    return <p className="text-sm text-gray-500">No configuration needed for this transformation.</p>;
+    return <p className="text-[12px] text-slate-400">No extra configuration is needed for this transformation.</p>;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {primitive.parameters.map(param => (
         <div key={param.id}>
           <ParameterInput
@@ -242,7 +248,7 @@ export const ParameterPanel: React.FC<ParameterPanelProps> = ({
             disabled={disabled}
           />
           {errors[param.id] && (
-            <p className="mt-1 text-sm text-red-600">{errors[param.id]}</p>
+            <p className="mt-1 text-[11px] text-red-300">{errors[param.id]}</p>
           )}
         </div>
       ))}

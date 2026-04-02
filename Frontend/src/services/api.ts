@@ -71,12 +71,10 @@ class APIClient {
 
   // ─── Pipelines ─────────────────────────────────────────────────────────────
 
-  /** Project root-level pipelines (folder_id IS NULL) */
   getPipelinesForProject(projectId: string) {
     return this.client.get(`/projects/${projectId}/pipelines`);
   }
 
-  /** Global pipelines (project_id IS NULL) */
   getGlobalPipelines(params?: { after?: string; limit?: number }) {
     return this.client.get('/pipelines/global', { params });
   }
@@ -85,17 +83,16 @@ class APIClient {
     return this.client.get(`/pipelines/${id}`);
   }
 
-  createPipeline(data: {
-    projectId?: string | null;
-    pipelineDisplayName: string;
-    pipelineDescText?: string;
-    folderId?: string | null;
-  }) {
+  createPipeline(data: { projectId?: string | null; pipelineDisplayName: string; pipelineDescText?: string; folderId?: string | null; }) {
     return this.client.post('/pipelines', data);
   }
 
   savePipeline(id: string, data: unknown) {
     return this.client.put(`/pipelines/${id}`, data);
+  }
+
+  deletePipeline(id: string) {
+    return this.client.delete(`/pipelines/${id}`);
   }
 
   getPipelineParameters(id: string) {
@@ -118,10 +115,6 @@ class APIClient {
     return this.client.post(`/pipelines/${id}/generate`, { options: options ?? {} });
   }
 
-  deletePipeline(id: string) {
-    return this.client.delete(`/pipelines/${id}`);
-  }
-
   getPipelineAuditLogs(id: string, params?: { limit?: number; offset?: number }) {
     return this.client.get(`/pipelines/${id}/audit-logs`, { params });
   }
@@ -142,22 +135,30 @@ class APIClient {
     return this.client.put(`/pipelines/${id}/alerts`, { rules });
   }
 
-  getPreview(nodeId: string, options: Record<string, unknown> = {}) {
-    return this.client.get(`/nodes/${nodeId}/preview`, { params: options });
-  }
-
   getLineage(pipelineId: string) {
     return this.client.get(`/pipelines/${pipelineId}/lineage`);
   }
 
+  // F-17: Export pipeline IR as JSON or YAML download
+  exportPipeline(id: string, format: 'json' | 'yaml' = 'json') {
+    return this.client.get(`/pipelines/${id}/export`, { params: { format }, responseType: 'blob' });
+  }
+
+  // F-18: Import pipeline from exported JSON/YAML payload
+  importPipeline(data: { payload: unknown; projectId?: string | null; overrideName?: string }) {
+    return this.client.post('/pipelines/import', data);
+  }
+
+  getPreview(nodeId: string, options: Record<string, unknown> = {}) {
+    return this.client.get(`/nodes/${nodeId}/preview`, { params: options });
+  }
+
   // ─── Orchestrators ─────────────────────────────────────────────────────────
 
-  /** Project root-level orchestrators (folder_id IS NULL) */
   getOrchestratorsForProject(projectId: string) {
     return this.client.get(`/projects/${projectId}/orchestrators`);
   }
 
-  /** Global orchestrators (project_id IS NULL) */
   getGlobalOrchestrators(params?: { after?: string; limit?: number }) {
     return this.client.get('/orchestrators/global', { params });
   }
@@ -182,12 +183,7 @@ class APIClient {
     return this.client.delete(`/orchestrators/${id}/schedule`);
   }
 
-  createOrchestrator(data: {
-    projectId?: string | null;
-    orchDisplayName: string;
-    orchDescText?: string;
-    folderId?: string | null;
-  }) {
+  createOrchestrator(data: { projectId?: string | null; orchDisplayName: string; orchDescText?: string; folderId?: string | null; }) {
     return this.client.post('/orchestrators', data);
   }
 
@@ -237,12 +233,7 @@ class APIClient {
     return this.client.get(`/folders/${folderId}/orchestrators`);
   }
 
-  createFolder(data: {
-    projectId: string;
-    parentFolderId?: string | null;
-    folderDisplayName: string;
-    folderTypeCode?: string;
-  }) {
+  createFolder(data: { projectId: string; parentFolderId?: string | null; folderDisplayName: string; folderTypeCode?: string; }) {
     return this.client.post('/folders', data);
   }
 
@@ -328,6 +319,11 @@ class APIClient {
 
   introspectTables(connectorId: string, schema: string) {
     return this.client.get(`/connections/${connectorId}/introspect/tables`, { params: { schema } });
+  }
+
+  // F-03/F-04: Column list for a specific table (catalog-first, live fallback)
+  introspectColumns(connectorId: string, schema: string, table: string) {
+    return this.client.get(`/connections/${connectorId}/introspect/columns`, { params: { schema, table } });
   }
 
   importMetadata(connectorId: string, selections: Array<{ db?: string; schema?: string; table: string }>) {
@@ -424,7 +420,7 @@ class APIClient {
     return this.client.post(`/executions/orchestrator-runs/${runId}/cancel`);
   }
 
-  // ─── Governance ─────────────────────────────────────────────────────────
+  // ─── Governance ────────────────────────────────────────────────────────────
 
   getUsers() {
     return this.client.get('/governance/users');

@@ -219,7 +219,11 @@ export class ScalaMultiTransformGenerator implements INodeGenerator {
     b.line(`val ${varName} = ${inputVar}`);
     b.indent(b2 => {
       (cfg.transformSequences || []).forEach(seq => {
-        let colExpr = `col(${scalaString(seq.columnName)})`;
+        if (seq.enabled === false) return;
+        const sourceColumn = typeof seq.sourceColumn === 'string' && seq.sourceColumn.trim().length > 0
+          ? seq.sourceColumn.trim()
+          : seq.columnName;
+        let colExpr = `col(${scalaString(sourceColumn)})`;
         seq.steps.filter((s: any) => s.enabled).forEach((step: any) => {
           colExpr = this.compileStep(step, colExpr);
         });
@@ -236,6 +240,16 @@ export class ScalaMultiTransformGenerator implements INodeGenerator {
       case 'to_number': return `col(${colExpr}).cast(${p.targetType === 'decimal' ? `DecimalType(${p.precision || 10}, ${p.scale || 2})` : scalaString(p.targetType || 'double')})`;
       case 'to_date': return `to_date(${colExpr}, ${scalaString(p.format || 'yyyy-MM-dd')})`;
       case 'trim_timestamp': return `date_trunc(${scalaString(p.granularity || 'day')}, ${colExpr})`; // FIX FROM AUDIT
+      case 'extract_date_part': {
+        const part = String(p.part || 'MONTH').toUpperCase();
+        if (part === 'YEAR') return `year(${colExpr})`;
+        if (part === 'MONTH') return `month(${colExpr})`;
+        if (part === 'DAY') return `dayofmonth(${colExpr})`;
+        if (part === 'HOUR') return `hour(${colExpr})`;
+        if (part === 'MINUTE') return `minute(${colExpr})`;
+        if (part === 'SECOND') return `second(${colExpr})`;
+        return `month(${colExpr})`;
+      }
       case 'substring': return `substring(${colExpr}, ${p.start || 1}, ${p.length || 10})`;
       case 'upper': return `upper(${colExpr})`;
       case 'lower': return `lower(${colExpr})`;

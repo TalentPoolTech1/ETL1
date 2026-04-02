@@ -59,7 +59,7 @@ export class PySparkKafkaSourceGenerator implements INodeGenerator {
 
     if (context.options.includeLogging && !cfg.streaming) {
       b.blank();
-      b.line(`logger.info(f"Loaded Kafka source '${node.name}': {${varName}.count()} records")`);
+      b.line(`logger.info(${pyStringLiteral(`Configured Kafka source '${node.name}' from topic ${cfg.topic}`)})`);
     }
 
     return { varName, code: b.build(), imports, warnings };

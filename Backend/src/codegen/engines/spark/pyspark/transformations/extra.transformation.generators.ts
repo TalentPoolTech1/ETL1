@@ -188,3 +188,114 @@ export class PySparkCustomUdfGenerator implements INodeGenerator {
     return { varName, code: b.build(), imports, warnings };
   }
 }
+
+// ─── Add Audit Columns ────────────────────────────────────────────────────────
+//
+// Injects standard pipeline run audit columns into a DataFrame:
+//   _load_ts    — current UTC timestamp (F.current_timestamp())
+//   _run_id     — passed as --run-id scaffold arg (or literal if no args context)
+//   _run_user   — passed as --run-user scaffold arg
+//
+// Config: { loadTsColumn?, runIdColumn?, runUserColumn?, useScaffoldArgs? }
+// Default column names: _load_ts, _run_id, _run_user
+
+export class PySparkAddAuditColumnsGenerator implements INodeGenerator {
+  readonly nodeType = 'transformation' as const;
+  readonly subType = 'add_audit_columns';
+
+  canHandle(node: PipelineNode): boolean {
+    return node.type === 'transformation' && node.transformationType === 'add_audit_columns';
+  }
+
+  async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
+    const cfg = node.config as {
+      loadTsColumn?: string;
+      runIdColumn?: string;
+      runUserColumn?: string;
+      useScaffoldArgs?: boolean;
+    };
+    const inputVar = getInputVar(node, context);
+    const varName = toVarName(node.name);
+    const b = new CodeBuilder();
+
+    const loadTsCol  = pyStringLiteral(cfg.loadTsColumn  ?? '_load_ts');
+    const runIdCol   = pyStringLiteral(cfg.runIdColumn   ?? '_run_id');
+    const runUserCol = pyStringLiteral(cfg.runUserColumn ?? '_run_user');
+    // When useScaffoldArgs=true (default), read from args injected by _parse_args()
+    const useArgs = cfg.useScaffoldArgs !== false;
+
+    if (context.options.includeComments) {
+      b.line(`# Add audit columns: ${cfg.loadTsColumn ?? '_load_ts'}, ${cfg.runIdColumn ?? '_run_id'}, ${cfg.runUserColumn ?? '_run_user'}`);
+    }
+
+    if (useArgs) {
+      b.line(`${varName} = (`);
+      b.indent(b2 => {
+        b2.line(`${inputVar}`);
+        b2.indent(b3 => {
+          b3.line(`.withColumn(${loadTsCol}, F.current_timestamp())`);
+          b3.line(`.withColumn(${runIdCol}, F.lit(args.run_id))`);
+          b3.line(`.withColumn(${runUserCol}, F.lit(args.run_user))`);
+        });
+      });
+      b.line(')');
+    } else {
+      b.line(`${varName} = (`);
+      b.indent(b2 => {
+        b2.line(`${inputVar}`);
+        b2.indent(b3 => {
+          b3.line(`.withColumn(${loadTsCol}, F.current_timestamp())`);
+          b3.line(`.withColumn(${runIdCol}, F.lit(""))`);
+          b3.line(`.withColumn(${runUserCol}, F.lit("system"))`);
+        });
+      });
+      b.line(')');
+    }
+
+    return { varName, code: b.build(), imports: [PYSPARK_IMPORTS.FUNCTIONS], warnings: [] };
+  }
+}
+
+// ─── CASE WHEN (conditional column) ──────────────────────────────────────────
+// Config shape: { outputColumn: string; cases: Array<{when: string; then: string}>; otherwise: string }
+
+export class PySparkCaseWhenGenerator implements INodeGenerator {
+  readonly nodeType = 'transformation' as const;
+  readonly subType = 'case_when';
+
+  canHandle(node: PipelineNode): boolean {
+    return node.type === 'transformation' && node.transformationType === 'case_when';
+  }
+
+  async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
+    const cfg = node.config as { outputColumn?: string; cases?: Array<{when: string; then: string}>; otherwise?: string };
+    const varName  = toVarName(node.name);
+    const inputVar = getInputVar(node, context);
+    const b        = new CodeBuilder();
+    const outCol   = pyStringLiteral(cfg.outputColumn ?? 'result');
+    const cases    = Array.isArray(cfg.cases) ? cfg.cases : [];
+    const otherwise = cfg.otherwise ?? 'None';
+
+    if (context.options.includeComments) b.line(`# Transform: ${node.name} (CASE WHEN)`);
+
+    if (cases.length === 0) {
+      b.line(`${varName} = ${inputVar}.withColumn(${outCol}, F.lit(None))`);
+      return { varName, code: b.build(), imports: [PYSPARK_IMPORTS.FUNCTIONS], warnings: [] };
+    }
+
+    b.line(`${varName} = ${inputVar}.withColumn(${outCol}, (`);
+    b.indent(b2 => {
+      cases.forEach((c, i) => {
+        if (i === 0) {
+          b2.line(`F.when(${c.when}, ${c.then})`);
+        } else {
+          b2.line(`.when(${c.when}, ${c.then})`);
+        }
+      });
+      b2.line(`.otherwise(${otherwise})`);
+    });
+    b.line('))');
+
+    return { varName, code: b.build(), imports: [PYSPARK_IMPORTS.FUNCTIONS], warnings: [] };
+  }
+}

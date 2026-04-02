@@ -332,8 +332,8 @@ export function ExecutionHistorySubTab({ pipelineId }: Props) {
                   <span className="text-[11px] text-slate-500 capitalize">{row.triggerType.toLowerCase()}</span>
                 </td>
                 <td className="px-3 py-1.5 text-right text-slate-300 font-mono">{fmtNum(row.rowsProcessed)}</td>
-                <td className="px-3 py-1.5 text-right text-emerald-400 font-mono">{fmtNum(null)}</td>
-                <td className="px-3 py-1.5 text-right text-red-400 font-mono">{fmtNum(null)}</td>
+                <td className="px-3 py-1.5 text-right text-emerald-400 font-mono">{row.runStatus === 'SUCCESS' ? fmtNum(row.rowsProcessed) : '—'}</td>
+                <td className="px-3 py-1.5 text-right text-red-400 font-mono">{row.runStatus === 'FAILED' && row.rowsProcessed ? fmtNum(row.rowsProcessed) : '—'}</td>
                 <td className="px-3 py-1.5 text-right text-slate-400 font-mono">{fmtBytes(row.bytesRead)}</td>
                 <td className="px-3 py-1.5 text-slate-500 text-[11px]">—</td>
                 <td className="px-3 py-1.5 text-slate-500 text-[11px] font-mono">{row.versionLabel}</td>

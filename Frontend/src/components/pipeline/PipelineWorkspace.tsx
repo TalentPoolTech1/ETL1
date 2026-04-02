@@ -1,7 +1,12 @@
 /**
  * PipelineWorkspace
  * Active sub-tabs: Designer | Properties | Parameters | Validation |
- *                  Executions | Metrics | Permissions | Code
+ *                  Executions | Metrics | Permissions | Code | Alerts |
+ *                  Audit Logs | Dependencies | Activity | Lineage
+ *
+ * Executions slot contains two inner views:
+ *   "Run"     — live trigger panel (ExecutionSubTab)
+ *   "History" — historical run list (ExecutionHistorySubTab)
  */
 import React, { useEffect, useCallback, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -11,6 +16,7 @@ import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
 import { PipelineCanvas }             from '@/components/canvas/PipelineCanvas';
 import { NodeConfigPanel }           from '@/components/canvas/NodeConfigPanel';
+import { DataPreviewPanel }          from '@/components/preview/DataPreviewPanel';
 import { PipelinePropertiesSubTab }   from './sub-tabs/PipelinePropertiesSubTab';
 import { PipelineParametersSubTab }   from './sub-tabs/PipelineParametersSubTab';
 import { PipelineValidationSubTab }   from './sub-tabs/PipelineValidationSubTab';
@@ -18,11 +24,21 @@ import { PipelineCodeSubTab }         from './sub-tabs/PipelineCodeSubTab';
 import { PipelineMetricsSubTab }      from './sub-tabs/PipelineMetricsSubTab';
 import { PermissionsSubTab }          from './sub-tabs/PermissionsSubTab';
 import { ExecutionHistorySubTab }     from './sub-tabs/ExecutionHistorySubTab';
+import { ExecutionSubTab }            from './sub-tabs/ExecutionSubTab';
+import { PipelineAlertsSubTab }       from './sub-tabs/PipelineAlertsSubTab';
+import { AuditLogsSubTab }            from './sub-tabs/AuditLogsSubTab';
+import { PipelineActivitySubTab }     from './sub-tabs/PipelineActivitySubTab';
+import { PipelineDependenciesSubTab } from './sub-tabs/PipelineDependenciesSubTab';
+import { LineageSubTab }              from './sub-tabs/LineageSubTab';
+import { OverviewSubTab }             from './sub-tabs/OverviewSubTab';
+import { OptimizeSubTab }             from './sub-tabs/OptimizeSubTab';
 import type { PipelineSubTab } from '@/types';
 import api from '@/services/api';
 
 const PIPELINE_SUB_TABS = [
+  { id: 'overview',     label: 'Overview',     shortcut: '' },
   { id: 'editor',       label: 'Designer',     shortcut: '1' },
+  { id: 'optimize',     label: 'Optimize',     shortcut: '' },
   { id: 'properties',   label: 'Properties',   shortcut: '2' },
   { id: 'parameters',   label: 'Parameters',   shortcut: '3' },
   { id: 'validation',   label: 'Validation',   shortcut: '4' },
@@ -30,7 +46,92 @@ const PIPELINE_SUB_TABS = [
   { id: 'metrics',      label: 'Metrics',      shortcut: '6' },
   { id: 'permissions',  label: 'Permissions',  shortcut: '7' },
   { id: 'code',         label: 'Code',         shortcut: '8' },
+  { id: 'alerts',       label: 'Alerts',       shortcut: '9' },
+  { id: 'logs',         label: 'Audit Logs',   shortcut: '' },
+  { id: 'dependencies', label: 'Dependencies', shortcut: '' },
+  { id: 'activity',     label: 'Activity',     shortcut: '' },
+  { id: 'lineage',      label: 'Lineage',      shortcut: '' },
 ] as { id: PipelineSubTab; label: string; shortcut: string }[];
+
+// ─── Inner view switcher for Executions slot ──────────────────────────────────
+type ExecView = 'run' | 'history';
+
+function ExecutionsSlot({ pipelineId }: { pipelineId: string }) {
+  const [view, setView] = useState<ExecView>('run');
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Inner view toggle */}
+      <div className="flex items-center gap-0 px-4 border-b border-slate-800 flex-shrink-0 bg-[#0a0c15]">
+        {(['run', 'history'] as ExecView[]).map(v => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            className={`h-8 px-4 text-[12px] font-medium border-b-2 transition-colors capitalize ${
+              view === v
+                ? 'border-blue-500 text-blue-300'
+                : 'border-transparent text-slate-500 hover:text-slate-300'
+            }`}
+          >
+            {v === 'run' ? 'Run Pipeline' : 'History'}
+          </button>
+        ))}
+      </div>
+      {view === 'run'     && <ExecutionSubTab        pipelineId={pipelineId} />}
+      {view === 'history' && <ExecutionHistorySubTab pipelineId={pipelineId} />}
+    </div>
+  );
+}
+
+// ─── F-17 Export / F-18 Import buttons ───────────────────────────────────────
+function ExportImportButtons({ pipelineId }: { pipelineId: string }) {
+  const [importing, setImporting] = React.useState(false);
+  const [importErr, setImportErr] = React.useState<string | null>(null);
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  const handleExport = async () => {
+    try {
+      const res = await api.exportPipeline(pipelineId, 'json');
+      const blob = res.data instanceof Blob ? res.data : new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `pipeline_${pipelineId}.json`; a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* silent — export is best-effort */ }
+  };
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true); setImportErr(null);
+    try {
+      const text = await file.text();
+      const parsedPayload = JSON.parse(text);
+      await api.importPipeline({ payload: parsedPayload });
+    } catch (err: unknown) {
+      setImportErr((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Import failed');
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <>
+      <button onClick={handleExport}
+        title="Export pipeline to JSON"
+        className="h-7 px-2.5 rounded bg-[#1e2035] border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-[11px] font-medium transition-colors">
+        ↓ Export
+      </button>
+      <button onClick={() => fileRef.current?.click()} disabled={importing}
+        title="Import pipeline from JSON"
+        className="h-7 px-2.5 rounded bg-[#1e2035] border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-[11px] font-medium transition-colors disabled:opacity-50">
+        {importing ? 'Importing…' : '↑ Import'}
+      </button>
+      <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+      {importErr && <span className="text-[10px] text-red-400">{importErr}</span>}
+    </>
+  );
+}
 
 interface PipelineWorkspaceProps { tabId: string; }
 
@@ -42,6 +143,7 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
   const activePipeline = useAppSelector(s => s.pipeline.activePipeline);
   const canvasNodes    = useAppSelector(s => Object.values(s.pipeline.nodes));
   const canvasEdges    = useAppSelector(s => Object.values(s.pipeline.edges));
+  const hasSelectedNode = useAppSelector(s => s.pipeline.selectedNodeIds.length > 0);
   const tab            = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
   const pipelineId     = tab?.objectId ?? '';
 
@@ -49,6 +151,7 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving]   = useState(false);
   const [configNodeId, setConfigNodeId] = useState<string | null>(null);
+  const [configOpenSignal, setConfigOpenSignal] = useState(0);
 
   useEffect(() => {
     if (!pipelineId) return;
@@ -128,29 +231,54 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
         hierarchyPath={tab?.hierarchyPath}
         status="draft"
         isDirty={unsavedChanges}
-        actions={unsavedChanges ? (
-          <button onClick={handleSave} disabled={isSaving}
-            className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50">
-            {isSaving ? 'Saving…' : 'Save (⌘S)'}
-          </button>
-        ) : undefined}
+        actions={
+          <div className="flex items-center gap-1.5">
+            <ExportImportButtons pipelineId={pipelineId} />
+            {unsavedChanges && (
+              <button onClick={handleSave} disabled={isSaving}
+                className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50">
+                {isSaving ? 'Saving…' : 'Save (⌘S)'}
+              </button>
+            )}
+          </div>
+        }
       />
 
       <SubTabBar tabId={tabId} tabs={PIPELINE_SUB_TABS} defaultTab="editor" />
 
       {/* Designer: always mounted, hidden when not active */}
       <div className={`flex-1 overflow-hidden ${activeSubTab === 'editor' ? 'flex' : 'hidden'}`}>
-        <PipelineCanvas onNodeDoubleClick={setConfigNodeId} pipelineId={pipelineId} />
-        <NodeConfigPanel nodeId={configNodeId} onClose={() => setConfigNodeId(null)} />
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <PipelineCanvas
+            onNodeDoubleClick={(nodeId) => {
+              setConfigNodeId(nodeId);
+              setConfigOpenSignal(prev => prev + 1);
+            }}
+            pipelineId={pipelineId}
+          />
+          {hasSelectedNode && (
+            <div className="h-64 shrink-0 border-t border-slate-800/80 bg-[#0a0c15]">
+              <DataPreviewPanel embedded />
+            </div>
+          )}
+        </div>
+        <NodeConfigPanel nodeId={configNodeId} openSignal={configOpenSignal} onClose={() => setConfigNodeId(null)} />
       </div>
 
-      {activeSubTab === 'properties'   && <PipelinePropertiesSubTab pipelineId={pipelineId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}
-      {activeSubTab === 'parameters'   && <PipelineParametersSubTab pipelineId={pipelineId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}
-      {activeSubTab === 'validation'   && <PipelineValidationSubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'executions'   && <ExecutionHistorySubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'metrics'       && <PipelineMetricsSubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'permissions'   && <PermissionsSubTab pipelineId={pipelineId} />}
-      {activeSubTab === 'code'          && <PipelineCodeSubTab pipelineId={pipelineId} />}
+      {activeSubTab === 'properties'   && <PipelinePropertiesSubTab   pipelineId={pipelineId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}
+      {activeSubTab === 'parameters'   && <PipelineParametersSubTab   pipelineId={pipelineId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}
+      {activeSubTab === 'validation'   && <PipelineValidationSubTab   pipelineId={pipelineId} />}
+      {activeSubTab === 'executions'   && <ExecutionsSlot              pipelineId={pipelineId} />}
+      {activeSubTab === 'metrics'      && <PipelineMetricsSubTab       pipelineId={pipelineId} />}
+      {activeSubTab === 'permissions'  && <PermissionsSubTab           pipelineId={pipelineId} />}
+      {activeSubTab === 'code'         && <PipelineCodeSubTab          pipelineId={pipelineId} />}
+      {activeSubTab === 'alerts'       && <PipelineAlertsSubTab        pipelineId={pipelineId} />}
+      {activeSubTab === 'logs'         && <AuditLogsSubTab             pipelineId={pipelineId} />}
+      {activeSubTab === 'dependencies' && <PipelineDependenciesSubTab  pipelineId={pipelineId} />}
+      {activeSubTab === 'activity'     && <PipelineActivitySubTab      pipelineId={pipelineId} />}
+      {activeSubTab === 'lineage'      && <LineageSubTab               pipelineId={pipelineId} />}
+      {activeSubTab === 'overview'     && <OverviewSubTab              pipelineId={pipelineId} />}
+      {activeSubTab === 'optimize'     && <OptimizeSubTab />}
     </div>
   );
 }

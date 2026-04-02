@@ -105,13 +105,13 @@ export function PermissionsSubTab({ pipelineId }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  const persist = async (updatedGrants: Grant[]) => {
+  const persist = async (updatedGrants: Grant[], inheritOverride?: boolean) => {
     setSaving(true);
     setErrorMessage(null);
     try {
       const payload = {
         grants: updatedGrants.map(grant => ({ userId: grant.userId, roleId: grant.roleId })),
-        inheritFromProject,
+        inheritFromProject: inheritOverride !== undefined ? inheritOverride : inheritFromProject,
       };
       const response = await api.updatePipelinePermissions(pipelineId, payload);
       const data = response.data.data ?? response.data ?? {};
@@ -201,8 +201,14 @@ export function PermissionsSubTab({ pipelineId }: Props) {
         </div>
         <button
           type="button"
-          disabled
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors opacity-70 cursor-not-allowed ${inheritFromProject ? 'bg-primary-600' : 'bg-neutral-300'}`}
+          disabled={!projectScoped}
+          onClick={() => {
+            if (!projectScoped) return;
+            const next = !inheritFromProject;
+            setInherit(next);
+            void persist(grants, next);
+          }}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!projectScoped ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${inheritFromProject ? 'bg-primary-600' : 'bg-neutral-300'}`}
         >
           <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${inheritFromProject ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>

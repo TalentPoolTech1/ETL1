@@ -642,6 +642,118 @@ export class MetadataIntrospectionService {
         // No driver installed — caller shows "unsupported" message
         return { columns: [], rows: [], unsupported: true };
     }
+
+    /**
+     * listColumns — Return column metadata for a specific table.
+     * Used by the /introspect/columns endpoint (F-03/F-04 column pickers).
+     * Delegates to pgDescribeTable for PostgreSQL/Redshift;
+     * MySQL and SQL Server use information_schema similarly.
+     * For file types, returns inferred columns from CSV header.
+     */
+    async listColumns(
+        typeCode: string,
+        config: ConnectorConfig,
+        secrets: ConnectorSecrets,
+        schema: string,
+        table: string,
+    ): Promise<ColumnEntry[]> {
+        const tc = typeCode.toUpperCase();
+
+        if (tc === 'POSTGRESQL' || tc === 'JDBC_POSTGRESQL' || tc === 'REDSHIFT') {
+            return pgDescribeTable(config, secrets, schema, table);
+        }
+
+        if (['MYSQL', 'JDBC_MYSQL', 'MARIADB', 'JDBC_MARIADB'].includes(tc)) {
+            const conn = await mysqlConnect({
+                host:     coerceStr(config['host'] ?? config['jdbc_host'], 'localhost'),
+                port:     Number(config['port'] ?? config['jdbc_port'] ?? 3306),
+                database: coerceStr(config['database'] ?? config['jdbc_database']),
+                user:     coerceStr(secrets['username'] ?? secrets['jdbc_username']),
+                password: coerceStr(secrets['password'] ?? secrets['jdbc_password']),
+                connectTimeout: 8000,
+            });
+            try {
+                const [rows] = await conn.query(
+                    `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, ORDINAL_POSITION
+                     FROM information_schema.COLUMNS
+                     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+                     ORDER BY ORDINAL_POSITION`,
+                    [schema || coerceStr(config['database'] ?? config['jdbc_database']), table],
+                ) as [Array<Record<string,unknown>>, any];
+                return (rows as Array<Record<string,unknown>>).map((r, i) => ({
+                    columnName:     String(r['COLUMN_NAME'] ?? ''),
+                    dataType:       String(r['DATA_TYPE'] ?? 'STRING').toUpperCase(),
+                    nullable:       String(r['IS_NULLABLE'] ?? 'YES') === 'YES',
+                    ordinalPosition: Number(r['ORDINAL_POSITION'] ?? i + 1),
+                }));
+            } finally { await conn.end().catch(() => {}); }
+        }
+
+        if (['SQLSERVER', 'JDBC_SQLSERVER', 'AZURE_SQL'].includes(tc)) {
+            const pool = await mssql.connect({
+                server:   coerceStr(config['host'] ?? config['jdbc_host'], 'localhost'),
+                port:     Number(config['port'] ?? config['jdbc_port'] ?? 1433),
+                database: coerceStr(config['database'] ?? config['jdbc_database']),
+                user:     coerceStr(secrets['username'] ?? secrets['jdbc_username']),
+                password: coerceStr(secrets['password'] ?? secrets['jdbc_password']),
+                options: { encrypt: true, trustServerCertificate: true, connectTimeout: 8000 },
+            });
+            try {
+                const result = await pool.request().input('schema', mssql.NVarChar, schema).input('table', mssql.NVarChar, table).query(
+                    `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, ORDINAL_POSITION
+                     FROM INFORMATION_SCHEMA.COLUMNS
+                     WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+                     ORDER BY ORDINAL_POSITION`,
+                );
+                return result.recordset.map((r: any) => ({
+                    columnName:      String(r.COLUMN_NAME ?? ''),
+                    dataType:        String(r.DATA_TYPE ?? 'VARCHAR').toUpperCase(),
+                    nullable:        String(r.IS_NULLABLE ?? 'YES') === 'YES',
+                    ordinalPosition: Number(r.ORDINAL_POSITION ?? 0),
+                }));
+            } finally { await pool.close().catch(() => {}); }
+        }
+
+        if (['ORACLE', 'JDBC_ORACLE'].includes(tc)) {
+            const host     = coerceStr(config['host'] ?? config['jdbc_host'], 'localhost');
+            const port     = Number(config['port'] ?? config['jdbc_port'] ?? 1521);
+            const database = coerceStr(config['database'] ?? config['jdbc_database'] ?? config['service_name'] ?? 'ORCL');
+            const conn = await oracledb.getConnection({
+                user:          coerceStr(secrets['username'] ?? secrets['jdbc_username']),
+                password:      coerceStr(secrets['password'] ?? secrets['jdbc_password']),
+                connectString: `${host}:${port}/${database}`,
+                connectTimeout: 8,
+            });
+            try {
+                const ownerUpper = schema.toUpperCase().replace(/'/g, "''");
+                const tableUpper = table.toUpperCase().replace(/'/g, "''");
+                const result = await conn.execute(
+                    `SELECT COLUMN_NAME, DATA_TYPE, NULLABLE, COLUMN_ID
+                     FROM ALL_TAB_COLUMNS
+                     WHERE OWNER = '${ownerUpper}' AND TABLE_NAME = '${tableUpper}'
+                     ORDER BY COLUMN_ID`,
+                    {}, { outFormat: oracledb.OUT_FORMAT_OBJECT },
+                );
+                return ((result.rows ?? []) as any[]).map((r: any) => ({
+                    columnName:      String(r.COLUMN_NAME ?? ''),
+                    dataType:        String(r.DATA_TYPE ?? 'VARCHAR2').toUpperCase(),
+                    nullable:        String(r.NULLABLE ?? 'Y') === 'Y',
+                    ordinalPosition: Number(r.COLUMN_ID ?? 0),
+                }));
+            } finally { await conn.close().catch(() => {}); }
+        }
+
+        if (this.isFileType(tc)) {
+            const basePath = coerceStr(config['storage_base_path'] ?? config['file_path'] ?? config['path'] ?? '');
+            const filePath = fs.existsSync(basePath) && !fs.statSync(basePath).isDirectory() ? basePath : '';
+            if (filePath && /csv/i.test(tc)) {
+                const delim = coerceStr(config['field_separator_char'] ?? config['delimiter'] ?? ',', ',');
+                return inferCsvSchema(filePath, delim);
+            }
+        }
+
+        return []; // Unsupported connector type — no column info available
+    }
 }
 
 export const metadataIntrospectionService = new MetadataIntrospectionService();

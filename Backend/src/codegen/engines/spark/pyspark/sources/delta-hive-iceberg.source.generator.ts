@@ -65,7 +65,7 @@ export class PySparkDeltaSourceGenerator implements INodeGenerator {
 
     if (context.options.includeLogging) {
       b.blank();
-      b.line(`logger.info(f"Loaded Delta source '${node.name}': {${varName}.count()} rows")`);
+      b.line(`logger.info(${pyStringLiteral(`Configured Delta source '${node.name}'`)})`);
     }
 
     return { varName, code: b.build(), imports: [PYSPARK_IMPORTS.FUNCTIONS], warnings };

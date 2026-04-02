@@ -64,6 +64,25 @@ const TYPE_LABELS: Record<ScheduleType, string> = {
   manual:   'Manual Only',
 };
 
+function ZebraSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded border border-slate-800">
+      <div className="border-b border-slate-800 bg-[#0f1528] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ZebraItem({ index, children, className = '' }: { index: number; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`${index > 0 ? 'border-t border-slate-800' : ''} ${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-2 py-1.5 ${className}`}>
+      {children}
+    </div>
+  );
+}
+
 export function OrchestratorScheduleSubTab({ orchId, onDirty }: { orchId: string; onDirty?: () => void }) {
   const [cfg, setCfg] = useState<ScheduleConfig>(DEFAULTS);
   const [isLoading, setIsLoading] = useState(false);
@@ -151,16 +170,16 @@ export function OrchestratorScheduleSubTab({ orchId, onDirty }: { orchId: string
     options?: string[]; placeholder?: string;
   }) => (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">{label}</label>
       {options ? (
         <select value={String(cfg[field])} onChange={e => update({ [field]: e.target.value } as Partial<ScheduleConfig>)}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500">
+          className="w-full h-6 px-1.5 bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-200 outline-none focus:border-blue-500">
           {options.map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       ) : (
         <input type={type} value={String(cfg[field])} placeholder={placeholder}
           onChange={e => update({ [field]: e.target.value } as Partial<ScheduleConfig>)}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+          className="w-full h-6 px-1.5 bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-200 outline-none focus:border-blue-500" />
       )}
     </div>
   );
@@ -168,201 +187,163 @@ export function OrchestratorScheduleSubTab({ orchId, onDirty }: { orchId: string
   const Checkbox = ({ label, field }: { label: string; field: keyof ScheduleConfig }) => (
     <label className="flex items-center gap-2 cursor-pointer">
       <input type="checkbox" checked={Boolean(cfg[field])} onChange={e => update({ [field]: e.target.checked } as Partial<ScheduleConfig>)}
-        className="w-3.5 h-3.5 accent-blue-500" />
-      <span className="text-[12px] text-slate-300">{label}</span>
+        className="w-3 h-3 accent-blue-500" />
+      <span className="text-[10px] text-slate-300">{label}</span>
     </label>
   );
 
   return (
     <div className="flex-1 overflow-auto p-5 bg-[#0d0f1a]">
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-2xl space-y-4">
         <div className="flex items-center gap-2">
           <button
             onClick={load}
             disabled={isLoading || isSaving}
-            className="flex items-center gap-2 h-8 px-3 rounded bg-slate-800/50 border border-slate-700 text-[12px] text-slate-200 hover:border-slate-600 disabled:opacity-50"
+            className="flex items-center gap-1.5 h-7 px-2.5 rounded bg-slate-800/50 border border-slate-700 text-[10px] text-slate-200 hover:border-slate-600 disabled:opacity-50"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
           <button
             onClick={save}
             disabled={isLoading || isSaving}
-            className="ml-auto h-8 px-3 rounded bg-blue-600 text-white text-[12px] font-medium hover:bg-blue-500 disabled:opacity-50"
+            className="ml-auto h-7 px-2.5 rounded bg-blue-600 text-white text-[10px] font-medium hover:bg-blue-500 disabled:opacity-50"
           >
             {isSaving ? 'Saving…' : 'Save Schedule'}
           </button>
           <button
             onClick={clear}
             disabled={isLoading || isSaving}
-            className="h-8 px-3 rounded bg-slate-800/50 border border-slate-700 text-[12px] text-slate-200 hover:border-slate-600 disabled:opacity-50"
+            className="h-7 px-2.5 rounded bg-slate-800/50 border border-slate-700 text-[10px] text-slate-200 hover:border-slate-600 disabled:opacity-50"
           >
             Delete
           </button>
         </div>
 
         {error && (
-          <div className="p-3 rounded border border-red-900/50 bg-red-900/20 text-red-200 text-[12px]">
+          <div className="p-2.5 rounded border border-red-900/50 bg-red-900/20 text-red-200 text-[11px]">
             {error}
           </div>
         )}
         {banner && !error && (
-          <div className="p-3 rounded border border-slate-800 bg-slate-900/30 text-slate-300 text-[12px]">
+          <div className="p-2.5 rounded border border-slate-800 bg-slate-900/30 text-slate-300 text-[11px]">
             {banner}
           </div>
         )}
 
         {!isPersistable && (
-          <div className="p-3 rounded border border-amber-900/40 bg-amber-900/10 text-amber-200 text-[12px] flex items-start gap-2">
+          <div className="p-2.5 rounded border border-amber-900/40 bg-amber-900/10 text-amber-200 text-[11px] flex items-start gap-2">
             <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
             Interval and Event schedules are not persisted yet. Select Cron or Manual to save.
           </div>
         )}
 
-        {/* Basic settings */}
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <F label="Schedule Name *" field="name" placeholder="e.g. Daily 2am Run" />
-            <div className="flex items-end gap-3">
-              <label className="flex items-center gap-2 cursor-pointer pb-1">
-                <input type="checkbox" checked={cfg.enabled} onChange={e => update({ enabled: e.target.checked })}
-                  className="w-4 h-4 accent-blue-500" />
-                <span className="text-[13px] text-slate-300 font-medium">Schedule Enabled</span>
-              </label>
-            </div>
-          </div>
-        </div>
+        <ZebraSection title="Basic Settings">
+          <ZebraItem index={0}>
+            <F label="Schedule Name" field="name" placeholder="e.g. Daily 2am Run" />
+          </ZebraItem>
+          <ZebraItem index={1}>
+            <Checkbox label="Schedule Enabled" field="enabled" />
+          </ZebraItem>
+        </ZebraSection>
 
-        {/* Schedule type selector */}
-        <div>
-          <label className="block text-[11px] text-slate-500 mb-2">Schedule Type</label>
-          <div className="grid grid-cols-4 gap-2">
-            {(['cron', 'interval', 'event', 'manual'] as ScheduleType[]).map(t => (
-              <button key={t} onClick={() => update({ type: t })}
-                className={`flex flex-col items-center gap-2 p-3 rounded-lg border transition-colors ${
-                  cfg.type === t
-                    ? 'bg-blue-900/40 border-blue-600 text-blue-300'
-                    : 'bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600 hover:text-slate-200'
-                }`}>
-                {TYPE_ICONS[t]}
-                <span className="text-[11px] font-medium">{TYPE_LABELS[t]}</span>
+        <ZebraSection title="Schedule Type">
+          {(['cron', 'interval', 'event', 'manual'] as ScheduleType[]).map((t, index) => (
+            <ZebraItem index={index} key={t}>
+              <button
+                type="button"
+                onClick={() => update({ type: t })}
+                className="flex w-full items-center justify-between gap-2 text-left"
+              >
+                <div className="flex items-center gap-2 text-[10px] text-slate-200">
+                  {TYPE_ICONS[t]}
+                  <span className="font-medium">{TYPE_LABELS[t]}</span>
+                </div>
+                <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${cfg.type === t ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>
+                  {cfg.type === t ? 'Active' : 'Use'}
+                </span>
               </button>
-            ))}
-          </div>
-        </div>
+            </ZebraItem>
+          ))}
+        </ZebraSection>
 
-        {/* Type-specific config */}
         {cfg.type === 'cron' && (
-          <div className="space-y-4 p-4 bg-slate-800/20 border border-slate-800 rounded-lg">
-            <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">Cron Settings</div>
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-1">Cron Expression *</label>
-              <input value={cfg.cronExpression} onChange={e => update({ cronExpression: e.target.value })}
-                className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 font-mono outline-none focus:border-blue-500" />
-              <p className="text-[10px] text-slate-600 mt-1 flex items-center gap-1">
-                <Info className="w-3 h-3" /> 5-field cron: minute hour day-of-month month day-of-week
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <F label="Timezone" field="timezone"
-                options={['UTC','America/New_York','America/Chicago','America/Los_Angeles','Europe/London','Europe/Berlin','Europe/Paris','Asia/Kolkata','Asia/Tokyo','Asia/Singapore','Australia/Sydney']} />
-              <F label="Catch-Up Rule" field="catchUpRule" options={['no_catchup','run_once','run_all_missed']} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <F label="Effective From" field="effectiveFrom" type="datetime-local" />
-              <F label="Effective To" field="effectiveTo" type="datetime-local" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <F label="Max Concurrent Runs" field="maxConcurrent" type="number" />
-              <F label="Misfire Policy" field="misfirePolicy" options={['ignore','fire_once','do_nothing','fire_all']} />
-            </div>
-          </div>
+          <ZebraSection title="Cron Settings">
+            <ZebraItem index={0}>
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Cron Expression</label>
+                <input value={cfg.cronExpression} onChange={e => update({ cronExpression: e.target.value })}
+                  className="w-full h-6 px-1.5 bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-200 font-mono outline-none focus:border-blue-500" />
+                <p className="mt-1 flex items-center gap-1 text-[9px] text-slate-600">
+                  <Info className="w-3 h-3" /> 5-field cron: minute hour day-of-month month day-of-week
+                </p>
+              </div>
+            </ZebraItem>
+            <ZebraItem index={1}><F label="Timezone" field="timezone" options={['UTC','America/New_York','America/Chicago','America/Los_Angeles','Europe/London','Europe/Berlin','Europe/Paris','Asia/Kolkata','Asia/Tokyo','Asia/Singapore','Australia/Sydney']} /></ZebraItem>
+            <ZebraItem index={2}><F label="Catch-Up Rule" field="catchUpRule" options={['no_catchup','run_once','run_all_missed']} /></ZebraItem>
+            <ZebraItem index={3}><F label="Effective From" field="effectiveFrom" type="datetime-local" /></ZebraItem>
+            <ZebraItem index={4}><F label="Effective To" field="effectiveTo" type="datetime-local" /></ZebraItem>
+            <ZebraItem index={5}><F label="Max Concurrent Runs" field="maxConcurrent" type="number" /></ZebraItem>
+            <ZebraItem index={6}><F label="Misfire Policy" field="misfirePolicy" options={['ignore','fire_once','do_nothing','fire_all']} /></ZebraItem>
+          </ZebraSection>
         )}
 
         {cfg.type === 'interval' && (
-          <div className="space-y-4 p-4 bg-slate-800/20 border border-slate-800 rounded-lg">
-            <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">Interval Settings</div>
-            <div className="flex gap-3">
-              <div className="flex-1">
-                <label className="block text-[11px] text-slate-500 mb-1">Every</label>
-                <input type="number" min="1" value={cfg.intervalValue} onChange={e => update({ intervalValue: e.target.value })}
-                  className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
-              </div>
-              <div className="flex-1">
-                <label className="block text-[11px] text-slate-500 mb-1">Unit</label>
-                <select value={cfg.intervalUnit} onChange={e => update({ intervalUnit: e.target.value })}
-                  className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500">
-                  <option value="minutes">Minutes</option>
-                  <option value="hours">Hours</option>
-                  <option value="days">Days</option>
-                </select>
-              </div>
-            </div>
-            <F label="Timezone" field="timezone"
-              options={['UTC','America/New_York','America/Chicago','America/Los_Angeles','Europe/London','Europe/Berlin','Asia/Kolkata','Asia/Tokyo']} />
-            <div className="grid grid-cols-2 gap-4">
-              <F label="Effective From" field="effectiveFrom" type="datetime-local" />
-              <F label="Effective To" field="effectiveTo" type="datetime-local" />
-            </div>
-          </div>
+          <ZebraSection title="Interval Settings">
+            <ZebraItem index={0}><F label="Every" field="intervalValue" type="number" /></ZebraItem>
+            <ZebraItem index={1}><F label="Unit" field="intervalUnit" options={['minutes','hours','days']} /></ZebraItem>
+            <ZebraItem index={2}><F label="Timezone" field="timezone" options={['UTC','America/New_York','America/Chicago','America/Los_Angeles','Europe/London','Europe/Berlin','Asia/Kolkata','Asia/Tokyo']} /></ZebraItem>
+            <ZebraItem index={3}><F label="Effective From" field="effectiveFrom" type="datetime-local" /></ZebraItem>
+            <ZebraItem index={4}><F label="Effective To" field="effectiveTo" type="datetime-local" /></ZebraItem>
+          </ZebraSection>
         )}
 
         {cfg.type === 'event' && (
-          <div className="space-y-4 p-4 bg-slate-800/20 border border-slate-800 rounded-lg">
-            <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">Event Trigger Settings</div>
-            <F label="Event Source" field="eventSource" placeholder="e.g. S3 bucket, Kafka topic, webhook" />
-            <div>
-              <label className="block text-[11px] text-slate-500 mb-1">Event Filter (optional)</label>
-              <textarea rows={3} value={cfg.eventFilter} onChange={e => update({ eventFilter: e.target.value })}
-                placeholder={'{"prefix": "data/", "suffix": ".parquet"}'}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 font-mono outline-none focus:border-blue-500 resize-none" />
-            </div>
-          </div>
+          <ZebraSection title="Event Trigger Settings">
+            <ZebraItem index={0}><F label="Event Source" field="eventSource" placeholder="e.g. S3 bucket, Kafka topic, webhook" /></ZebraItem>
+            <ZebraItem index={1}>
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Event Filter</label>
+                <textarea rows={3} value={cfg.eventFilter} onChange={e => update({ eventFilter: e.target.value })}
+                  placeholder={'{"prefix": "data/", "suffix": ".parquet"}'}
+                  className="w-full rounded bg-slate-800 border border-slate-700 px-1.5 py-1 text-[10px] text-slate-200 font-mono outline-none focus:border-blue-500 resize-none" />
+              </div>
+            </ZebraItem>
+          </ZebraSection>
         )}
 
         {cfg.type === 'manual' && (
-          <div className="p-4 bg-slate-800/20 border border-slate-800 rounded-lg flex items-start gap-3">
-            <Hand className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="text-[13px] font-medium text-slate-300">Manual Execution Only</div>
-              <p className="text-[12px] text-slate-500 mt-1">This orchestrator will only run when explicitly triggered via the Run button, API, or another orchestrator.</p>
-            </div>
-          </div>
+          <ZebraSection title="Manual Execution Only">
+            <ZebraItem index={0} className="flex items-start gap-2">
+              <Hand className="w-4 h-4 text-slate-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[10px] text-slate-400">This orchestrator will only run when explicitly triggered via the Run button, API, or another orchestrator.</p>
+            </ZebraItem>
+          </ZebraSection>
         )}
 
-        {/* Retry policy */}
-        <div className="space-y-4 p-4 bg-slate-800/20 border border-slate-800 rounded-lg">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">Retry Policy</div>
-          <div className="grid grid-cols-3 gap-4">
-            <F label="Strategy" field="retryPolicy" options={['fixed','exponential','no_retry']} />
-            <F label="Max Retries" field="retryCount" type="number" />
-            <F label="Retry Delay (s)" field="retryDelayS" type="number" />
-          </div>
-        </div>
+        <ZebraSection title="Retry Policy">
+          <ZebraItem index={0}><F label="Strategy" field="retryPolicy" options={['fixed','exponential','no_retry']} /></ZebraItem>
+          <ZebraItem index={1}><F label="Max Retries" field="retryCount" type="number" /></ZebraItem>
+          <ZebraItem index={2}><F label="Retry Delay (s)" field="retryDelayS" type="number" /></ZebraItem>
+        </ZebraSection>
 
-        {/* Failure handling */}
-        <div className="space-y-4 p-4 bg-slate-800/20 border border-slate-800 rounded-lg">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">Failure Handling</div>
-          <F label="On Failure" field="failureHandling"
-            options={['stop','continue','rollback','skip_and_continue','alert_only']} />
-          <div className="space-y-2">
-            <Checkbox label="Notify on failure" field="notifyOnFailure" />
-            <Checkbox label="Notify on success" field="notifyOnSuccess" />
-          </div>
-        </div>
+        <ZebraSection title="Failure Handling">
+          <ZebraItem index={0}><F label="On Failure" field="failureHandling" options={['stop','continue','rollback','skip_and_continue','alert_only']} /></ZebraItem>
+          <ZebraItem index={1}><Checkbox label="Notify on failure" field="notifyOnFailure" /></ZebraItem>
+          <ZebraItem index={2}><Checkbox label="Notify on success" field="notifyOnSuccess" /></ZebraItem>
+        </ZebraSection>
 
-        {/* Advanced */}
-        <div className="space-y-4 p-4 bg-slate-800/20 border border-slate-800 rounded-lg">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide">Advanced</div>
-          <div>
-            <label className="block text-[11px] text-slate-500 mb-1">Blackout Windows</label>
-            <textarea rows={2} value={cfg.blackoutWindows} onChange={e => update({ blackoutWindows: e.target.value })}
-              placeholder={'Mon-Fri 23:00-06:00 UTC\nSat-Sun all-day'}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 resize-none" />
-          </div>
-          <F label="Holiday Calendar Reference" field="holidayCalendar"
-            placeholder="e.g. US Federal Holidays" />
-        </div>
+        <ZebraSection title="Advanced">
+          <ZebraItem index={0}>
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500 mb-1">Blackout Windows</label>
+              <textarea rows={2} value={cfg.blackoutWindows} onChange={e => update({ blackoutWindows: e.target.value })}
+                placeholder={'Mon-Fri 23:00-06:00 UTC\nSat-Sun all-day'}
+                className="w-full rounded bg-slate-800 border border-slate-700 px-1.5 py-1 text-[10px] text-slate-200 outline-none focus:border-blue-500 resize-none" />
+            </div>
+          </ZebraItem>
+          <ZebraItem index={1}><F label="Holiday Calendar Reference" field="holidayCalendar" placeholder="e.g. US Federal Holidays" /></ZebraItem>
+        </ZebraSection>
 
       </div>
     </div>

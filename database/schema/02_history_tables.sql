@@ -74,6 +74,9 @@ CREATE TABLE history.pipelines_history (
 
 -- Global pipelines have no project_id; history must accept NULL to mirror source row
 ALTER TABLE history.pipelines_history ALTER COLUMN project_id DROP NOT NULL;
+-- Existing databases may have been created before inherit_project_permissions was added.
+ALTER TABLE history.pipelines_history
+    ADD COLUMN IF NOT EXISTS inherit_project_permissions BOOLEAN NOT NULL DEFAULT TRUE;
 
 COMMENT ON TABLE history.pipelines_history IS 'Immutable row-image history for catalog.pipelines.';
 COMMENT ON COLUMN history.pipelines_history.hist_id IS 'Sequential audit record identifier.';

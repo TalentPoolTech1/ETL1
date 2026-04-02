@@ -19,8 +19,6 @@ import { DashboardView } from '@/components/views/DashboardView';
 import { SettingsView } from '@/components/views/SettingsView';
 import { LineageExplorer } from '@/components/views/LineageExplorer';
 import { GovernanceView } from '@/components/views/GovernanceView';
-import { PropertiesPanel } from '@/components/properties/PropertiesPanel';
-import { DataPreviewPanel } from '@/components/preview/DataPreviewPanel';
 import { MetadataPreviewPanel } from '@/components/preview/MetadataPreviewPanel';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { LoginPage } from '@/components/auth/LoginPage';
@@ -36,9 +34,6 @@ import React from 'react';
 function WorkspaceRouter() {
   const activeTabId    = useAppSelector(s => s.tabs.activeTabId);
   const activeTab      = useAppSelector(s => s.tabs.allTabs.find(t => t.id === activeTabId));
-  const activeSubTab   = useAppSelector(s => activeTabId ? (s.ui.subTabMap[activeTabId] ?? 'editor') : 'editor');
-  const isEditorTab    = activeSubTab === 'editor';
-  const hasSelectedNode = useAppSelector(s => s.pipeline.selectedNodeIds.length > 0);
   const metadataPreviewId = useAppSelector(s => s.ui.metadataPreviewDatasetId);
 
   const metaBottom = metadataPreviewId ? <MetadataPreviewPanel /> : undefined;
@@ -80,8 +75,8 @@ function WorkspaceRouter() {
     case 'pipeline':
       return shell(
         <PipelineWorkspace tabId={activeTab.id} />,
-        isEditorTab && hasSelectedNode ? <PropertiesPanel /> : undefined,
-        isEditorTab && hasSelectedNode ? <DataPreviewPanel /> : metaBottom,
+        undefined,
+        metaBottom,
       );
 
     case 'orchestrator':

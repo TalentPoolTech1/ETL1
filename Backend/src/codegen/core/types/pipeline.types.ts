@@ -168,10 +168,14 @@ export type TransformationType =
   | 'custom_udf' | 'data_quality' | 'mask'
   | 'sample' | 'cache' | 'repartition'
   | 'multi_transform_sequence'
-  | 'scd_type1' | 'scd_type2' | 'surrogate_key';
+  | 'scd_type1' | 'scd_type2' | 'surrogate_key'
+  | 'add_audit_columns'
+  | 'case_when';
 
 export interface FilterConfig {
   condition: string;
+  mode?: 'INCLUDE' | 'EXCLUDE';
+  conditionLanguage?: 'spark_sql';
 }
 
 export interface SelectConfig {
@@ -395,8 +399,10 @@ export interface MultiTransformIRStep {
 export interface MultiTransformIRSequence {
   id: string;
   name: string;
+  enabled?: boolean;
   columnId: string;
   columnName: string;
+  sourceColumn?: string;
   targetEngine: 'spark' | 'postgresql' | 'redshift';
   steps: MultiTransformIRStep[];
   pipelineId: string;

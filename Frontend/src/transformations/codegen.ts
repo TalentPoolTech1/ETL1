@@ -85,6 +85,15 @@ export class SparkSQLGenerator extends BaseCodeGenerator {
 
   compileSequence(sequence: TransformSequence): CodeGenerationResult {
     this.resetWarnings();
+    const baseColumn = sequence.sourceColumn?.trim() || sequence.columnName;
+
+    if (sequence.enabled === false) {
+      return {
+        sql: baseColumn,
+        warnings: this.warnings,
+        isValid: true,
+      };
+    }
 
     if (sequence.targetEngine !== 'spark' && sequence.targetEngine !== undefined) {
       this.addWarning(`Sequence targets ${sequence.targetEngine}, not Spark`);
@@ -93,13 +102,13 @@ export class SparkSQLGenerator extends BaseCodeGenerator {
     const enabledSteps = sequence.steps.filter(s => s.enabled);
     if (enabledSteps.length === 0) {
       return {
-        sql: sequence.columnName,
+        sql: baseColumn,
         warnings: this.warnings,
         isValid: true,
       };
     }
 
-    let currentExpr = sequence.columnName;
+    let currentExpr = baseColumn;
 
     for (let i = 0; i < enabledSteps.length; i++) {
       const step = enabledSteps[i];
@@ -184,17 +193,26 @@ export class PostgreSQLGenerator extends BaseCodeGenerator {
 
   compileSequence(sequence: TransformSequence): CodeGenerationResult {
     this.resetWarnings();
+    const baseColumn = sequence.sourceColumn?.trim() || sequence.columnName;
 
-    const enabledSteps = sequence.steps.filter(s => s.enabled);
-    if (enabledSteps.length === 0) {
+    if (sequence.enabled === false) {
       return {
-        sql: this.escapeIdentifier(sequence.columnName),
+        sql: this.escapeIdentifier(baseColumn),
         warnings: this.warnings,
         isValid: true,
       };
     }
 
-    let currentExpr = this.escapeIdentifier(sequence.columnName);
+    const enabledSteps = sequence.steps.filter(s => s.enabled);
+    if (enabledSteps.length === 0) {
+      return {
+        sql: this.escapeIdentifier(baseColumn),
+        warnings: this.warnings,
+        isValid: true,
+      };
+    }
+
+    let currentExpr = this.escapeIdentifier(baseColumn);
 
     for (let i = 0; i < enabledSteps.length; i++) {
       const step = enabledSteps[i];
@@ -279,17 +297,26 @@ export class RedshiftCodeGenerator extends BaseCodeGenerator {
 
   compileSequence(sequence: TransformSequence): CodeGenerationResult {
     this.resetWarnings();
+    const baseColumn = sequence.sourceColumn?.trim() || sequence.columnName;
 
-    const enabledSteps = sequence.steps.filter(s => s.enabled);
-    if (enabledSteps.length === 0) {
+    if (sequence.enabled === false) {
       return {
-        sql: this.escapeIdentifier(sequence.columnName),
+        sql: this.escapeIdentifier(baseColumn),
         warnings: this.warnings,
         isValid: true,
       };
     }
 
-    let currentExpr = this.escapeIdentifier(sequence.columnName);
+    const enabledSteps = sequence.steps.filter(s => s.enabled);
+    if (enabledSteps.length === 0) {
+      return {
+        sql: this.escapeIdentifier(baseColumn),
+        warnings: this.warnings,
+        isValid: true,
+      };
+    }
+
+    let currentExpr = this.escapeIdentifier(baseColumn);
 
     for (let i = 0; i < enabledSteps.length; i++) {
       const step = enabledSteps[i];

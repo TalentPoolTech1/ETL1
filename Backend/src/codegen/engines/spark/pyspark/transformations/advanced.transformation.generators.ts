@@ -109,36 +109,51 @@ export class PySparkUnionGenerator implements INodeGenerator {
   }
 
   async generate(node: PipelineNode, context: GenerationContext): Promise<GeneratedNodeCode> {
-    const cfg = node.config as { byName?: boolean; all?: boolean };
+    const cfg = node.config as { byName?: boolean; all?: boolean; unionType?: string };
     const varName = toVarName(node.name);
     const b = new CodeBuilder();
     const warnings: any[] = [];
+    const unionType = (cfg.unionType ?? '').toUpperCase();
 
     if (node.inputs.length < 2) {
       warnings.push({ nodeId: node.id, code: 'UNION_TOO_FEW_INPUTS', message: 'Union requires at least 2 inputs.', severity: 'error' as const });
       return { varName, code: `${varName} = None  # ERROR: Union needs >= 2 inputs`, imports: [], warnings };
     }
 
+    const inputVars = node.inputs.map(id => context.resolvedNodes.get(id)?.varName ?? 'MISSING');
+
+    // ─── INTERSECT / EXCEPT — use Spark SQL via createOrReplaceTempView ────────
+    if (unionType === 'INTERSECT' || unionType === 'EXCEPT') {
+      const op = unionType === 'INTERSECT' ? 'INTERSECT' : 'EXCEPT';
+      if (context.options.includeComments) b.line(`# Transform: ${node.name} (${op})`);
+      // Register each input as a temp view and run SQL
+      inputVars.forEach((v, i) => b.line(`${v}.createOrReplaceTempView("${v}_${i}")`));
+      const sqlParts = inputVars.map((v, i) => `SELECT * FROM ${v}_${i}`).join(`\n  ${op}\n  `);
+      b.line(`${varName} = spark.sql("""${sqlParts}""")`);
+      return { varName, code: b.build(), imports: [], warnings };
+    }
+
     if (context.options.includeComments) b.line(`# Transform: ${node.name} (Union)`);
 
-    const inputVars = node.inputs.map(id => context.resolvedNodes.get(id)?.varName ?? 'MISSING');
     const method = cfg.byName ? 'unionByName' : 'union';
-
-    // Build chain
-    let chain = inputVars[0];
-    const methodArgs = cfg.all ? `${inputVars[1]}, allowMissingColumns=True` : inputVars[1];
+    // cfg.all=true  → UNION ALL (keep duplicates)
+    // cfg.all=false, cfg.byName=false → UNION (deduplicate) → append .distinct()
+    // cfg.byName=true → unionByName (name-aligned, no dedup)
+    const needsDistinct = !cfg.all && !cfg.byName;
+    const argSuffix = cfg.byName && !cfg.all ? ', allowMissingColumns=False' : '';
 
     if (inputVars.length === 2) {
-      b.line(`${varName} = ${chain}.${method}(${methodArgs})`);
+      const chain = `${inputVars[0]}.${method}(${inputVars[1]}${argSuffix})`;
+      b.line(`${varName} = ${chain}${needsDistinct ? '.distinct()' : ''}`);
     } else {
       b.line(`${varName} = (`);
       b.indent(b2 => {
-        b2.line(`${chain}`);
+        b2.line(`${inputVars[0]}`);
         b2.indent(b3 => {
           inputVars.slice(1).forEach(v => {
-            const args = cfg.all ? `${v}, allowMissingColumns=True` : v;
-            b3.line(`.${method}(${args})`);
+            b3.line(`.${method}(${v}${argSuffix})`);
           });
+          if (needsDistinct) b3.line(`.distinct()`);
         });
       });
       b.line(')');

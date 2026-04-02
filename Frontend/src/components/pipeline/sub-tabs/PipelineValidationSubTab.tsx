@@ -31,7 +31,25 @@ export function PipelineValidationSubTab({ pipelineId }: { pipelineId: string })
     try {
       const res = await api.validatePipeline(pipelineId);
       const d = res.data?.data ?? res.data;
-      setIssues(Array.isArray(d?.issues) ? d.issues : []);
+      // API returns { valid, errors: [{code, message, nodeId?, severity?}], warnings: [{...}] }
+      // Map to the ValidationIssue[] shape this component uses.
+      const toIssues = (
+        items: Array<{ code?: string; message?: string; nodeId?: string }>,
+        severity: ValidationIssue['severity'],
+      ): ValidationIssue[] =>
+        (Array.isArray(items) ? items : []).map((item, idx) => ({
+          id:           `${severity}-${idx}`,
+          severity,
+          ruleId:       item.code ?? `RULE-${idx}`,
+          affectedNode: item.nodeId ?? undefined,
+          message:      item.message ?? 'Unknown issue',
+        }));
+
+      const mapped: ValidationIssue[] = [
+        ...toIssues(d?.errors   ?? [], 'error'),
+        ...toIssues(d?.warnings ?? [], 'warning'),
+      ];
+      setIssues(mapped);
     } catch {
       setIssues([{ id: '1', severity: 'error', ruleId: 'SYS-001', message: 'Validation service unavailable.' }]);
     } finally {

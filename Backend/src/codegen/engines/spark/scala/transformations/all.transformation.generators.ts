@@ -13,6 +13,15 @@ function inputVal(node: PipelineNode, ctx: GenerationContext, idx = 0): string {
   return ctx.resolvedNodes.get(node.inputs[idx])?.varName ?? 'missingInput';
 }
 
+function normalizeFilterCondition(raw: unknown): string {
+  if (typeof raw !== 'string') return 'true';
+  const normalized = raw
+    .replace(/^\s*where\b/i, '')
+    .replace(/;+\s*$/, '')
+    .trim();
+  return normalized || 'true';
+}
+
 // ─── Filter ───────────────────────────────────────────────────────────────────
 
 export class ScalaFilterGenerator implements INodeGenerator {
@@ -22,9 +31,12 @@ export class ScalaFilterGenerator implements INodeGenerator {
   async generate(node: PipelineNode, ctx: GenerationContext): Promise<GeneratedNodeCode> {
     const cfg = node.config as FilterConfig;
     const v = toScalaVal(node.name); const b = new ScalaCodeBuilder();
+    const condition = normalizeFilterCondition(cfg.condition);
+    const predicateExpr = `expr(${scalaString(condition)})`;
+    const filterExpr = cfg.mode === 'EXCLUDE' ? `not(${predicateExpr})` : predicateExpr;
     if (ctx.options.includeComments) b.comment(`Transform: ${node.name} (Filter)`);
-    b.line(`val ${v} = ${inputVal(node, ctx)}.filter(${scalaString(cfg.condition)})`);
-    return { varName: v, code: b.build(), imports: [], warnings: [] };
+    b.line(`val ${v} = ${inputVal(node, ctx)}.filter(${filterExpr})`);
+    return { varName: v, code: b.build(), imports: ['import org.apache.spark.sql.functions._'], warnings: [] };
   }
 }
 

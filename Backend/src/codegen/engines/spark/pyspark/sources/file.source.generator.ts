@@ -80,7 +80,7 @@ export class PySparkFileSourceGenerator implements INodeGenerator {
 
     if (context.options.includeLogging) {
       b.blank();
-      b.line(`logger.info(f"Loaded file source '${node.name}': {${varName}.count()} rows")`);
+      b.line(`logger.info(${pyStringLiteral(`Configured file source '${node.name}' from ${cfg.path}`)})`);
     }
 
     const code = schemaDef ? `${schemaDef}\n${b.build()}` : b.build();
@@ -93,7 +93,7 @@ export class PySparkFileSourceGenerator implements INodeGenerator {
         if (cfg.header !== false) b.line(`.option("header", "true")`);
         if (cfg.delimiter) b.line(`.option("sep", ${pyStringLiteral(cfg.delimiter)})`);
         b.line(`.option("encoding", "UTF-8")`);
-        b.line(`.option("mode", "PERMISSIVE")`);
+        b.line(`.option("mode", "FAILFAST")`);
         break;
       case 'json':
         if (cfg.multiLine) b.line(`.option("multiLine", "true")`);
@@ -123,7 +123,7 @@ export class PySparkFileSourceGenerator implements INodeGenerator {
     b.line(`${varName} = spark.read.format("delta").load(${pyStringLiteral(cfg.path)})`);
     if (context.options.includeLogging) {
       b.blank();
-      b.line(`logger.info(f"Loaded Delta source '${node.name}': {${varName}.count()} rows")`);
+      b.line(`logger.info(${pyStringLiteral(`Configured Delta source '${node.name}' from ${cfg.path}`)})`);
     }
     return { varName, code: b.build(), imports, warnings };
   }

@@ -11,6 +11,57 @@ function getInputVar(node: PipelineNode, context: GenerationContext): string {
   return context.resolvedNodes.get(inputId)?.varName ?? 'MISSING_INPUT';
 }
 
+function prepareSinkInput(
+  node: PipelineNode,
+  inputVar: string,
+  varName: string,
+  context: GenerationContext,
+  builder: CodeBuilder,
+): { inputVar: string; needsFunctions: boolean } {
+  const cfg = node.config as {
+    auditColumnsEnabled?: boolean | string;
+    loadTsColumn?: string;
+    runIdColumn?: string;
+    runUserColumn?: string;
+    useScaffoldArgs?: boolean | string;
+  };
+
+  const auditEnabled = cfg.auditColumnsEnabled === true || cfg.auditColumnsEnabled === 'true';
+  if (!auditEnabled) return { inputVar, needsFunctions: false };
+
+  const loadTsColumn = typeof cfg.loadTsColumn === 'string' ? cfg.loadTsColumn.trim() : '_load_ts';
+  const runIdColumn = typeof cfg.runIdColumn === 'string' ? cfg.runIdColumn.trim() : '_run_id';
+  const runUserColumn = typeof cfg.runUserColumn === 'string' ? cfg.runUserColumn.trim() : '_run_user';
+  const useScaffoldArgs = cfg.useScaffoldArgs !== false && cfg.useScaffoldArgs !== 'false';
+
+  const auditAssignments: Array<{ column: string; expression: string }> = [];
+  if (loadTsColumn) auditAssignments.push({ column: loadTsColumn, expression: 'F.current_timestamp()' });
+  if (runIdColumn) auditAssignments.push({ column: runIdColumn, expression: useScaffoldArgs ? 'F.lit(args.run_id)' : 'F.lit("")' });
+  if (runUserColumn) auditAssignments.push({ column: runUserColumn, expression: useScaffoldArgs ? 'F.lit(args.run_user)' : 'F.lit("system")' });
+
+  if (auditAssignments.length === 0) return { inputVar, needsFunctions: false };
+
+  const auditedVarName = `${varName}_audited`;
+
+  if (context.options.includeComments) {
+    builder.line(`# Add target audit values before writing ${node.name}`);
+  }
+
+  builder.line(`${auditedVarName} = (`);
+  builder.indent(b2 => {
+    b2.line(`${inputVar}`);
+    b2.indent(b3 => {
+      auditAssignments.forEach(({ column, expression }) => {
+        b3.line(`.withColumn(${pyStringLiteral(column)}, ${expression})`);
+      });
+    });
+  });
+  builder.line(')');
+  builder.blank();
+
+  return { inputVar: auditedVarName, needsFunctions: true };
+}
+
 // ─── JDBC Sink ────────────────────────────────────────────────────────────────
 
 export class PySparkJdbcSinkGenerator implements INodeGenerator {
@@ -26,6 +77,8 @@ export class PySparkJdbcSinkGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name, 'sink');
     const b = new CodeBuilder();
+    const preparedInput = prepareSinkInput(node, inputVar, varName, context, b);
+    const writeInputVar = preparedInput.inputVar;
 
     if (context.options.includeComments) {
       b.line(`# Sink: ${node.name} (JDBC → ${cfg.table})`);
@@ -41,7 +94,7 @@ export class PySparkJdbcSinkGenerator implements INodeGenerator {
 
     b.line(`(`);
     b.indent(b2 => {
-      b2.line(`${inputVar}`);
+      b2.line(`${writeInputVar}`);
       b2.indent(b3 => {
         b3.line(`.write`);
         b3.line(`.format("jdbc")`);
@@ -67,7 +120,12 @@ export class PySparkJdbcSinkGenerator implements INodeGenerator {
       b.line(`logger.info(f"Wrote JDBC sink '${node.name}' → ${cfg.table} (mode: ${cfg.mode})")`);
     }
 
-    return { varName, code: b.build(), imports: [PYSPARK_IMPORTS.OS], warnings: [] };
+    return {
+      varName,
+      code: b.build(),
+      imports: preparedInput.needsFunctions ? [PYSPARK_IMPORTS.OS, PYSPARK_IMPORTS.FUNCTIONS] : [PYSPARK_IMPORTS.OS],
+      warnings: [],
+    };
   }
 }
 
@@ -86,13 +144,15 @@ export class PySparkFileSinkGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name, 'sink');
     const b = new CodeBuilder();
+    const preparedInput = prepareSinkInput(node, inputVar, varName, context, b);
+    const writeInputVar = preparedInput.inputVar;
 
     if (context.options.includeComments) {
       b.line(`# Sink: ${node.name} (${cfg.format.toUpperCase()} File)`);
     }
 
     // Repartition must happen on the DataFrame BEFORE the writer chain
-    const writeSource = cfg.numPartitions ? `${inputVar}.repartition(${cfg.numPartitions})` : inputVar;
+    const writeSource = cfg.numPartitions ? `${writeInputVar}.repartition(${cfg.numPartitions})` : writeInputVar;
 
     b.line(`(`);
     b.indent(b2 => {
@@ -128,7 +188,7 @@ export class PySparkFileSinkGenerator implements INodeGenerator {
       b.line(`logger.info(f"Wrote file sink '${node.name}' → ${cfg.path}")`);
     }
 
-    return { varName, code: b.build(), imports: [], warnings: [] };
+    return { varName, code: b.build(), imports: preparedInput.needsFunctions ? [PYSPARK_IMPORTS.FUNCTIONS] : [], warnings: [] };
   }
 }
 
@@ -148,6 +208,8 @@ export class PySparkDeltaSinkGenerator implements INodeGenerator {
     const varName = toVarName(node.name, 'sink');
     const b = new CodeBuilder();
     const warnings: any[] = [];
+    const preparedInput = prepareSinkInput(node, inputVar, varName, context, b);
+    const writeInputVar = preparedInput.inputVar;
 
     if (context.options.includeComments) {
       b.line(`# Sink: ${node.name} (Delta Lake)`);
@@ -172,7 +234,7 @@ export class PySparkDeltaSinkGenerator implements INodeGenerator {
       b.indent(b2 => {
         b2.line(`.merge(`);
         b2.indent(b3 => {
-          b3.line(`${inputVar},`);
+          b3.line(`${writeInputVar},`);
           b3.line(`${pyStringLiteral(mergeCondition)}`);
         });
         b2.line(`)`);
@@ -184,7 +246,7 @@ export class PySparkDeltaSinkGenerator implements INodeGenerator {
     } else {
       b.line(`_writer_${varName} = (`);
       b.indent(b2 => {
-        b2.line(`${inputVar}`);
+        b2.line(`${writeInputVar}`);
         b2.indent(b3 => {
           b3.line(`.write`);
           b3.line(`.format("delta")`);
@@ -237,6 +299,8 @@ export class PySparkIcebergSinkGenerator implements INodeGenerator {
     const tableRef = `${cfg.catalog}.${cfg.namespace}.${cfg.table}`;
     const b = new CodeBuilder();
     const warnings = [];
+    const preparedInput = prepareSinkInput(node, inputVar, varName, context, b);
+    const writeInputVar = preparedInput.inputVar;
 
     if (context.options.includeComments) b.line(`# Sink: ${node.name} (Iceberg → ${tableRef})`);
 
@@ -248,7 +312,7 @@ export class PySparkIcebergSinkGenerator implements INodeGenerator {
 
     if (cfg.mode === 'merge' && cfg.mergeKey && cfg.mergeKey.length > 0) {
       const mergeCondition = cfg.mergeKey.map(k => `t.${k} = s.${k}`).join(' AND ');
-      b.line(`${inputVar}.createOrReplaceTempView("_iceberg_source_${varName}")`);
+      b.line(`${writeInputVar}.createOrReplaceTempView("_iceberg_source_${varName}")`);
       b.line(`spark.sql(f"""`);
       b.indent(b2 => {
         b2.line(`MERGE INTO ${tableRef} t`);
@@ -261,7 +325,7 @@ export class PySparkIcebergSinkGenerator implements INodeGenerator {
     } else {
       b.line(`(`);
       b.indent(b2 => {
-        b2.line(`${inputVar}`);
+        b2.line(`${writeInputVar}`);
         b2.indent(b3 => {
           b3.line(`.write`);
           b3.line(`.format("iceberg")`);
@@ -276,7 +340,7 @@ export class PySparkIcebergSinkGenerator implements INodeGenerator {
       b.line(')');
     }
 
-    return { varName, code: b.build(), imports: [], warnings };
+    return { varName, code: b.build(), imports: preparedInput.needsFunctions ? [PYSPARK_IMPORTS.FUNCTIONS] : [], warnings };
   }
 }
 
@@ -295,12 +359,14 @@ export class PySparkKafkaSinkGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name, 'sink');
     const b = new CodeBuilder();
+    const preparedInput = prepareSinkInput(node, inputVar, varName, context, b);
+    const writeInputVar = preparedInput.inputVar;
 
     if (context.options.includeComments) b.line(`# Sink: ${node.name} (Kafka → ${cfg.topic})`);
 
     // Serialize to Kafka value
     if (cfg.valueFormat === 'json' || !cfg.valueFormat) {
-      b.line(`_kafka_df_${varName} = ${inputVar}.select(`);
+      b.line(`_kafka_df_${varName} = ${writeInputVar}.select(`);
       b.indent(b2 => {
         if (cfg.keyColumn) {
           b2.line(`F.col(${pyStringLiteral(cfg.keyColumn)}).cast("string").alias("key"),`);
@@ -309,7 +375,7 @@ export class PySparkKafkaSinkGenerator implements INodeGenerator {
       });
       b.line(')');
     } else {
-      b.line(`_kafka_df_${varName} = ${inputVar}.select(F.to_json(F.struct("*")).alias("value"))`);
+      b.line(`_kafka_df_${varName} = ${writeInputVar}.select(F.to_json(F.struct("*")).alias("value"))`);
     }
 
     b.blank();
@@ -349,6 +415,8 @@ export class PySparkHiveSinkGenerator implements INodeGenerator {
     const varName = toVarName(node.name, 'sink');
     const table = `${cfg.database}.${cfg.table}`;
     const b = new CodeBuilder();
+    const preparedInput = prepareSinkInput(node, inputVar, varName, context, b);
+    const writeInputVar = preparedInput.inputVar;
 
     if (context.options.includeComments) b.line(`# Sink: ${node.name} (Hive → ${table})`);
 
@@ -359,7 +427,7 @@ export class PySparkHiveSinkGenerator implements INodeGenerator {
 
     b.line(`(`);
     b.indent(b2 => {
-      b2.line(`${inputVar}`);
+      b2.line(`${writeInputVar}`);
       b2.indent(b3 => {
         b3.line(`.write`);
         b3.line(`.mode(${pyStringLiteral(cfg.mode)})`);
@@ -373,7 +441,7 @@ export class PySparkHiveSinkGenerator implements INodeGenerator {
     });
     b.line(')');
 
-    return { varName, code: b.build(), imports: [], warnings: [] };
+    return { varName, code: b.build(), imports: preparedInput.needsFunctions ? [PYSPARK_IMPORTS.FUNCTIONS] : [], warnings: [] };
   }
 }
 
@@ -392,6 +460,8 @@ export class PySparkConsoleSinkGenerator implements INodeGenerator {
     const inputVar = getInputVar(node, context);
     const varName = toVarName(node.name, 'sink');
     const b = new CodeBuilder();
+    const preparedInput = prepareSinkInput(node, inputVar, varName, context, b);
+    const writeInputVar = preparedInput.inputVar;
 
     if (context.options.includeComments) b.line(`# Sink: ${node.name} (Console - DEBUG ONLY)`);
 
@@ -399,8 +469,8 @@ export class PySparkConsoleSinkGenerator implements INodeGenerator {
     const truncate = cfg.truncate !== false;
     const vertical = cfg.vertical ?? false;
 
-    b.line(`${inputVar}.show(${numRows}, truncate=${truncate ? 'True' : 'False'}, vertical=${vertical ? 'True' : 'False'})`);
-    b.line(`${inputVar}.printSchema()`);
+    b.line(`${writeInputVar}.show(${numRows}, truncate=${truncate ? 'True' : 'False'}, vertical=${vertical ? 'True' : 'False'})`);
+    b.line(`${writeInputVar}.printSchema()`);
 
     context.warnings.push({
       nodeId: node.id,
@@ -409,6 +479,6 @@ export class PySparkConsoleSinkGenerator implements INodeGenerator {
       severity: 'warn',
     });
 
-    return { varName, code: b.build(), imports: [], warnings: [] };
+    return { varName, code: b.build(), imports: preparedInput.needsFunctions ? [PYSPARK_IMPORTS.FUNCTIONS] : [], warnings: [] };
   }
 }

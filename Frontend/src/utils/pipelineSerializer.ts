@@ -57,6 +57,15 @@ interface SerializeOptions {
   technology?: 'pyspark' | 'scala-spark';
 }
 
+function normalizeFilterCondition(raw: unknown): string {
+  if (typeof raw !== 'string') return 'true';
+  const normalized = raw
+    .replace(/^\s*where\b/i, '')
+    .replace(/;+\s*$/, '')
+    .trim();
+  return normalized || 'true';
+}
+
 export function serializePipelineToDefinition(
   pipeline: { id: string; name: string; description?: string; version?: number },
   nodes: Record<string, FrontendNode>,
@@ -92,6 +101,17 @@ export function serializePipelineToDefinition(
 
 function serializeNode(node: FrontendNode, inputs: string[]): BackendNode {
   const cfg = node.config;
+  const normalizedTransformSequences = (() => {
+    const raw = cfg.transformSequences;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw !== 'string' || !raw.trim()) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
 
   switch (node.type) {
     case 'source':
@@ -105,7 +125,7 @@ function serializeNode(node: FrontendNode, inputs: string[]): BackendNode {
       };
 
     case 'transform': {
-      const hasSequences = Array.isArray(cfg.transformSequences) && cfg.transformSequences.length > 0;
+      const hasSequences = normalizedTransformSequences.length > 0;
       if (hasSequences) {
         return {
           id: node.id,
@@ -113,7 +133,7 @@ function serializeNode(node: FrontendNode, inputs: string[]): BackendNode {
           type: 'transformation',
           transformationType: 'multi_transform_sequence',
           config: {
-            transformSequences: cfg.transformSequences,
+            transformSequences: normalizedTransformSequences,
             executionStrategy: cfg.executionStrategy,
             cacheResults: cfg.cacheResults ?? false,
           },
@@ -126,7 +146,11 @@ function serializeNode(node: FrontendNode, inputs: string[]): BackendNode {
         name: node.name,
         type: 'transformation',
         transformationType: 'filter',
-        config: { condition: cfg.expression ?? 'true' },
+        config: {
+          condition: normalizeFilterCondition(cfg.expression),
+          mode: cfg.filterMode === 'EXCLUDE' ? 'EXCLUDE' : 'INCLUDE',
+          conditionLanguage: 'spark_sql',
+        },
         inputs,
       };
     }
@@ -137,7 +161,11 @@ function serializeNode(node: FrontendNode, inputs: string[]): BackendNode {
         name: node.name,
         type: 'transformation',
         transformationType: 'filter',
-        config: { condition: cfg.expression ?? 'true' },
+        config: {
+          condition: normalizeFilterCondition(cfg.expression),
+          mode: cfg.filterMode === 'EXCLUDE' ? 'EXCLUDE' : 'INCLUDE',
+          conditionLanguage: 'spark_sql',
+        },
         inputs,
       };
 

@@ -38,10 +38,12 @@ export interface TransformSequence {
   id: string; // UUID, unique across the platform
   name: string; // User-friendly name
   description?: string;
+  enabled?: boolean;
 
-  // What column this applies to
-  columnId: string; // ID of the target column in the dataset
-  columnName: string; // Display name
+  // Which column this reads from and writes to
+  columnId: string; // ID of the output column in the dataset
+  columnName: string; // Output/display column name
+  sourceColumn?: string; // Upstream input column name
 
   // Target engine(s) for code generation
   targetEngine: 'spark' | 'postgresql' | 'redshift';
@@ -154,8 +156,10 @@ export function createSequence(
   return {
     id: sequenceId,
     name: `Transform ${columnName}`,
+    enabled: true,
     columnId,
     columnName,
+    sourceColumn: columnName,
     targetEngine,
     steps: [],
     pipelineId,
