@@ -15,7 +15,14 @@
       "Bash(timeout 25 npm run dev)",
       "Bash(PATH=\"/home/venkateswarlu/.nvm/versions/node/v24.14.0/bin:$PATH\" npm install --prefix /home/venkateswarlu/Documents/ETL1/Backend)",
       "Bash(PGPASSWORD=admin123 psql -h localhost -U postgres -d etl_db -c \"SELECT tech_id, tech_code, display_name FROM meta.technology_types WHERE tech_code ILIKE ''%postgres%'' OR tech_code ILIKE ''%jdbc%'';\")",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(psql -d etl_db -c \"\\\\sf catalog.pr_update_connector\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(PGPASSWORD=admin123 psql -U postgres -h localhost -d etl_db -c \":*)",
+      "Bash(PGPASSWORD=admin123 psql -U postgres -h localhost -d etl_db -f /home/venkateswarlu/Documents/ETL1/database/logic/pipeline_logic.sql)",
+      "Bash(npx tsc:*)",
+      "Bash(grep -n \"TRANSFORM_REGISTRY\\\\|ltrim\\\\|upper\\\\|lower\\\\|concat\\\\|abs\\\\|to_number\" /home/venkateswarlu/Documents/ETL1/Frontend/src/transformations/*.ts)"
     ]
   }
 }

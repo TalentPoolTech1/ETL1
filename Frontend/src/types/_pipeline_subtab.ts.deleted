@@ -1,0 +1,15 @@
+export type PipelineSubTab =
+  | 'editor'
+  | 'properties'
+  | 'parameters'
+  | 'validation'
+  | 'history'
+  | 'executions'
+  | 'metrics'
+  | 'code'
+  | 'alerts'
+  | 'logs'
+  | 'dependencies'
+  | 'permissions'
+  | 'activity'
+  | 'lineage';
