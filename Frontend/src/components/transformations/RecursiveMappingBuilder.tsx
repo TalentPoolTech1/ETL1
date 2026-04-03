@@ -579,12 +579,12 @@ function HybridInput({
 }) {
   return (
     <div>
-      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</div>
+      <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">{label}</div>
       <div className="grid gap-2 md:grid-cols-[110px_minmax(0,1fr)]">
         <select
           value={value.mode}
           onChange={e => onChange({ ...value, mode: e.target.value as ValueMode, value: '' })}
-          className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+          className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
         >
           <option value="value">Value</option>
           <option value="column">Column</option>
@@ -594,7 +594,7 @@ function HybridInput({
           <select
             value={value.value}
             onChange={e => onChange({ ...value, value: e.target.value })}
-            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
           >
             <option value="">Select column</option>
             {availableColumns.map(column => (
@@ -606,7 +606,7 @@ function HybridInput({
             value={value.value}
             onChange={e => onChange({ ...value, value: e.target.value })}
             placeholder="Enter value"
-            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
           />
         )}
       </div>
@@ -630,11 +630,11 @@ function ConditionListEditor({
       {safeConditions.map((condition, index) => (
         <div key={condition.id} className={`${index > 0 ? 'border-t border-slate-700' : ''} ${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} p-2`}>
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Condition {index + 1}</div>
+            <div className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">Condition {index + 1}</div>
             <button
               type="button"
               onClick={() => onChange(safeConditions.filter(item => item.id !== condition.id))}
-              className="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-red-300"
+              className="rounded border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[12px] font-semibold text-red-300"
             >
               Delete
             </button>
@@ -659,7 +659,7 @@ function ConditionListEditor({
             <select
               value={condition.operator}
               onChange={e => onChange(safeConditions.map(item => item.id === condition.id ? { ...item, operator: e.target.value as CaseCondition['operator'] } : item))}
-              className="h-8 rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[11px] text-slate-100"
+              className="h-8 rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
             >
               <option value="=">=</option>
               <option value="!=">!=</option>
@@ -684,7 +684,7 @@ function ConditionListEditor({
       <button
         type="button"
         onClick={() => onChange([...safeConditions, createDefaultCondition()])}
-        className="m-2 rounded border border-blue-500/40 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-blue-300"
+        className="m-2 rounded border border-blue-500/40 bg-blue-500/10 px-1.5 py-0.5 text-[12px] font-semibold text-blue-300"
       >
         Add Condition
       </button>
@@ -709,7 +709,7 @@ function TransformationParams({
 }) {
   const entry = TRANSFORMATION_REGISTRY[node.operation];
   if (!entry || entry.params.length === 0) {
-    return <div className="text-[11px] text-slate-400">No parameters required.</div>;
+    return <div className="text-[12px] text-slate-400">No parameters required.</div>;
   }
 
   if (node.operation === 'case_when') {
@@ -727,7 +727,7 @@ function TransformationParams({
                 onChange({ ...node, params: { ...node.params, branches: next } });
               }}
               placeholder="WHEN condition"
-              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
             />
             <input
               value={branch.then ?? ''}
@@ -736,7 +736,7 @@ function TransformationParams({
                 onChange({ ...node, params: { ...node.params, branches: next } });
               }}
               placeholder="THEN value"
-              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
             />
             <button
               type="button"
@@ -744,7 +744,7 @@ function TransformationParams({
                 const next = branches.length === 1 ? [{ when: '', then: '' }] : branches.filter((_: any, rowIdx: number) => rowIdx !== idx);
                 onChange({ ...node, params: { ...node.params, branches: next } });
               }}
-              className="h-7 rounded border border-red-500/30 bg-red-500/10 px-2 text-[10px] text-red-300"
+              className="h-7 rounded border border-red-500/30 bg-red-500/10 px-2 text-[12px] text-red-300"
             >
               Del
             </button>
@@ -754,7 +754,7 @@ function TransformationParams({
           <button
             type="button"
             onClick={() => onChange({ ...node, params: { ...node.params, branches: [...branches, { when: '', then: '' }] } })}
-            className="h-7 rounded border border-blue-500/30 bg-blue-500/10 px-2 text-[10px] text-blue-300"
+            className="h-7 rounded border border-blue-500/30 bg-blue-500/10 px-2 text-[12px] text-blue-300"
           >
             + Branch
           </button>
@@ -762,7 +762,7 @@ function TransformationParams({
             value={node.params.else ?? 'NULL'}
             onChange={e => onChange({ ...node, params: { ...node.params, else: e.target.value } })}
             placeholder="ELSE value"
-            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
           />
         </div>
       </div>
@@ -777,7 +777,7 @@ function TransformationParams({
     return (
       <div className="space-y-2">
         {!dateOpsAllowed && (
-          <div className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">
+          <div className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[12px] text-amber-200">
             Source is not date/timestamp. Add to_date/to_timestamp first, or provide sourceFormat.
           </div>
         )}
@@ -786,7 +786,7 @@ function TransformationParams({
           <select
             value={endOperand.mode}
             onChange={e => onChange({ ...node, params: { ...node.params, endOperand: { mode: e.target.value as ValueMode, value: '' } } })}
-            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+            className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
           >
             <option value="column">End column</option>
             <option value="value">End value</option>
@@ -795,7 +795,7 @@ function TransformationParams({
             <select
               value={endOperand.value}
               onChange={e => onChange({ ...node, params: { ...node.params, endOperand: { ...endOperand, value: e.target.value } } })}
-              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
             >
               <option value="">Select end column</option>
               {availableColumns.map(column => (
@@ -807,18 +807,18 @@ function TransformationParams({
               value={endOperand.value}
               onChange={e => onChange({ ...node, params: { ...node.params, endOperand: { ...endOperand, value: e.target.value } } })}
               placeholder="2026-03-29"
-              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+              className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
             />
           )}
         </div>
 
         <div className="grid gap-1.5 md:grid-cols-2">
           <div>
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Unit</div>
+            <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">Unit</div>
             <select
               value={String(node.params.unit ?? 'DAY')}
               onChange={e => onChange({ ...node, params: { ...node.params, unit: e.target.value } })}
-              className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+              className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
             >
               <option value="DAY">DAY</option>
               <option value="MONTH">MONTH</option>
@@ -828,12 +828,12 @@ function TransformationParams({
 
           {!sourceIsTemporal && (
             <div>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">sourceFormat</div>
+              <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">sourceFormat</div>
               <input
                 value={String(node.params.sourceFormat ?? '')}
                 onChange={e => onChange({ ...node, params: { ...node.params, sourceFormat: e.target.value } })}
                 placeholder="yyyy-MM-dd"
-                className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+                className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
               />
             </div>
           )}
@@ -841,12 +841,12 @@ function TransformationParams({
 
         {endOperand.mode === 'column' && endOperand.value && !isTemporalType(columnTypeMap?.[endOperand.value]) && (
           <div>
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">endFormat</div>
+            <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">endFormat</div>
             <input
               value={String(node.params.endFormat ?? '')}
               onChange={e => onChange({ ...node, params: { ...node.params, endFormat: e.target.value } })}
               placeholder="yyyy-MM-dd"
-              className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+              className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
             />
           </div>
         )}
@@ -862,12 +862,12 @@ function TransformationParams({
         if (param.type === 'number') {
           return (
             <div key={param.id}>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
+              <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
               <input
                 type="number"
                 value={value ?? ''}
                 onChange={e => onChange({ ...node, params: { ...node.params, [param.id]: e.target.value === '' ? '' : Number(e.target.value) } })}
-                className="h-8 w-full rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[11px] text-slate-100"
+                className="h-8 w-full rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
               />
             </div>
           );
@@ -876,11 +876,11 @@ function TransformationParams({
         if (param.type === 'string') {
           return (
             <div key={param.id}>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
+              <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
               <input
                 value={value ?? ''}
                 onChange={e => onChange({ ...node, params: { ...node.params, [param.id]: e.target.value } })}
-                className="h-8 w-full rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[11px] text-slate-100"
+                className="h-8 w-full rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
               />
             </div>
           );
@@ -889,11 +889,11 @@ function TransformationParams({
         if (param.type === 'select') {
           return (
             <div key={param.id}>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
+              <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
               <select
                 value={value ?? ''}
                 onChange={e => onChange({ ...node, params: { ...node.params, [param.id]: e.target.value } })}
-                className="h-8 w-full rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[11px] text-slate-100"
+                className="h-8 w-full rounded-md border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
               >
                 <option value="">Select</option>
                 {(param.options || []).map(option => (
@@ -906,7 +906,7 @@ function TransformationParams({
 
         if (param.type === 'toggle') {
           return (
-            <label key={param.id} className="flex h-7 items-center gap-2 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-200">
+            <label key={param.id} className="flex h-7 items-center gap-2 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-200">
               <input
                 type="checkbox"
                 checked={Boolean(value)}
@@ -921,11 +921,11 @@ function TransformationParams({
         if (param.type === 'expression') {
           return (
             <div key={param.id}>
-              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
+              <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
               <input
                 value={value ?? ''}
                 onChange={e => onChange({ ...node, params: { ...node.params, [param.id]: e.target.value } })}
-                className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+                className="h-7 w-full rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
               />
             </div>
           );
@@ -935,7 +935,7 @@ function TransformationParams({
           const listValue: string[] = Array.isArray(value) ? value : [];
           return (
             <div key={param.id} className="space-y-1.5">
-              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
+              <div className="text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.id}</div>
               {listValue.map((item, idx) => (
                 <div key={`${param.id}_${idx}`} className="grid grid-cols-[minmax(0,1fr)_52px] gap-1.5">
                   <input
@@ -945,7 +945,7 @@ function TransformationParams({
                       next[idx] = e.target.value;
                       onChange({ ...node, params: { ...node.params, [param.id]: next } });
                     }}
-                    className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[10px] text-slate-100"
+                    className="h-7 rounded border border-slate-600 bg-[#1f2238] px-2 text-[12px] text-slate-100"
                   />
                   <button
                     type="button"
@@ -953,7 +953,7 @@ function TransformationParams({
                       const next = listValue.filter((_, rowIdx) => rowIdx !== idx);
                       onChange({ ...node, params: { ...node.params, [param.id]: next } });
                     }}
-                    className="h-7 rounded border border-red-500/30 bg-red-500/10 px-2 text-[10px] text-red-300"
+                    className="h-7 rounded border border-red-500/30 bg-red-500/10 px-2 text-[12px] text-red-300"
                   >
                     Del
                   </button>
@@ -962,7 +962,7 @@ function TransformationParams({
               <button
                 type="button"
                 onClick={() => onChange({ ...node, params: { ...node.params, [param.id]: [...listValue, ''] } })}
-                className="h-7 rounded border border-blue-500/30 bg-blue-500/10 px-2 text-[10px] text-blue-300"
+                className="h-7 rounded border border-blue-500/30 bg-blue-500/10 px-2 text-[12px] text-blue-300"
               >
                 + Item
               </button>
@@ -1001,7 +1001,7 @@ function TransformationParams({
 
 function OperationBadge({ operation }: { operation: PrimitiveOperation }) {
   const label = operation.toUpperCase();
-  return <span className="rounded bg-[#101426] px-2 py-0.5 text-[10px] font-semibold text-slate-300">{label}</span>;
+  return <span className="rounded bg-[#101426] px-2 py-0.5 text-[12px] font-semibold text-slate-300">{label}</span>;
 }
 
 const AVAILABLE_OPERATIONS = Object.keys(TRANSFORMATION_REGISTRY)
@@ -1094,7 +1094,7 @@ function isOperationAllowed(prev: OutputKind, operation: PrimitiveOperation): bo
 function GroupSummary({ group }: { group: GroupNode }) {
   const { steps, nestedGroups } = countNested(group);
   return (
-    <div className="text-[11px] text-slate-400">
+    <div className="text-[12px] text-slate-400">
       {group.logic.toUpperCase()} ({steps} steps, {nestedGroups} nested)
     </div>
   );
@@ -1156,7 +1156,7 @@ function NodeEditor(props: NodeEditorProps) {
             <select
               value={node.operation}
               onChange={e => onNodeChange(node.id, () => createDefaultTransformation(e.target.value as PrimitiveOperation))}
-              className="h-6 rounded border border-slate-600 bg-[#1f2238] px-1.5 text-[10px] text-slate-100"
+              className="h-6 rounded border border-slate-600 bg-[#1f2238] px-1.5 text-[12px] text-slate-100"
             >
               {AVAILABLE_OPERATIONS.map(operation => (
                 <option
@@ -1209,7 +1209,7 @@ function NodeEditor(props: NodeEditorProps) {
           </div>
 
           {!dateOpsAllowed && DATE_REQUIRED_OPERATIONS.has(node.operation) && (
-            <div className="mb-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-200">
+            <div className="mb-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[12px] text-amber-200">
               Date operation selected on non-date source. Convert source to date/timestamp first.
             </div>
           )}
@@ -1224,7 +1224,7 @@ function NodeEditor(props: NodeEditorProps) {
           />
 
           {errors.length > 0 && (
-            <div className="mt-2 text-[11px] text-red-300">{errors[0]}</div>
+            <div className="mt-2 text-[12px] text-red-300">{errors[0]}</div>
           )}
         </div>
       </div>
@@ -1252,14 +1252,14 @@ function NodeEditor(props: NodeEditorProps) {
           <select
             value={node.logic}
             onChange={e => onNodeChange(node.id, current => ({ ...(current as GroupNode), logic: e.target.value as GroupNode['logic'] }))}
-            className="h-6 rounded border border-slate-600 bg-[#1f2238] px-1.5 text-[10px] text-slate-100"
+            className="h-6 rounded border border-slate-600 bg-[#1f2238] px-1.5 text-[12px] text-slate-100"
           >
             <option value="parallel">Parallel Group</option>
             <option value="sequence">Sequence Group</option>
             <option value="case">Case Group</option>
           </select>
 
-          <span className="rounded bg-[#101426] px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+          <span className="rounded bg-[#101426] px-2 py-0.5 text-[12px] font-semibold text-slate-300">
             {summary.steps} steps
           </span>
 
@@ -1346,7 +1346,7 @@ function NodeEditor(props: NodeEditorProps) {
             )}
 
             {node.children.length === 0 ? (
-              <div className="rounded-md border border-dashed border-slate-700 bg-[#101323] px-3 py-3 text-[11px] text-slate-500">
+              <div className="rounded-md border border-dashed border-slate-700 bg-[#101323] px-3 py-3 text-[12px] text-slate-300">
                 Empty group. Add a transformation or subgroup.
               </div>
             ) : (
@@ -1419,7 +1419,7 @@ function NodeEditor(props: NodeEditorProps) {
         )}
 
         {errors.length > 0 && (
-          <div className="mt-2 text-[11px] text-red-300">{errors[0]}</div>
+          <div className="mt-2 text-[12px] text-red-300">{errors[0]}</div>
         )}
       </div>
     </div>
@@ -1531,12 +1531,12 @@ export function RecursiveMappingBuilder({
     const setParam = (nextValue: any) => updateRow(row.id, current => ({ ...current, params: { ...current.params, [param.id]: nextValue } }));
 
     if (param.type === 'number') {
-      return <input value={value ?? ''} type="number" onChange={e => setParam(e.target.value === '' ? '' : Number(e.target.value))} className="h-6 w-[90px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100" />;
+      return <input value={value ?? ''} type="number" onChange={e => setParam(e.target.value === '' ? '' : Number(e.target.value))} className="h-6 w-[90px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100" />;
     }
 
     if (param.type === 'select') {
       return (
-        <select value={value ?? ''} onChange={e => setParam(e.target.value)} className="h-6 min-w-[110px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100">
+        <select value={value ?? ''} onChange={e => setParam(e.target.value)} className="h-6 min-w-[110px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100">
           <option value="">Select</option>
           {(param.options || []).map(option => <option key={option} value={option}>{option}</option>)}
         </select>
@@ -1545,7 +1545,7 @@ export function RecursiveMappingBuilder({
 
     if (param.type === 'toggle') {
       return (
-        <label className="flex h-6 items-center gap-1 rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-200">
+        <label className="flex h-6 items-center gap-1 rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-200">
           <input type="checkbox" checked={Boolean(value)} onChange={e => setParam(e.target.checked)} className="h-3 w-3" />
           <span>{param.id}</span>
         </label>
@@ -1559,7 +1559,7 @@ export function RecursiveMappingBuilder({
           <select
             value={hybrid.mode}
             onChange={e => setParam({ mode: e.target.value as ValueMode, value: '' })}
-            className="h-6 w-[72px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+            className="h-6 w-[72px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
           >
             <option value="value">Val</option>
             <option value="column">Col</option>
@@ -1568,7 +1568,7 @@ export function RecursiveMappingBuilder({
             <select
               value={hybrid.value}
               onChange={e => setParam({ ...hybrid, value: e.target.value })}
-              className="h-6 min-w-[120px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+              className="h-6 min-w-[120px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
             >
               <option value="">Column</option>
               {availableColumns.map(column => <option key={column} value={column}>{column}</option>)}
@@ -1577,7 +1577,7 @@ export function RecursiveMappingBuilder({
             <input
               value={hybrid.value}
               onChange={e => setParam({ ...hybrid, value: e.target.value })}
-              className="h-6 w-[120px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+              className="h-6 w-[120px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
               placeholder="value"
             />
           )}
@@ -1591,17 +1591,17 @@ export function RecursiveMappingBuilder({
         <input
           value={current}
           onChange={e => setParam(e.target.value.split(',').map(item => item.trim()).filter(Boolean))}
-          className="h-6 w-[140px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+          className="h-6 w-[140px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
           placeholder="a,b,c"
         />
       );
     }
 
     if (param.type === 'expression') {
-      return <input value={value ?? ''} onChange={e => setParam(e.target.value)} className="h-6 w-[150px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100" placeholder={param.id} />;
+      return <input value={value ?? ''} onChange={e => setParam(e.target.value)} className="h-6 w-[150px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100" placeholder={param.id} />;
     }
 
-    return <input value={value ?? ''} onChange={e => setParam(e.target.value)} className="h-6 w-[120px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100" placeholder={param.id} />;
+    return <input value={value ?? ''} onChange={e => setParam(e.target.value)} className="h-6 w-[120px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100" placeholder={param.id} />;
   };
 
   const activeRowIndex = rows.findIndex(row => row.id === activeRowId);
@@ -1610,11 +1610,11 @@ export function RecursiveMappingBuilder({
     <section>
       <div className="flex items-center justify-between border-b border-slate-800 px-1 py-1.5">
         <div>
-          <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-blue-300">Transform</div>
-          <div className="text-[10px] text-slate-400">Zebra rows. Click a line to edit. Add inserts below the active line.</div>
+          <div className="text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">Transform</div>
+          <div className="text-[12px] text-slate-400">Zebra rows. Click a line to edit. Add inserts below the active line.</div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-slate-500">{activeRowIndex >= 0 ? `Editing line ${activeRowIndex + 1}` : 'No active line'}</span>
+          <span className="text-[12px] text-slate-300">{activeRowIndex >= 0 ? `Editing line ${activeRowIndex + 1}` : 'No active line'}</span>
           <button
             type="button"
             onClick={() => addRow(activeRowIndex >= 0 ? activeRowIndex + 1 : undefined, activeRowIndex >= 0 ? Number(rows[activeRowIndex]?.params.__indent ?? 0) : 0)}
@@ -1628,7 +1628,7 @@ export function RecursiveMappingBuilder({
 
       <div className="max-h-[460px] overflow-auto">
         {rows.length === 0 ? (
-          <div className="px-3 py-4 text-[11px] text-slate-500">No transformations yet. Click + to add a row.</div>
+          <div className="px-3 py-4 text-[12px] text-slate-300">No transformations yet. Click + to add a row.</div>
         ) : (
           <table className="w-full table-fixed">
             <colgroup>
@@ -1637,7 +1637,7 @@ export function RecursiveMappingBuilder({
               <col />
               <col className="w-[172px]" />
             </colgroup>
-            <thead className="sticky top-0 z-10 bg-[#101426] text-left text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            <thead className="sticky top-0 z-10 bg-[#101426] text-left text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
               <tr>
                 <th className="px-2 py-1">#</th>
                 <th className="px-2 py-1">Transformation</th>
@@ -1661,7 +1661,7 @@ export function RecursiveMappingBuilder({
                       onClick={() => setActiveRowId(row.id)}
                       className={`${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} border-t border-slate-700 ${isActive ? 'shadow-[inset_2px_0_0_0_#3b82f6]' : ''} cursor-pointer`}
                     >
-                      <td className="px-2 py-0.5 align-middle text-[10px] text-slate-500">
+                      <td className="px-2 py-0.5 align-middle text-[12px] text-slate-300">
                         <div className="flex items-center gap-1">
                           <span className={`inline-block h-1.5 w-1.5 rounded-full ${isActive ? 'bg-blue-400' : 'bg-slate-700'}`} />
                           <span>L{index + 1}</span>
@@ -1676,7 +1676,7 @@ export function RecursiveMappingBuilder({
                               setActiveRowId(row.id);
                               updateRow(row.id, current => createDefaultTransformation(e.target.value as PrimitiveOperation));
                             }}
-                            className="h-6 w-full rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+                            className="h-6 w-full rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
                           >
                             {Object.entries(groupedOperations).map(([category, operations]) => (
                               <optgroup key={category} label={categoryLabel(category)}>
@@ -1704,7 +1704,7 @@ export function RecursiveMappingBuilder({
                               return next;
                               });
                             }}
-                            className="h-6 rounded border border-slate-600 bg-[#1e2035] px-2 text-[10px] text-slate-200"
+                            className="h-6 rounded border border-slate-600 bg-[#1e2035] px-2 text-[12px] text-slate-200"
                           >
                             {showCase ? 'Hide CASE' : 'Edit CASE'}
                           </button>
@@ -1717,7 +1717,7 @@ export function RecursiveMappingBuilder({
                                 setActiveRowId(row.id);
                                 updateRow(row.id, current => ({ ...current, params: { ...current.params, endOperand: { mode: e.target.value as ValueMode, value: '' } } }));
                               }}
-                              className="h-6 w-[84px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+                              className="h-6 w-[84px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
                             >
                               <option value="column">End col</option>
                               <option value="value">End val</option>
@@ -1730,7 +1730,7 @@ export function RecursiveMappingBuilder({
                                   setActiveRowId(row.id);
                                   updateRow(row.id, current => ({ ...current, params: { ...current.params, endOperand: { ...(current.params.endOperand || defaultHybrid('column')), value: e.target.value } } }));
                                 }}
-                                className="h-6 min-w-[110px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+                                className="h-6 min-w-[110px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
                               >
                                 <option value="">Column</option>
                                 {availableColumns.map(column => <option key={column} value={column}>{column}</option>)}
@@ -1743,7 +1743,7 @@ export function RecursiveMappingBuilder({
                                   setActiveRowId(row.id);
                                   updateRow(row.id, current => ({ ...current, params: { ...current.params, endOperand: { ...(current.params.endOperand || defaultHybrid('value')), value: e.target.value } } }));
                                 }}
-                                className="h-6 w-[110px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+                                className="h-6 w-[110px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
                                 placeholder="2026-03-29"
                               />
                             )}
@@ -1754,7 +1754,7 @@ export function RecursiveMappingBuilder({
                                 setActiveRowId(row.id);
                                 updateRow(row.id, current => ({ ...current, params: { ...current.params, unit: e.target.value } }));
                               }}
-                              className="h-6 w-[76px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+                              className="h-6 w-[76px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
                             >
                               <option value="DAY">DAY</option>
                               <option value="MONTH">MONTH</option>
@@ -1767,7 +1767,7 @@ export function RecursiveMappingBuilder({
                                 setActiveRowId(row.id);
                                 updateRow(row.id, current => ({ ...current, params: { ...current.params, sourceFormat: e.target.value } }));
                               }}
-                              className="h-6 w-[98px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+                              className="h-6 w-[98px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
                               placeholder="src fmt"
                             />
                             <input
@@ -1777,7 +1777,7 @@ export function RecursiveMappingBuilder({
                                 setActiveRowId(row.id);
                                 updateRow(row.id, current => ({ ...current, params: { ...current.params, endFormat: e.target.value } }));
                               }}
-                              className="h-6 w-[98px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
+                              className="h-6 w-[98px] rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[12px] text-slate-100"
                               placeholder="end fmt"
                             />
                           </div>
@@ -1785,14 +1785,14 @@ export function RecursiveMappingBuilder({
                           <div className="flex flex-wrap items-center gap-1" onClick={e => e.stopPropagation()}>
                             {(registryEntry?.params || []).map(param => (
                               <div key={`${row.id}_${param.id}`} className="flex items-center gap-1">
-                                <span className="text-[9px] uppercase tracking-[0.14em] text-slate-500">{param.id}</span>
+                                <span className="text-[12px] uppercase tracking-[0.14em] text-slate-300">{param.id}</span>
                                 {renderInlineParam(row, param)}
                               </div>
                             ))}
-                            {(registryEntry?.params || []).length === 0 && <span className="text-[10px] text-slate-500">No parameters</span>}
+                            {(registryEntry?.params || []).length === 0 && <span className="text-[12px] text-slate-300">No parameters</span>}
                           </div>
                         )}
-                        {rowErrors.length > 0 && <div className="mt-1 text-[10px] text-red-300">{rowErrors[0]}</div>}
+                        {rowErrors.length > 0 && <div className="mt-1 text-[12px] text-red-300">{rowErrors[0]}</div>}
                       </td>
                       <td className="px-2 py-0.5 align-middle">
                         <div className="flex items-center gap-1">
@@ -1824,7 +1824,7 @@ export function RecursiveMappingBuilder({
                     </tr>
                     {isCase && showCase && (
                       <tr className="border-t border-slate-700 bg-[#0f1427]">
-                        <td className="px-2 py-1 align-top text-[10px] text-slate-500"> </td>
+                        <td className="px-2 py-1 align-top text-[12px] text-slate-300"> </td>
                         <td colSpan={3} className="px-2 py-1 align-top">
                           <TransformationParams
                             node={row}

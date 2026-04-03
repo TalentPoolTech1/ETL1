@@ -67,49 +67,49 @@ export function PipelineDependenciesSubTab({ pipelineId }: { pipelineId: string 
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-[12px] font-medium text-slate-300">Dependencies</span>
-        <button onClick={load} className="ml-auto text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-1 border border-slate-700 px-2 py-1 rounded transition-colors">
+        <span className="text-[12px] font-medium text-white">Dependencies</span>
+        <button onClick={load} className="ml-auto text-[12px] text-slate-300 hover:text-white flex items-center gap-1 border border-slate-700 px-2 py-1 rounded transition-colors">
           <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
       {loading ? (
-        <div className="text-sm text-slate-500 py-8 text-center">Loading dependencies…</div>
+        <div className="text-sm text-slate-300 py-8 text-center">Loading dependencies…</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-3xl">
           {/* Upstream */}
           <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">
+            <div className="flex items-center gap-2 text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">
               <ArrowRight className="w-3.5 h-3.5 text-blue-400" /> Upstream Dependencies
             </div>
             {upstream.length === 0 ? (
-              <p className="text-[12px] text-slate-600">No upstream dependencies.</p>
+              <p className="text-[12px] text-slate-400">No upstream dependencies.</p>
             ) : upstream.map(d => (
               <div key={d.id} className="flex items-center gap-2 py-2 border-b border-slate-800/50 last:border-0">
                 {iconFor(d.type)}
-                <span className="text-[12px] text-slate-300">{d.name}</span>
-                <span className="text-[11px] text-slate-600 capitalize ml-auto">{d.type}</span>
+                <span className="text-[12px] text-white">{d.name}</span>
+                <span className="text-[12px] text-slate-400 capitalize ml-auto">{d.type}</span>
               </div>
             ))}
           </div>
 
           {/* Downstream */}
           <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-            <div className="flex items-center gap-2 text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">
+            <div className="flex items-center gap-2 text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">
               <ArrowLeft className="w-3.5 h-3.5 text-purple-400" /> Downstream Impact
             </div>
             {downstream.length === 0 ? (
-              <p className="text-[12px] text-slate-600">No downstream dependents.</p>
+              <p className="text-[12px] text-slate-400">No downstream dependents.</p>
             ) : downstream.map(d => (
               <div key={d.id} className="flex items-center gap-2 py-2 border-b border-slate-800/50 last:border-0">
                 {iconFor(d.type)}
-                <span className="text-[12px] text-slate-300">{d.name}</span>
-                <span className="text-[11px] text-slate-600 capitalize ml-auto">{d.type}</span>
+                <span className="text-[12px] text-white">{d.name}</span>
+                <span className="text-[12px] text-slate-400 capitalize ml-auto">{d.type}</span>
               </div>
             ))}
           </div>
         </div>
       )}
-      <p className="text-[11px] text-slate-600 mt-4">Dependency data is populated from execution lineage records. Run the pipeline to generate lineage.</p>
+      <p className="text-[12px] text-slate-400 mt-4">Dependency data is populated from execution lineage records. Run the pipeline to generate lineage.</p>
     </div>
   );
 }

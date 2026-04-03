@@ -3,3 +3,6 @@ dist/
 logs/
 *.log
 .env
+.run_artifacts/
+.tmp_executions/
+drivers/

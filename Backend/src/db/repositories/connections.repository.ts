@@ -28,6 +28,8 @@ export interface ConnectorRow {
     conn_max_pool_size_num: number;
     conn_idle_timeout_sec?: number;
     conn_jdbc_driver_class: string | null;
+    conn_jdbc_driver_maven_coords: string | null;
+    conn_jdbc_driver_paths: string | null;
     conn_test_query: string | null;
     conn_spark_config_json: Record<string, string> | null;
     health_status_code: string | null;
@@ -43,6 +45,29 @@ export interface ConnectorDecryptedRow extends ConnectorRow {
     conn_secrets_json: Record<string, unknown> | null;
     conn_ssh_tunnel_json: Record<string, unknown> | null;
     conn_proxy_json: Record<string, unknown> | null;
+}
+
+export interface FileFormatOptionsRow {
+    file_format_code: string | null;
+    field_separator_char: string | null;
+    decimal_separator_char: string | null;
+    date_format_text: string | null;
+    timestamp_format_text: string | null;
+    encoding_standard_code: string | null;
+    has_header_flag: boolean | null;
+    quote_char_text: string | null;
+    escape_char_text: string | null;
+    null_value_text: string | null;
+    line_separator_text: string | null;
+    multiline_flag: boolean | null;
+    sheet_name_text: string | null;
+    sheet_index_num: number | null;
+    root_tag_text: string | null;
+    row_tag_text: string | null;
+    corrupt_record_mode: string | null;
+    column_widths_text: string | null;
+    skip_rows_num: number | null;
+    compression_code: string | null;
 }
 
 export interface ConnectorHealthRow {
@@ -89,6 +114,8 @@ export interface CreateConnectorParams {
     configJson: Record<string, unknown>;
     secretsJson?: Record<string, unknown> | null;
     jdbcDriverClass?: string | null;
+    jdbcDriverMavenCoords?: string | null;
+    jdbcDriverPaths?: string | null;
     testQuery?: string | null;
     sparkConfigJson?: Record<string, string> | null;
     sslMode?: string;
@@ -107,6 +134,8 @@ export interface UpdateConnectorParams {
     configJson?: Record<string, unknown>;
     secretsJson?: Record<string, unknown> | null;
     jdbcDriverClass?: string | null;
+    jdbcDriverMavenCoords?: string | null;
+    jdbcDriverPaths?: string | null;
     testQuery?: string | null;
     sparkConfigJson?: Record<string, string> | null;
     sslMode?: string;
@@ -160,6 +189,8 @@ export class ConnectionsRepository {
                     conn_max_pool_size_num,
                     NULL::INTEGER     AS conn_idle_timeout_sec,
                     NULL::TEXT        AS conn_jdbc_driver_class,
+                    NULL::TEXT        AS conn_jdbc_driver_maven_coords,
+                    NULL::TEXT        AS conn_jdbc_driver_paths,
                     NULL::TEXT        AS conn_test_query,
                     NULL::JSONB       AS conn_spark_config_json,
                     health_status_code,
@@ -198,6 +229,8 @@ export class ConnectionsRepository {
                     conn_max_pool_size_num,
                     conn_idle_timeout_sec,
                     conn_jdbc_driver_class,
+                    conn_jdbc_driver_maven_coords,
+                    conn_jdbc_driver_paths,
                     conn_test_query,
                     conn_spark_config_json,
                     health_status_code,
@@ -227,8 +260,40 @@ export class ConnectionsRepository {
                 `SELECT * FROM catalog.fn_get_connector_decrypted($1::uuid)`,
                 [connectorId],
             );
-            return result.rows[0] ?? null;
+            const row = result.rows[0] ?? null;
+            if (!row) return null;
+            const fileFormatOptions = await this.getFileFormatOptions(connectorId, userId, encryptionKey, client);
+            if (fileFormatOptions) {
+                row.conn_config_json = {
+                    ...(row.conn_config_json ?? {}),
+                    ...fileFormatOptions,
+                };
+            }
+            return row;
         });
+    }
+
+    async getFileFormatOptions(
+        connectorId: string,
+        userId: string,
+        encryptionKey: string,
+        existingClient?: PoolClient,
+    ): Promise<Record<string, unknown> | null> {
+        const load = async (client: PoolClient) => {
+            if (!existingClient) {
+                await this.setSession(client, userId, encryptionKey);
+            }
+            const result: QueryResult<FileFormatOptionsRow> = await client.query(
+                `SELECT * FROM catalog.fn_get_file_format_options($1::uuid)`,
+                [connectorId],
+            );
+            const row = result.rows[0] ?? null;
+            return row ? ({ ...row } as Record<string, unknown>) : null;
+        };
+
+        if (existingClient) return load(existingClient);
+
+        return db.transaction(async client => load(client));
     }
 
     /**
@@ -243,7 +308,7 @@ export class ConnectionsRepository {
             await this.setSession(client, params.userId, params.encryptionKey);
             const result: QueryResult<{ p_connector_id: string }> = await client.query(
                 `CALL catalog.pr_create_connector(
-                    $1, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid, $14::uuid, null
+                    $1, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid, $14::uuid, $15, $16, null
                 )`,
                 [
                     params.connectorDisplayName,
@@ -260,6 +325,8 @@ export class ConnectionsRepository {
                     params.idleTimeoutSec ?? 600,
                     params.userId,
                     params.technologyId ?? null,
+                    params.jdbcDriverMavenCoords ?? null,
+                    params.jdbcDriverPaths ?? null,
                 ],
             );
 
@@ -276,7 +343,7 @@ export class ConnectionsRepository {
             await this.setSession(client, params.userId, params.encryptionKey);
             await client.query(
                 `CALL catalog.pr_update_connector(
-                    $1::uuid, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid, $14::uuid
+                    $1::uuid, $2, $3::jsonb, $4::jsonb, $5, $6, $7::jsonb, $8, $9::jsonb, $10::jsonb, $11, $12, $13::uuid, $14::uuid, $15, $16
                 )`,
                 [
                     params.connectorId,
@@ -293,6 +360,8 @@ export class ConnectionsRepository {
                     params.idleTimeoutSec ?? null,
                     params.userId,
                     params.technologyId ?? null,
+                    params.jdbcDriverMavenCoords ?? null,
+                    params.jdbcDriverPaths ?? null,
                 ],
             );
         });

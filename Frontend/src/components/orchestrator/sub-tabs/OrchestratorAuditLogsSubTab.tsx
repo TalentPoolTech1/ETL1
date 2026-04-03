@@ -82,7 +82,7 @@ export function OrchestratorAuditLogsSubTab({ orchId }: { orchId: string }) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-neutral-200 bg-white flex-shrink-0">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 bg-[#161b25] flex-shrink-0">
         <Input
           placeholder="Search by user, action, or summary…"
           value={search}
@@ -119,9 +119,9 @@ export function OrchestratorAuditLogsSubTab({ orchId }: { orchId: string }) {
             {filtered.map(entry => (
               <div key={entry.id} className="relative pl-12">
                 {/* Dot */}
-                <div className="absolute left-2.5 top-2 w-3 h-3 rounded-full bg-white border-2 border-neutral-300" />
+                <div className="absolute left-2.5 top-2 w-3 h-3 rounded-full bg-[#161b25] border-2 border-slate-700" />
 
-                <div className="bg-white border border-neutral-200 rounded-lg p-4 hover:border-neutral-300 transition-colors">
+                <div className="bg-[#161b25] border border-slate-800 rounded-lg p-4 hover:border-slate-700 transition-colors">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">

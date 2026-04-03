@@ -46,7 +46,7 @@ const ACTION_COLORS: Record<string, string> = {
 
 function ActionBadge({ action }: { action: string }) {
   const color = ACTION_COLORS[action] ?? 'text-slate-400';
-  return <span className={`font-medium text-[11px] ${color}`}>{action}</span>;
+  return <span className={`font-medium text-[12px] ${color}`}>{action}</span>;
 }
 
 export function ObjectHistoryGrid({ rows, loading, emptyMessage = 'No history records' }: ObjectHistoryGridProps) {
@@ -68,17 +68,17 @@ export function ObjectHistoryGrid({ rows, loading, emptyMessage = 'No history re
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-300 pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search history…"
-            className="w-full h-7 pl-7 pr-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-300 placeholder-slate-600 outline-none focus:border-blue-600 focus:ring-0"
+            className="w-full h-7 pl-7 pr-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-300 placeholder-slate-500 outline-none focus:border-blue-600 focus:ring-0"
           />
         </div>
         <div className="flex items-center gap-1">
-          <Filter className="w-3.5 h-3.5 text-slate-500" />
+          <Filter className="w-3.5 h-3.5 text-slate-300" />
           <select
             value={actionFilter}
             onChange={e => setActionFilter(e.target.value)}
@@ -94,19 +94,19 @@ export function ObjectHistoryGrid({ rows, loading, emptyMessage = 'No history re
         >
           <Download className="w-3 h-3" /> Export
         </button>
-        <span className="text-[11px] text-slate-600 ml-auto">{filtered.length} records</span>
+        <span className="text-[12px] text-slate-400 ml-auto">{filtered.length} records</span>
       </div>
 
       {/* Table */}
       <div className="flex-1 overflow-auto min-h-0">
         {loading ? (
-          <div className="flex items-center justify-center h-32 text-sm text-slate-500">Loading history…</div>
+          <div className="flex items-center justify-center h-32 text-sm text-slate-300">Loading history…</div>
         ) : filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-sm text-slate-600">{emptyMessage}</div>
+          <div className="flex items-center justify-center h-32 text-sm text-slate-400">{emptyMessage}</div>
         ) : (
           <table className="w-full border-collapse text-[12px]">
             <thead className="sticky top-0 bg-[#0a0c15] z-10">
-              <tr className="text-left text-[11px] text-slate-500 border-b border-slate-800">
+              <tr className="text-left text-[12px] text-slate-300 border-b border-slate-800">
                 <th className="px-3 py-2 font-medium">Timestamp</th>
                 <th className="px-3 py-2 font-medium">Action</th>
                 <th className="px-3 py-2 font-medium">Actor</th>
@@ -129,8 +129,8 @@ export function ObjectHistoryGrid({ rows, loading, emptyMessage = 'No history re
                   <td className="px-3 py-1.5 text-slate-400">{row.objectArea ?? row.fieldChanged ?? '—'}</td>
                   <td className="px-3 py-1.5 text-red-400/80 max-w-[150px] truncate" title={row.oldValue}>{row.oldValue ?? '—'}</td>
                   <td className="px-3 py-1.5 text-emerald-400/80 max-w-[150px] truncate" title={row.newValue}>{row.newValue ?? '—'}</td>
-                  <td className="px-3 py-1.5 text-slate-500">{row.version ?? '—'}</td>
-                  <td className="px-3 py-1.5 text-slate-500 max-w-[200px] truncate" title={row.comment}>{row.comment ?? '—'}</td>
+                  <td className="px-3 py-1.5 text-slate-300">{row.version ?? '—'}</td>
+                  <td className="px-3 py-1.5 text-slate-300 max-w-[200px] truncate" title={row.comment}>{row.comment ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

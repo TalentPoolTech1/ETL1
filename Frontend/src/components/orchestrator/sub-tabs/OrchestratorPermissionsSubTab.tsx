@@ -193,7 +193,7 @@ export function OrchestratorPermissionsSubTab({ orchId }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Inheritance banner */}
-      <div className="flex items-center justify-between p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
+      <div className="flex items-center justify-between p-4 bg-neutral-50 border border-slate-800 rounded-lg">
         <div>
           <div className="text-sm font-medium text-neutral-800">Inherit permissions from project</div>
           <div className="text-xs text-neutral-500 mt-0.5">
@@ -213,7 +213,7 @@ export function OrchestratorPermissionsSubTab({ orchId }: Props) {
           }}
           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!projectScoped ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${inheritFromProject ? 'bg-primary-600' : 'bg-neutral-300'}`}
         >
-          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${inheritFromProject ? 'translate-x-6' : 'translate-x-1'}`} />
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-[#161b25] shadow transition-transform ${inheritFromProject ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
       </div>
 
@@ -242,7 +242,7 @@ export function OrchestratorPermissionsSubTab({ orchId }: Props) {
               <select
                 value={newUserId}
                 onChange={e => setNewUserId(e.target.value)}
-                className="flex-1 px-2 py-1.5 border border-neutral-300 rounded-md text-sm bg-white"
+                className="flex-1 px-2 py-1.5 border border-slate-700 rounded-md text-sm bg-[#161b25]"
               >
                 {filteredUsers.map(user => (
                   <option key={user.userId} value={user.userId}>{user.label}</option>
@@ -251,7 +251,7 @@ export function OrchestratorPermissionsSubTab({ orchId }: Props) {
               <select
                 value={newRoleId}
                 onChange={e => setNewRoleId(e.target.value)}
-                className="px-2 py-1.5 border border-neutral-300 rounded-md text-sm bg-white"
+                className="px-2 py-1.5 border border-slate-700 rounded-md text-sm bg-[#161b25]"
               >
                 {roles.map(role => (
                   <option key={role.roleId} value={role.roleId}>{role.roleName}</option>
@@ -266,7 +266,7 @@ export function OrchestratorPermissionsSubTab({ orchId }: Props) {
         {loading ? (
           <div className="text-sm text-neutral-400 py-4">Loading permissions…</div>
         ) : (
-          <div className="border border-neutral-200 rounded-lg overflow-hidden">
+          <div className="border border-slate-800 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-neutral-50">
                 <tr>

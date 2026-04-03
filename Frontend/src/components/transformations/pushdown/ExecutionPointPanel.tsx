@@ -84,13 +84,13 @@ function ExecutionPointButton({
         ${isSelected
           ? 'border-blue-500 bg-blue-50 text-blue-900'
           : disabled || isForcedLocked
-            ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-            : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50 cursor-pointer'}
+            ? 'border-slate-800 bg-[#0d0f1a] text-slate-300 cursor-not-allowed'
+            : 'border-slate-800 bg-[#161b25] text-slate-200 hover:border-slate-700 hover:bg-[#0d0f1a] cursor-pointer'}
       `}
     >
       {content.icon}
       <div className="font-medium">{content.label}</div>
-      <div className="text-xs text-gray-500">{content.desc}</div>
+      <div className="text-xs text-slate-300">{content.desc}</div>
     </button>
   );
 }
@@ -122,9 +122,9 @@ function ImpactPreview({
       </div>
 
       {impact.affectedSteps.length > 0 && (
-        <div className="mb-3 p-2 bg-white rounded border border-amber-100">
-          <div className="text-sm font-medium text-gray-700 mb-2">Affected steps:</div>
-          <ul className="text-sm text-gray-600 space-y-1">
+        <div className="mb-3 p-2 bg-[#161b25] rounded border border-amber-100">
+          <div className="text-sm font-medium text-slate-200 mb-2">Affected steps:</div>
+          <ul className="text-sm text-slate-300 space-y-1">
             {impact.affectedSteps.map((stepId, idx) => (
               <li key={idx} className="pl-4 flex items-center gap-2">
                 <ChevronRight className="w-3 h-3" />
@@ -136,8 +136,8 @@ function ImpactPreview({
       )}
 
       {impact.warnings.length > 0 && (
-        <div className="mb-3 p-2 bg-white rounded border border-amber-100">
-          <div className="text-sm font-medium text-gray-700 mb-2">Warnings:</div>
+        <div className="mb-3 p-2 bg-[#161b25] rounded border border-amber-100">
+          <div className="text-sm font-medium text-slate-200 mb-2">Warnings:</div>
           <ul className="text-sm text-amber-700 space-y-1">
             {impact.warnings.map((warning, idx) => (
               <li key={idx} className="pl-4 flex items-center gap-2">
@@ -150,8 +150,8 @@ function ImpactPreview({
       )}
 
       {impact.estimatedPerformanceImpact && (
-        <div className="mb-3 p-2 bg-white rounded border border-amber-100">
-          <div className="text-sm font-medium text-gray-700 mb-1">Performance impact:</div>
+        <div className="mb-3 p-2 bg-[#161b25] rounded border border-amber-100">
+          <div className="text-sm font-medium text-slate-200 mb-1">Performance impact:</div>
           <div className="flex items-center gap-2">
             <Zap
               className={`w-4 h-4 ${
@@ -162,7 +162,7 @@ function ImpactPreview({
                     : 'text-green-500'
               }`}
             />
-            <span className="text-sm text-gray-600">{impact.estimatedPerformanceImpact}</span>
+            <span className="text-sm text-slate-300">{impact.estimatedPerformanceImpact}</span>
           </div>
         </div>
       )}
@@ -176,7 +176,7 @@ function ImpactPreview({
         </button>
         <button
           onClick={onCancel}
-          className="flex-1 px-3 py-2 bg-white border border-amber-200 text-amber-700 text-sm font-medium rounded hover:bg-amber-50 transition-colors"
+          className="flex-1 px-3 py-2 bg-[#161b25] border border-amber-200 text-amber-700 text-sm font-medium rounded hover:bg-amber-50 transition-colors"
         >
           Cancel
         </button>
@@ -227,12 +227,12 @@ function SegmentCard({
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4 mb-4">
+    <div className="border border-slate-800 rounded-lg p-4 mb-4">
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="font-semibold text-gray-900">{segment.stepRange}</h3>
-          <p className="text-sm text-gray-500 mt-1">
+          <h3 className="font-semibold text-white">{segment.stepRange}</h3>
+          <p className="text-sm text-slate-300 mt-1">
             {segment.sourceTechnologies.join(', ') || 'Unknown source'}
           </p>
         </div>
@@ -274,7 +274,7 @@ function SegmentCard({
 
       {/* Execution point selector */}
       <div className="mb-3">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-slate-200 mb-2">
           Execution Point:
         </label>
         <div className="flex gap-2">
@@ -307,18 +307,18 @@ function SegmentCard({
       {/* Affected columns */}
       {segment.affectedColumns.length > 0 && (
         <div className="mb-3 text-sm">
-          <div className="font-medium text-gray-700 mb-1">Affected columns:</div>
+          <div className="font-medium text-slate-200 mb-1">Affected columns:</div>
           <div className="flex flex-wrap gap-1">
             {segment.affectedColumns.slice(0, 5).map((col, idx) => (
               <span
                 key={idx}
-                className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded font-mono"
+                className="px-2 py-1 bg-[#111827] text-slate-200 text-xs rounded font-mono"
               >
                 {col}
               </span>
             ))}
             {segment.affectedColumns.length > 5 && (
-              <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
+              <span className="px-2 py-1 bg-[#111827] text-slate-200 text-xs rounded">
                 +{segment.affectedColumns.length - 5} more
               </span>
             )}
@@ -359,17 +359,17 @@ export function ExecutionPointPanel({
   }
 
   return (
-    <div className="w-96 border-l border-gray-200 bg-white overflow-y-auto">
+    <div className="w-96 border-l border-slate-800 bg-[#161b25] overflow-y-auto">
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
+      <div className="sticky top-0 bg-[#161b25] border-b border-slate-800 p-4 flex items-center justify-between">
         <div>
-          <h2 className="font-bold text-gray-900">Execution Strategy</h2>
-          <p className="text-sm text-gray-500 mt-1">Configure where each segment executes</p>
+          <h2 className="font-bold text-white">Execution Strategy</h2>
+          <p className="text-sm text-slate-300 mt-1">Configure where each segment executes</p>
         </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-slate-300 hover:text-slate-300"
           >
             ✕
           </button>
@@ -377,19 +377,19 @@ export function ExecutionPointPanel({
       </div>
 
       {/* Summary stats */}
-      <div className="p-4 bg-gray-50 border-b border-gray-200">
+      <div className="p-4 bg-[#0d0f1a] border-b border-slate-800">
         <div className="grid grid-cols-3 gap-2 text-center">
           <div>
             <div className="text-2xl font-bold text-blue-600">{summary.pushdownCount}</div>
-            <div className="text-xs text-gray-600">Source DB</div>
+            <div className="text-xs text-slate-300">Source DB</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-amber-600">{summary.pysparkCount}</div>
-            <div className="text-xs text-gray-600">PySpark</div>
+            <div className="text-xs text-slate-300">PySpark</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-red-600">{summary.forcedCount}</div>
-            <div className="text-xs text-gray-600">Locked</div>
+            <div className="text-xs text-slate-300">Locked</div>
           </div>
         </div>
       </div>
@@ -421,7 +421,7 @@ export function ExecutionPointPanel({
       </div>
 
       {/* Export button */}
-      <div className="sticky bottom-0 p-4 border-t border-gray-200 bg-gray-50">
+      <div className="sticky bottom-0 p-4 border-t border-slate-800 bg-[#0d0f1a]">
         <button
           onClick={() => {
             const config = stateManager.exportConfiguration();

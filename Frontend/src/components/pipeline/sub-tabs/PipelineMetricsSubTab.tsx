@@ -10,13 +10,13 @@ function MetricCard({ label, value, sub, trend }: {
   label: string; value: string; sub?: string; trend?: 'up' | 'down' | 'flat';
 }) {
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
-  const trendColor = trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-slate-500';
+  const trendColor = trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-slate-400';
   return (
     <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4">
-      <div className="text-[11px] text-slate-500 mb-1">{label}</div>
-      <div className="text-[22px] font-bold text-slate-100 leading-tight">{value}</div>
+      <div className="text-[12px] font-semibold text-slate-300 mb-1.5">{label}</div>
+      <div className="text-[24px] font-bold text-white leading-tight">{value}</div>
       {sub && (
-        <div className={`flex items-center gap-1 mt-1 text-[11px] ${trendColor}`}>
+        <div className={`flex items-center gap-1 mt-1 text-[12px] ${trendColor}`}>
           <TrendIcon className="w-3 h-3" />
           {sub}
         </div>
@@ -56,13 +56,13 @@ export function PipelineMetricsSubTab({ pipelineId }: { pipelineId: string }) {
   useEffect(() => { load(); }, [pipelineId]);
 
   if (loading) return (
-    <div className="flex-1 flex items-center justify-center text-slate-500 text-sm bg-[#0d0f1a]">
+    <div className="flex-1 flex items-center justify-center text-slate-300 text-sm bg-[#0d0f1a]">
       Loading metrics…
     </div>
   );
 
   if (runs.length === 0) return (
-    <div className="flex-1 flex flex-col items-center justify-center text-slate-600 bg-[#0d0f1a]">
+    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 bg-[#0d0f1a]">
       <BarChart3 className="w-10 h-10 mb-3 opacity-30" />
       <p className="text-sm">No execution data available yet.</p>
     </div>
@@ -98,7 +98,7 @@ export function PipelineMetricsSubTab({ pipelineId }: { pipelineId: string }) {
       {/* Status breakdown */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Status Breakdown (Last 30)</div>
+          <div className="text-[12px] font-bold text-slate-300 uppercase tracking-wide mb-3">Status Breakdown (Last 30)</div>
           {[
             { label: 'Success',   count: successful.length, color: 'bg-emerald-500' },
             { label: 'Failed',    count: failed.length,     color: 'bg-red-500' },
@@ -118,7 +118,7 @@ export function PipelineMetricsSubTab({ pipelineId }: { pipelineId: string }) {
 
         {/* Duration chart */}
         <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Recent Run Durations</div>
+          <div className="text-[12px] font-bold text-slate-300 uppercase tracking-wide mb-3">Recent Run Durations</div>
           <div className="flex items-end gap-1 h-24">
             {chartRuns.map((r, i) => {
               const pct = (r.durationMs! / maxBarDur) * 100;
@@ -130,7 +130,7 @@ export function PipelineMetricsSubTab({ pipelineId }: { pipelineId: string }) {
               );
             })}
           </div>
-          <div className="text-[10px] text-slate-600 mt-1 text-right">{chartRuns.length} recent runs</div>
+          <div className="text-[12px] text-slate-400 mt-1 text-right">{chartRuns.length} recent runs</div>
         </div>
       </div>
 

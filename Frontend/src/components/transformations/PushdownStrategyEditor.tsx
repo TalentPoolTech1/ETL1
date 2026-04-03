@@ -71,7 +71,7 @@ export function PushdownStrategyEditor({
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <Triangle className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-2" />
-          <p className="text-gray-600">Analyzing pushdown eligibility...</p>
+          <p className="text-slate-300">Analyzing pushdown eligibility...</p>
         </div>
       </div>
     );
@@ -79,15 +79,15 @@ export function PushdownStrategyEditor({
 
   if (!pushdown.state.analysis) {
     return (
-      <div className="p-6 text-center bg-gray-50 rounded-lg">
-        <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-        <p className="text-gray-600">Select a pipeline to analyze push-down eligibility</p>
+      <div className="p-6 text-center bg-[#0d0f1a] rounded-lg">
+        <AlertCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+        <p className="text-slate-300">Select a pipeline to analyze push-down eligibility</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-[#161b25]">
       {/* Issue Banner */}
       {bannerVisible && pushdown.hasIssues() && (
         <IssueResolutionBanner
@@ -105,10 +105,10 @@ export function PushdownStrategyEditor({
         {/* Left side: Pipeline visualization + function palette */}
         <div className="flex-1 flex flex-col gap-6 overflow-y-auto">
           {/* Pipeline overview */}
-          <div className="bg-white border border-gray-200 rounded-lg p-6">
+          <div className="bg-[#161b25] border border-slate-800 rounded-lg p-6">
             <div className="flex items-center gap-2 mb-4">
               <BarChart3 className="w-5 h-5 text-blue-600" />
-              <h2 className="font-bold text-gray-900">Pipeline Segments</h2>
+              <h2 className="font-bold text-white">Pipeline Segments</h2>
             </div>
 
             <div className="space-y-2">
@@ -128,8 +128,8 @@ export function PushdownStrategyEditor({
                     key={segment.segmentId}
                     className={`p-3 border rounded-lg cursor-pointer transition-all ${color}`}
                   >
-                    <div className="font-medium text-gray-900">{segment.stepRange}</div>
-                    <div className="text-sm text-gray-600 mt-1">
+                    <div className="font-medium text-white">{segment.stepRange}</div>
+                    <div className="text-sm text-slate-300 mt-1">
                       {segment.sourceTechnologies.join(', ')}
                     </div>
                     <div className="mt-2 flex items-center gap-2 text-xs">
@@ -142,7 +142,7 @@ export function PushdownStrategyEditor({
                       >
                         {segment.eligible ? '✓ Eligible' : '✗ Not eligible'}
                       </span>
-                      <span className="text-gray-500">
+                      <span className="text-slate-300">
                         {execPoint === 'source' ? '🔵 Pushdown' : '🟠 PySpark'}
                       </span>
                     </div>
@@ -154,12 +154,12 @@ export function PushdownStrategyEditor({
 
           {/* Function palette (if step selected) */}
           {selectedStep && functionPalette && (
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
+            <div className="bg-[#161b25] border border-slate-800 rounded-lg p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Settings className="w-5 h-5 text-amber-600" />
-                <h2 className="font-bold text-gray-900">Function Availability</h2>
+                <h2 className="font-bold text-white">Function Availability</h2>
               </div>
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-slate-300 mb-4">
                 Selected step: <span className="font-medium">{selectedStep}</span>
               </p>
               <TransformPalette
@@ -191,11 +191,11 @@ export function PushdownStrategyEditor({
       </div>
 
       {/* Bottom action bar */}
-      <div className="border-t border-gray-200 bg-gray-50 px-6 py-4 flex items-center justify-between">
+      <div className="border-t border-slate-800 bg-[#0d0f1a] px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setPanelOpen(!panelOpen)}
-            className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded hover:bg-gray-300 transition-colors"
+            className="px-4 py-2 bg-gray-200 text-slate-200 text-sm font-medium rounded hover:bg-gray-300 transition-colors"
           >
             {panelOpen ? 'Hide' : 'Show'} Execution Strategy
           </button>
@@ -211,7 +211,7 @@ export function PushdownStrategyEditor({
         <div className="flex gap-2">
           <button
             onClick={() => pushdown.reset()}
-            className="px-4 py-2 bg-white text-gray-700 border border-gray-200 text-sm font-medium rounded hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 bg-[#161b25] text-slate-200 border border-slate-800 text-sm font-medium rounded hover:bg-[#0d0f1a] transition-colors"
           >
             Reset
           </button>

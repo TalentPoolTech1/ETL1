@@ -103,6 +103,7 @@ interface DraggedMetadataItem {
 
 interface Props {
   onNodeDoubleClick?: (nodeId: string) => void;
+  onPreviewNode?: (nodeId: string) => void;
   pipelineId?: string;
 }
 
@@ -212,14 +213,14 @@ function CodePreviewOverlay({ pipelineId, onClose }: { pipelineId: string; onClo
         onMouseDown={e => startOverlayDrag('move', e)}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Code Preview</div>
+            <div className="text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">Code Preview</div>
             <div className="mt-1 text-[15px] font-semibold text-slate-100 truncate">{pipelineName}</div>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded hover:bg-slate-700 text-slate-400 hover:text-white text-lg transition-colors">×</button>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#111320] px-3 py-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Runtime</span>
+            <span className="text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">Runtime</span>
             <select
               value={lang}
               onChange={e => handleLangChange(e.target.value as CodeLang)}
@@ -233,14 +234,14 @@ function CodePreviewOverlay({ pipelineId, onClose }: { pipelineId: string; onClo
             </select>
           </div>
           {meta && (
-            <div className="text-[11px] text-slate-400 truncate">
+            <div className="text-[12px] text-slate-400 truncate">
               {techLabel(lang)} · Generated {meta.generatedAt}
             </div>
           )}
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <button onClick={copy} disabled={!code} onMouseDown={e => e.stopPropagation()} className="flex items-center gap-1.5 h-8 px-3 rounded border border-slate-600 bg-slate-700/70 hover:bg-slate-600 text-slate-200 text-[11px] font-medium transition-colors disabled:opacity-40">{copied ? 'Copied' : 'Copy'}</button>
-            <button onClick={download} disabled={!code} onMouseDown={e => e.stopPropagation()} className="flex items-center gap-1.5 h-8 px-3 rounded border border-slate-600 bg-slate-700/70 hover:bg-slate-600 text-slate-200 text-[11px] font-medium transition-colors disabled:opacity-40">Download</button>
-            <button onClick={() => generate(lang)} disabled={loading} onMouseDown={e => e.stopPropagation()} className="flex items-center gap-1.5 h-8 px-3 rounded bg-blue-700 hover:bg-blue-600 text-white text-[11px] font-semibold transition-colors disabled:opacity-50">{loading ? 'Generating…' : 'Regenerate'}</button>
+            <button onClick={copy} disabled={!code} onMouseDown={e => e.stopPropagation()} className="flex items-center gap-1.5 h-8 px-3 rounded border border-slate-600 bg-slate-700/70 hover:bg-slate-600 text-slate-200 text-[12px] font-medium transition-colors disabled:opacity-40">{copied ? 'Copied' : 'Copy'}</button>
+            <button onClick={download} disabled={!code} onMouseDown={e => e.stopPropagation()} className="flex items-center gap-1.5 h-8 px-3 rounded border border-slate-600 bg-slate-700/70 hover:bg-slate-600 text-slate-200 text-[12px] font-medium transition-colors disabled:opacity-40">Download</button>
+            <button onClick={() => generate(lang)} disabled={loading} onMouseDown={e => e.stopPropagation()} className="flex items-center gap-1.5 h-8 px-3 rounded bg-blue-700 hover:bg-blue-600 text-white text-[12px] font-semibold transition-colors disabled:opacity-50">{loading ? 'Generating…' : 'Regenerate'}</button>
           </div>
         </div>
       </div>
@@ -265,19 +266,19 @@ function CodePreviewOverlay({ pipelineId, onClose }: { pipelineId: string; onClo
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[12px] font-semibold text-slate-100 truncate">{meta?.fileName ?? `generated.${lang === 'sql' ? 'sql' : lang === 'scala' ? 'scala' : 'py'}`}</div>
-                  <div className="mt-0.5 text-[10px] text-slate-500">
+                  <div className="mt-0.5 text-[12px] text-slate-300">
                     {techLabel(lang)} · v{meta?.version ?? '—'}
                   </div>
                 </div>
                 {meta && (
-                  <div className="text-[10px] text-slate-600 font-mono whitespace-nowrap">
+                  <div className="text-[12px] text-slate-400 font-mono whitespace-nowrap">
                     {meta.lineCount} lines · {meta.sizeLabel}
                   </div>
                 )}
               </div>
             </div>
             <div className="flex-1 overflow-auto bg-[#0a0c15] flex">
-              <div className="select-none text-right pr-4 pl-3 text-[11px] text-slate-700 font-mono border-r border-slate-800/50 pt-3 pb-3 leading-5 shrink-0">
+              <div className="select-none text-right pr-4 pl-3 text-[12px] text-slate-200 font-mono border-r border-slate-800/50 pt-3 pb-3 leading-5 shrink-0">
                 {code.split('\n').map((_, i) => <div key={i}>{i + 1}</div>)}
               </div>
               <pre className="flex-1 text-[12px] font-mono text-slate-200 whitespace-pre leading-5 pl-4 pr-4 pt-3 pb-3 overflow-visible">{code}</pre>
@@ -292,7 +293,7 @@ function CodePreviewOverlay({ pipelineId, onClose }: { pipelineId: string; onClo
   );
 }
 
-export function PipelineCanvas({ onNodeDoubleClick, pipelineId }: Props) {
+export function PipelineCanvas({ onNodeDoubleClick, onPreviewNode, pipelineId }: Props) {
   const dispatch = useAppDispatch();
   const { nodes, edges, selectedNodeIds } = useAppSelector(s => s.pipeline);
   const canvasRef    = useRef<SVGSVGElement>(null);
@@ -613,7 +614,7 @@ export function PipelineCanvas({ onNodeDoubleClick, pipelineId }: Props) {
           </button>
           <div ref={toolbarScrollRef} className="min-w-0 flex-1 overflow-x-auto overflow-y-hidden">
             <div className="flex items-center gap-1.5 min-w-max pr-2">
-              <span className="text-[10px] text-slate-300 uppercase tracking-widest mr-1 font-bold">Add Node</span>
+              <span className="text-[12px] text-slate-300 uppercase tracking-widest mr-1 font-bold">Add Node</span>
               <div className="w-px h-5 bg-slate-600 mx-1" />
               {TOOLBAR_NODES.map(n => (
                 <button key={n.type}
@@ -624,7 +625,7 @@ export function PipelineCanvas({ onNodeDoubleClick, pipelineId }: Props) {
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
                   title={`Click or drag to add ${n.label}`}
-                  className="flex items-center gap-1.5 h-7 px-2.5 rounded text-[11px] font-semibold transition-all hover:scale-105 cursor-grab active:cursor-grabbing shrink-0"
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded text-[12px] font-semibold transition-all hover:scale-105 cursor-grab active:cursor-grabbing shrink-0"
                   style={{ color: '#0d0f1a', backgroundColor: n.color, boxShadow: `0 1px 4px ${n.color}66` }}>
                   <span className="text-[13px]">{n.icon}</span>{n.label}
                 </button>
@@ -645,30 +646,30 @@ export function PipelineCanvas({ onNodeDoubleClick, pipelineId }: Props) {
           {/* F-21: Undo/Redo buttons */}
           <div className="flex items-center gap-1">
             <button onClick={() => dispatch(undo())} title="Undo (Ctrl+Z)"
-              className="h-7 px-2 rounded text-[11px] text-slate-300 hover:text-white hover:bg-slate-700 transition-colors font-mono border border-slate-600/50">
+              className="h-7 px-2 rounded text-[12px] text-slate-300 hover:text-white hover:bg-slate-700 transition-colors font-mono border border-slate-600/50">
               ↩
             </button>
             <button onClick={() => dispatch(redo())} title="Redo (Ctrl+Y)"
-              className="h-7 px-2 rounded text-[11px] text-slate-300 hover:text-white hover:bg-slate-700 transition-colors font-mono border border-slate-600/50">
+              className="h-7 px-2 rounded text-[12px] text-slate-300 hover:text-white hover:bg-slate-700 transition-colors font-mono border border-slate-600/50">
               ↪
             </button>
           </div>
           {pipelineId && (
             <button onClick={() => setShowCodePreview(true)}
-              className="flex items-center gap-1.5 h-7 px-3 rounded text-[11px] font-semibold border border-violet-500/60 text-violet-300 hover:bg-violet-700 hover:text-white hover:border-violet-500 transition-colors">
+              className="flex items-center gap-1.5 h-7 px-3 rounded text-[12px] font-semibold border border-violet-500/60 text-violet-300 hover:bg-violet-700 hover:text-white hover:border-violet-500 transition-colors">
               <span className="text-[13px]">{'</>'}</span> Preview Code
             </button>
           )}
           <div className="flex items-center gap-1.5 bg-[#1e2035] rounded px-2 py-1 border border-slate-600/40">
             <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))}
               className="w-5 h-5 rounded text-slate-200 hover:text-white hover:bg-slate-600 text-sm font-bold transition-colors">−</button>
-            <span className="text-[11px] text-slate-200 w-10 text-center font-mono font-semibold">{Math.round(zoom * 100)}%</span>
+            <span className="text-[12px] text-slate-200 w-10 text-center font-mono font-semibold">{Math.round(zoom * 100)}%</span>
             <button onClick={() => setZoom(z => Math.min(3, z + 0.1))}
               className="w-5 h-5 rounded text-slate-200 hover:text-white hover:bg-slate-600 text-sm font-bold transition-colors">+</button>
             <div className="w-px h-4 bg-slate-600 mx-0.5" />
             {/* BUG-005 FIXED: Fit button now fits node bounds into viewport */}
             <button onClick={fitToView}
-              className="h-5 px-2 rounded text-[10px] text-slate-300 hover:text-white hover:bg-slate-600 transition-colors font-medium"
+              className="h-5 px-2 rounded text-[12px] text-slate-300 hover:text-white hover:bg-slate-600 transition-colors font-medium"
               title="Fit all nodes into view">
               Fit
             </button>
@@ -793,6 +794,23 @@ export function PipelineCanvas({ onNodeDoubleClick, pipelineId }: Props) {
                     fontStyle={configured ? 'normal' : 'italic'} pointerEvents="none">
                     {truncate(subtitle, 26)}
                   </text>
+                  {(node.type === 'source' || node.type === 'target') && (
+                    <foreignObject x={node.x + NODE_W - 34} y={node.y + HEADER_H + 7} width="22" height="22">
+                      <button
+                        type="button"
+                        title="Preview data"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedEdgeId(null);
+                          dispatch(selectNode({ id: node.id, multiSelect: false }));
+                          onPreviewNode?.(node.id);
+                        }}
+                        className="flex h-[22px] w-[22px] items-center justify-center rounded border border-slate-600 bg-[#101629]/90 text-[11px] text-slate-200 transition-colors hover:border-blue-400 hover:text-white hover:bg-[#18213a]"
+                      >
+                        👁
+                      </button>
+                    </foreignObject>
+                  )}
                   {node.type !== 'source' && (
                     <g>
                       <circle cx={node.x} cy={node.y + NODE_H / 2} r={PORT_R + 1}

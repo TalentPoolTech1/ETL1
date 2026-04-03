@@ -18,9 +18,10 @@ export function LoginPage() {
 
     try {
       const response = await apiClient.login(email, password);
-      const { token, user } = response.data.data as {
+      const { token, user, permissions } = response.data.data as {
         token: string;
         user: { userId: string; email: string; fullName: string };
+        permissions: string[];
       };
 
       localStorage.setItem('authToken', token);
@@ -28,7 +29,7 @@ export function LoginPage() {
 
       dispatch(setAuthSuccess({
         user: { id: user.userId, email: user.email, fullName: user.fullName },
-        permissions: [],
+        permissions: permissions ?? [],
       }));
       window.history.replaceState({}, '', '/');
     } catch (err: any) {
@@ -44,63 +45,57 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0d0f1a]">
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
       <div className="w-full max-w-sm">
-        <div className="bg-[#161929] border border-[#2a2f4a] rounded-2xl p-8 shadow-2xl">
+        <div className="rounded-2xl p-8 shadow-2xl" style={{ background: 'var(--bg-4)', border: '1px solid var(--bd-2)' }}>
           <div className="flex items-center justify-center mb-8">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center mr-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mr-3"
+              style={{ background: 'var(--ac)' }}>
               <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
               </svg>
             </div>
-            <span className="text-white text-xl font-semibold tracking-tight">ETL1 Platform</span>
+            <span className="thm-heading-1 tracking-tight">ETL1 Platform</span>
           </div>
 
-          <h1 className="text-white text-lg font-medium text-center mb-6">Sign in to your account</h1>
+          <h1 className="thm-heading-2 text-center mb-6">Sign in to your account</h1>
 
           {error && (
-            <div className="bg-red-900/30 border border-red-700/50 text-red-300 text-sm rounded-lg px-4 py-3 mb-5">
+            <div className="rounded-lg px-4 py-3 mb-5" style={{ background: 'var(--err-bg)', border: '1px solid rgba(248,113,113,0.3)', color: 'var(--err)', fontSize: 'var(--fs-sm)' }}>
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-400 mb-1.5">
+              <label htmlFor="email" className="field-label">
                 Email address
               </label>
               <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full bg-[#0d0f1a] border border-[#2a2f4a] text-white rounded-lg px-3.5 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                placeholder="you@example.com"
+                id="email" type="email" autoComplete="email" required
+                value={email} onChange={e => setEmail(e.target.value)}
+                className="field-input" placeholder="you@example.com"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-400 mb-1.5">
+              <label htmlFor="password" className="field-label">
                 Password
               </label>
               <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                className="w-full bg-[#0d0f1a] border border-[#2a2f4a] text-white rounded-lg px-3.5 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                placeholder="••••••••"
+                id="password" type="password" autoComplete="current-password" required
+                value={password} onChange={e => setPassword(e.target.value)}
+                className="field-input" placeholder="••••••••"
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-medium rounded-lg py-2.5 text-sm transition flex items-center justify-center gap-2 mt-2"
+            <button type="submit" disabled={loading}
+              className="w-full font-medium rounded-lg py-2.5 transition flex items-center justify-center gap-2 mt-2"
+              style={{
+                background: loading ? 'rgba(59,130,246,0.4)' : 'var(--ac)',
+                color: '#fff', fontSize: 'var(--fs-base)',
+                cursor: loading ? 'not-allowed' : 'pointer',
+              }}
             >
               {loading ? (
                 <>
@@ -110,9 +105,7 @@ export function LoginPage() {
                   </svg>
                   Signing in…
                 </>
-              ) : (
-                'Sign in'
-              )}
+              ) : 'Sign in'}
             </button>
           </form>
         </div>

@@ -41,6 +41,10 @@ export function uniqueVarName(node: PipelineNode, suffix = 'df'): string {
   return `${base}_${idSuffix}_${suffix}`;
 }
 
+export function pyBoolLiteral(value: boolean): string {
+  return value ? 'True' : 'False';
+}
+
 // ─── DataType Mapping ──────────────────────────────────────────────────────────
 
 /**
@@ -60,13 +64,13 @@ export function toPySparkType(dt: DataType): string {
     case 'decimal':
       return `T.DecimalType(${dt.precision ?? 10}, ${dt.scale ?? 2})`;
     case 'array':
-      return `T.ArrayType(${dt.elementType ? toPySparkType(dt.elementType) : 'T.StringType()'}, ${dt.nullable !== false})`;
+      return `T.ArrayType(${dt.elementType ? toPySparkType(dt.elementType) : 'T.StringType()'}, ${pyBoolLiteral(dt.nullable !== false)})`;
     case 'map':
-      return `T.MapType(${dt.keyType ? toPySparkType(dt.keyType) : 'T.StringType()'}, ${dt.valueType ? toPySparkType(dt.valueType) : 'T.StringType()'}, ${dt.nullable !== false})`;
+      return `T.MapType(${dt.keyType ? toPySparkType(dt.keyType) : 'T.StringType()'}, ${dt.valueType ? toPySparkType(dt.valueType) : 'T.StringType()'}, ${pyBoolLiteral(dt.nullable !== false)})`;
     case 'struct':
       if (dt.fields && dt.fields.length > 0) {
         const fieldDefs = dt.fields
-          .map(f => `T.StructField("${f.name}", ${toPySparkType(f.dataType)}, ${f.nullable !== false})`)
+          .map(f => `T.StructField("${f.name}", ${toPySparkType(f.dataType)}, ${pyBoolLiteral(f.nullable !== false)})`)
           .join(', ');
         return `T.StructType([${fieldDefs}])`;
       }

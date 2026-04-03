@@ -48,8 +48,8 @@ function ParameterInput({
     case 'text':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
-          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
+          <label className="text-[12px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[12px] text-slate-400">{def.description}</p>}
           <input
             type="text"
             placeholder={def.placeholder}
@@ -65,8 +65,8 @@ function ParameterInput({
     case 'number':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
-          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
+          <label className="text-[12px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[12px] text-slate-400">{def.description}</p>}
           <input
             type="number"
             placeholder={def.placeholder}
@@ -82,8 +82,8 @@ function ParameterInput({
     case 'select':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
-          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
+          <label className="text-[12px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[12px] text-slate-400">{def.description}</p>}
           <select
             value={value ?? ''}
             onChange={e => handleChange(e.target.value)}
@@ -118,8 +118,8 @@ function ParameterInput({
     case 'date':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
-          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
+          <label className="text-[12px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[12px] text-slate-400">{def.description}</p>}
           <input
             type="date"
             value={value || ''}
@@ -134,8 +134,8 @@ function ParameterInput({
     case 'expression':
       return (
         <div className="flex flex-col gap-1">
-          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
-          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
+          <label className="text-[12px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[12px] text-slate-400">{def.description}</p>}
           <textarea
             placeholder={def.placeholder}
             value={value || ''}
@@ -151,8 +151,8 @@ function ParameterInput({
     case 'list':
       return (
         <div className="flex flex-col gap-2">
-          <label className="text-[11px] font-semibold text-slate-200">{def.label}</label>
-          {def.description && <p className="text-[11px] text-slate-400">{def.description}</p>}
+          <label className="text-[12px] font-semibold text-slate-200">{def.label}</label>
+          {def.description && <p className="text-[12px] text-slate-400">{def.description}</p>}
           <div className="space-y-2">
             {(value || []).map((item: any, idx: number) => (
               <div key={idx} className="flex gap-2">
@@ -248,7 +248,7 @@ export const ParameterPanel: React.FC<ParameterPanelProps> = ({
             disabled={disabled}
           />
           {errors[param.id] && (
-            <p className="mt-1 text-[11px] text-red-300">{errors[param.id]}</p>
+            <p className="mt-1 text-[12px] text-red-300">{errors[param.id]}</p>
           )}
         </div>
       ))}

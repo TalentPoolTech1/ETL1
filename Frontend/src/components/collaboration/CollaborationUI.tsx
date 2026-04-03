@@ -62,7 +62,7 @@ export function ActivityTimeline({ activities, maxItems = 10 }: ActivityTimeline
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold text-neutral-900">Activity</h3>
-      <div className="space-y-2 border-l-2 border-neutral-200 pl-3">
+      <div className="space-y-2 border-l-2 border-slate-800 pl-3">
         {displayActivities.map(activity => (
           <div key={activity.id} className="text-sm">
             <p className="text-neutral-900">

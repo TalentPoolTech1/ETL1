@@ -80,22 +80,24 @@ RETURNS TABLE (
     connector_id           UUID,
     connector_display_name TEXT,
     connector_type_code    TEXT,
-    conn_jdbc_driver_class TEXT,
-    conn_test_query        TEXT,
-    conn_spark_config_json JSONB,
-    conn_ssl_mode          TEXT,
-    conn_max_pool_size_num INTEGER,
-    conn_idle_timeout_sec  INTEGER,
-    health_status_code     TEXT,
-    created_dtm            TIMESTAMPTZ,
-    updated_dtm            TIMESTAMPTZ,
-    created_by_user_id     UUID,
-    updated_by_user_id     UUID,
-    technology_id          UUID
+    conn_jdbc_driver_class        TEXT,
+    conn_jdbc_driver_maven_coords TEXT,
+    conn_jdbc_driver_paths        TEXT,
+    conn_test_query               TEXT,
+    conn_spark_config_json        JSONB,
+    conn_ssl_mode                 TEXT,
+    conn_max_pool_size_num        INTEGER,
+    conn_idle_timeout_sec         INTEGER,
+    health_status_code            TEXT,
+    created_dtm                   TIMESTAMPTZ,
+    updated_dtm                   TIMESTAMPTZ,
+    created_by_user_id            UUID,
+    updated_by_user_id            UUID,
+    technology_id                 UUID
 )
 LANGUAGE sql STABLE AS $$
     SELECT c.connector_id, c.connector_display_name, c.connector_type_code,
-           c.conn_jdbc_driver_class, c.conn_test_query, c.conn_spark_config_json,
+           c.conn_jdbc_driver_class, c.conn_jdbc_driver_maven_coords, c.conn_jdbc_driver_paths, c.conn_test_query, c.conn_spark_config_json,
            c.conn_ssl_mode, c.conn_max_pool_size_num, c.conn_idle_timeout_sec,
            COALESCE(h.health_status_code, 'UNKNOWN'),
            c.created_dtm, c.updated_dtm, c.created_by_user_id, c.updated_by_user_id,
@@ -128,22 +130,25 @@ COMMENT ON FUNCTION catalog.fn_get_connector_secrets_decrypted(UUID) IS 'Law 3: 
 -- WRITE OPERATIONS — CONNECTORS
 -- ============================================================================
 
+DROP PROCEDURE IF EXISTS catalog.pr_create_connector(TEXT, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID, UUID);
 CREATE OR REPLACE PROCEDURE catalog.pr_create_connector(
     p_connector_display_name     TEXT,
     p_connector_type_code        TEXT,
     p_conn_config_plain          JSONB,
     p_conn_secrets_plain         JSONB,
-    p_conn_jdbc_driver_class     TEXT,
-    p_conn_test_query            TEXT,
-    p_conn_spark_config_json     JSONB,
-    p_conn_ssl_mode              TEXT,
-    p_conn_ssh_tunnel_plain      JSONB,
-    p_conn_proxy_plain           JSONB,
-    p_conn_max_pool_size_num     INTEGER,
-    p_conn_idle_timeout_sec      INTEGER,
-    p_created_by_user_id         UUID,
-    p_technology_id              UUID,
-    OUT p_connector_id           UUID
+    p_conn_jdbc_driver_class         TEXT,
+    p_conn_test_query                TEXT,
+    p_conn_spark_config_json         JSONB,
+    p_conn_ssl_mode                  TEXT,
+    p_conn_ssh_tunnel_plain          JSONB,
+    p_conn_proxy_plain               JSONB,
+    p_conn_max_pool_size_num         INTEGER,
+    p_conn_idle_timeout_sec          INTEGER,
+    p_created_by_user_id             UUID,
+    p_technology_id                  UUID,
+    p_conn_jdbc_driver_maven_coords  TEXT,
+    p_conn_jdbc_driver_paths         TEXT,
+    OUT p_connector_id               UUID
 )
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -153,7 +158,7 @@ BEGIN
     INSERT INTO catalog.connectors (
         connector_display_name, connector_type_code,
         conn_config_json_encrypted, conn_secrets_json_encrypted,
-        conn_jdbc_driver_class, conn_test_query, conn_spark_config_json,
+        conn_jdbc_driver_class, conn_jdbc_driver_maven_coords, conn_jdbc_driver_paths, conn_test_query, conn_spark_config_json,
         conn_ssl_mode,
         conn_ssh_tunnel_json_encrypted, conn_proxy_json_encrypted,
         conn_max_pool_size_num, conn_idle_timeout_sec,
@@ -168,6 +173,8 @@ BEGIN
              THEN pgp_sym_encrypt(p_conn_secrets_plain::TEXT, v_enc_key)
              ELSE NULL END,
         p_conn_jdbc_driver_class,
+        p_conn_jdbc_driver_maven_coords,
+        p_conn_jdbc_driver_paths,
         p_conn_test_query,
         p_conn_spark_config_json,
         COALESCE(p_conn_ssl_mode, 'REQUIRE'),
@@ -188,24 +195,26 @@ BEGIN
     VALUES (p_connector_id, 'UNKNOWN');
 END;
 $$;
-COMMENT ON PROCEDURE catalog.pr_create_connector(TEXT, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID) IS 'Law 3: Registers a new connector with config, secrets, SSH tunnel, and proxy all encrypted via pgcrypto before storage. Initializes a health record in UNKNOWN state.';
+COMMENT ON PROCEDURE catalog.pr_create_connector(TEXT, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID, UUID, TEXT, TEXT) IS 'Law 3: Registers a new connector with config, secrets, SSH tunnel, proxy, JDBC Maven coordinates, and JDBC driver path hints. Sensitive blobs are encrypted via pgcrypto before storage, and a health record is initialized in UNKNOWN state.';
 ;
-DROP PROCEDURE IF EXISTS catalog.pr_update_connector(UUID, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID);
+DROP PROCEDURE IF EXISTS catalog.pr_update_connector(UUID, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID, UUID);
 CREATE OR REPLACE PROCEDURE catalog.pr_update_connector(
     p_connector_id               UUID,
     p_connector_display_name     TEXT,
     p_conn_config_plain          JSONB,
     p_conn_secrets_plain         JSONB,
-    p_conn_jdbc_driver_class     TEXT,
-    p_conn_test_query            TEXT,
-    p_conn_spark_config_json     JSONB,
-    p_conn_ssl_mode              TEXT,
-    p_conn_ssh_tunnel_plain      JSONB,
-    p_conn_proxy_plain           JSONB,
-    p_conn_max_pool_size_num     INTEGER,
-    p_conn_idle_timeout_sec      INTEGER,
-    p_updated_by_user_id         UUID,
-    p_technology_id              UUID
+    p_conn_jdbc_driver_class         TEXT,
+    p_conn_test_query                TEXT,
+    p_conn_spark_config_json         JSONB,
+    p_conn_ssl_mode                  TEXT,
+    p_conn_ssh_tunnel_plain          JSONB,
+    p_conn_proxy_plain               JSONB,
+    p_conn_max_pool_size_num         INTEGER,
+    p_conn_idle_timeout_sec          INTEGER,
+    p_updated_by_user_id             UUID,
+    p_technology_id                  UUID,
+    p_conn_jdbc_driver_maven_coords  TEXT DEFAULT NULL,
+    p_conn_jdbc_driver_paths         TEXT DEFAULT NULL
 )
 LANGUAGE plpgsql AS $$
 DECLARE
@@ -220,6 +229,8 @@ BEGIN
                                             THEN pgp_sym_encrypt(p_conn_secrets_plain::TEXT, v_enc_key)::TEXT
                                             ELSE conn_secrets_json_encrypted END,
         conn_jdbc_driver_class        = COALESCE(p_conn_jdbc_driver_class, conn_jdbc_driver_class),
+        conn_jdbc_driver_maven_coords = COALESCE(p_conn_jdbc_driver_maven_coords, conn_jdbc_driver_maven_coords),
+        conn_jdbc_driver_paths        = COALESCE(p_conn_jdbc_driver_paths, conn_jdbc_driver_paths),
         conn_test_query               = COALESCE(p_conn_test_query, conn_test_query),
         conn_spark_config_json        = COALESCE(p_conn_spark_config_json, conn_spark_config_json),
         conn_ssl_mode                 = COALESCE(p_conn_ssl_mode, conn_ssl_mode),
@@ -236,7 +247,7 @@ BEGIN
     WHERE connector_id = p_connector_id;
 END;
 $$;
-COMMENT ON PROCEDURE catalog.pr_update_connector(UUID, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID, UUID) IS 'Updates an existing connector. Only non-NULL parameters overwrite existing values. Re-encrypts config, secrets, SSH tunnel, and proxy if new plaintext is provided.';
+COMMENT ON PROCEDURE catalog.pr_update_connector(UUID, TEXT, JSONB, JSONB, TEXT, TEXT, JSONB, TEXT, JSONB, JSONB, INTEGER, INTEGER, UUID, UUID, TEXT, TEXT) IS 'Updates an existing connector. Only non-NULL parameters overwrite existing values. Re-encrypts config, secrets, SSH tunnel, and proxy when new plaintext is provided, and persists JDBC Maven coordinates plus connection-level driver path hints.';
 ;
 CREATE OR REPLACE PROCEDURE catalog.pr_delete_connector(p_connector_id UUID)
 LANGUAGE plpgsql AS $$
@@ -452,10 +463,31 @@ $$;
 COMMENT ON FUNCTION catalog.fn_get_datasets(UUID) IS 'Lists datasets registered under a specific connector.';
 ;
 CREATE OR REPLACE FUNCTION catalog.fn_get_dataset_columns(p_dataset_id UUID)
-RETURNS TABLE (column_id UUID, column_name_text TEXT, data_type_code TEXT, is_nullable_flag BOOLEAN, ordinal_position_num INTEGER)
+RETURNS TABLE (
+    column_id UUID,
+    column_name_text TEXT,
+    data_type_code TEXT,
+    override_data_type_code TEXT,
+    effective_data_type_code TEXT,
+    parse_format_text TEXT,
+    is_nullable_flag BOOLEAN,
+    ordinal_position_num INTEGER,
+    column_desc_text TEXT
+)
 LANGUAGE sql STABLE AS $$
-    SELECT column_id, column_name_text, data_type_code, is_nullable_flag, ordinal_position_num
-    FROM catalog.dataset_columns WHERE dataset_id = p_dataset_id ORDER BY ordinal_position_num;
+    SELECT
+        column_id,
+        column_name_text,
+        data_type_code,
+        override_data_type_code,
+        COALESCE(override_data_type_code, data_type_code) AS effective_data_type_code,
+        parse_format_text,
+        is_nullable_flag,
+        ordinal_position_num,
+        column_desc_text
+    FROM catalog.dataset_columns
+    WHERE dataset_id = p_dataset_id
+    ORDER BY ordinal_position_num;
 $$;
 COMMENT ON FUNCTION catalog.fn_get_dataset_columns(UUID) IS 'Returns all columns for a dataset in ordinal order.';
 ;
@@ -487,22 +519,64 @@ CREATE OR REPLACE PROCEDURE catalog.pr_sync_dataset_columns(
 LANGUAGE plpgsql AS $$
 DECLARE
     v_col JSONB;
+    v_seen_columns TEXT[] := ARRAY[]::TEXT[];
+    v_column_name TEXT;
 BEGIN
-    -- Clear to re-sync: old columns physically deleted, trigger captures history
-    DELETE FROM catalog.dataset_columns WHERE dataset_id = p_dataset_id;
     FOR v_col IN SELECT * FROM jsonb_array_elements(p_columns_json)
     LOOP
-        INSERT INTO catalog.dataset_columns (dataset_id, column_name_text, data_type_code, is_nullable_flag, ordinal_position_num)
+        v_column_name := v_col->>'column_name_text';
+        v_seen_columns := array_append(v_seen_columns, v_column_name);
+
+        INSERT INTO catalog.dataset_columns (
+            dataset_id,
+            column_name_text,
+            data_type_code,
+            override_data_type_code,
+            parse_format_text,
+            is_nullable_flag,
+            ordinal_position_num,
+            column_desc_text
+        )
         VALUES (
             p_dataset_id,
-            v_col->>'column_name_text',
+            v_column_name,
             v_col->>'data_type_code',
+            (
+                SELECT dc.override_data_type_code
+                FROM catalog.dataset_columns dc
+                WHERE dc.dataset_id = p_dataset_id
+                  AND dc.column_name_text = v_column_name
+                LIMIT 1
+            ),
+            (
+                SELECT dc.parse_format_text
+                FROM catalog.dataset_columns dc
+                WHERE dc.dataset_id = p_dataset_id
+                  AND dc.column_name_text = v_column_name
+                LIMIT 1
+            ),
             (v_col->>'is_nullable_flag')::BOOLEAN,
-            (v_col->>'ordinal_position_num')::INTEGER
-        );
+            (v_col->>'ordinal_position_num')::INTEGER,
+            (
+                SELECT dc.column_desc_text
+                FROM catalog.dataset_columns dc
+                WHERE dc.dataset_id = p_dataset_id
+                  AND dc.column_name_text = v_column_name
+                LIMIT 1
+            )
+        )
+        ON CONFLICT (dataset_id, column_name_text)
+        DO UPDATE SET
+            data_type_code = EXCLUDED.data_type_code,
+            is_nullable_flag = EXCLUDED.is_nullable_flag,
+            ordinal_position_num = EXCLUDED.ordinal_position_num;
     END LOOP;
+
+    DELETE FROM catalog.dataset_columns
+    WHERE dataset_id = p_dataset_id
+      AND NOT (column_name_text = ANY(v_seen_columns));
 END;
 $$;
-COMMENT ON PROCEDURE catalog.pr_sync_dataset_columns(UUID, JSONB) IS 'Replaces all column metadata for a dataset. Used after a schema introspection scan.';
+COMMENT ON PROCEDURE catalog.pr_sync_dataset_columns(UUID, JSONB) IS 'Synchronises imported column metadata for a dataset while preserving manual override data type, parse format, and description values by matching column names.';
 ;
 COMMIT;

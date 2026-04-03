@@ -1,7 +1,7 @@
 /**
  * NodeConfigPanel — Right-side panel for configuring a selected pipeline node.
  *
- * Source:     Technology selector → Connection dropdown → Schema dropdown → Table dropdown
+ * Source:     Connection dropdown → Catalog object → Runtime path/pattern overrides
  * Target:     Connection → Schema → Table → Write Mode (APPEND/OVERWRITE/SCD1/SCD2/SCD3/UPSERT/MERGE)
  * Filter:     SQL WHERE expression
  * Join:       Join type + key columns
@@ -14,7 +14,6 @@ import { X, ChevronDown, Loader2, Plus, Trash2, Grid3X3, BookOpenText } from 'lu
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { updateNode } from '@/store/slices/pipelineSlice';
 import { fetchConnectors, selectAllConnectors } from '@/store/slices/connectionsSlice';
-import type { ConnectorSummary } from '@/store/slices/connectionsSlice';
 import { ConditionBuilder, conditionToSQL } from '@/components/transformations/ConditionBuilder';
 import type { ComplexCondition } from '@/components/transformations/ConditionBuilder';
 import { PatternWizard } from '@/components/transformations/PatternWizard';
@@ -37,10 +36,36 @@ const WRITE_MODES = [
 
 const JOIN_TYPES = ['INNER', 'LEFT OUTER', 'RIGHT OUTER', 'FULL OUTER', 'CROSS', 'SEMI', 'ANTI'];
 
+const TARGET_AUDIT_VALUE_OPTIONS = [
+  { value: '__audit__:current_timestamp', label: 'Current Timestamp' },
+  { value: '__audit__:current_date', label: 'Current Date' },
+  { value: '__audit__:current_time', label: 'Current Time' },
+  { value: '__audit__:job_name', label: 'Job Name' },
+  { value: '__audit__:run_id', label: 'Run ID' },
+  { value: '__audit__:user_name', label: 'User Name' },
+] as const;
+
+function isAuditMappingValue(value: string): boolean {
+  return value.startsWith('__audit__:');
+}
+
+function getAuditMappingLabel(value: string): string {
+  return TARGET_AUDIT_VALUE_OPTIONS.find(option => option.value === value)?.label ?? value.replace(/^__audit__:/, '');
+}
+
+export function canOpenTargetMappingEditor(config: Record<string, string>, sinkType: string): boolean {
+  if (sinkType !== 'jdbc') return false;
+  return Boolean(
+    config.connectionId?.trim()
+    && config.schema?.trim()
+    && config.table?.trim(),
+  );
+}
+
 // ─── Shared primitives ─────────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-bold uppercase tracking-widest text-blue-300 mt-4 mb-2 px-1 border-l-2 border-blue-500 pl-2">
+    <div className="text-[12px] font-bold uppercase tracking-widest text-blue-300 mt-4 mb-2 px-1 border-l-2 border-blue-500 pl-2">
       {children}
     </div>
   );
@@ -49,7 +74,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <div className="mb-3">
-      <label className="block text-[11px] font-semibold text-slate-200 mb-1">
+      <label className="block text-[12px] font-semibold text-slate-200 mb-1">
         {label}{required && <span className="text-amber-400 ml-0.5">*</span>}
       </label>
       {children}
@@ -122,13 +147,37 @@ function CompactIconButton({
 }
 
 function ZebraList({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return <div className={`overflow-hidden rounded border border-slate-700 ${className}`}>{children}</div>;
+  return <div className={`overflow-hidden ${className}`}>{children}</div>;
 }
 
 function ZebraRow({ children, index, className = '' }: { children: React.ReactNode; index: number; className?: string }) {
   return (
-    <div className={`flex items-center gap-1.5 px-1.5 py-1 ${index > 0 ? 'border-t border-slate-700' : ''} ${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} ${className}`}>
+    <div className={`flex items-center gap-1 px-1 py-0.5 ${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} ${className}`}>
       {children}
+    </div>
+  );
+}
+
+/* Borderless inline dropdown — only chevron visible, no box, used inside zebra column lists */
+function InlineSelect({ value, onChange, children, loading, disabled, className = '' }: {
+  value: string; onChange: (v: string) => void; children: React.ReactNode;
+  loading?: boolean; disabled?: boolean; className?: string;
+}) {
+  return (
+    <div className={`relative flex items-center min-w-0 flex-1 ${className}`}>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled || loading}
+        className="w-full h-6 pl-0.5 pr-4 bg-transparent border-0 text-slate-200 text-[12px] font-mono appearance-none focus:outline-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {children}
+      </select>
+      <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2">
+        {loading
+          ? <Loader2 className="h-2.5 w-2.5 animate-spin text-slate-300" />
+          : <ChevronDown className="h-2.5 w-2.5 text-slate-300" />}
+      </span>
     </div>
   );
 }
@@ -143,6 +192,37 @@ function normalizeFilterExpression(raw: unknown): string {
 
 // ─── Source node config ────────────────────────────────────────────────────────
 const FILE_FORMATS = ['csv', 'parquet', 'json', 'orc', 'avro', 'delta', 'text'];
+const FILE_SUFFIX_PRESETS = [
+  { value: '', label: 'Insert date/timestamp token…' },
+  { value: '{YYYYMMDD}', label: 'YYYYMMDD' },
+  { value: '{YYYY-MM-DD}', label: 'YYYY-MM-DD' },
+  { value: '{YYYY_MM_DD}', label: 'YYYY_MM_DD' },
+  { value: '{YYYYMM}', label: 'YYYYMM' },
+  { value: '{YYYY}', label: 'YYYY' },
+  { value: '{YYYYMMDDHH24MISS}', label: 'YYYYMMDDHH24MISS' },
+  { value: '{YYYYMMDD_HH24MISS}', label: 'YYYYMMDD_HH24MISS' },
+  { value: '{YYYY-MM-DD_HH24MISS}', label: 'YYYY-MM-DD_HH24MISS' },
+  { value: '{DD-MON-YYYY}', label: 'DD-MON-YYYY' },
+  { value: '{DD-MON-YY}', label: 'DD-MON-YY' },
+];
+
+function isFileConnectorType(connectorTypeCode?: string | null): boolean {
+  const code = String(connectorTypeCode ?? '').toUpperCase();
+  return code.startsWith('FILE_') || ['CSV', 'JSON', 'PARQUET', 'AVRO', 'ORC', 'XML', 'EXCEL', 'XLSX'].includes(code);
+}
+
+function isKafkaConnectorType(connectorTypeCode?: string | null): boolean {
+  const code = String(connectorTypeCode ?? '').toUpperCase();
+  return code.includes('KAFKA') || code.includes('KINESIS') || code.includes('PUBSUB') || code.includes('RABBITMQ');
+}
+
+function prettyConnectorType(connectorTypeCode?: string | null): string {
+  return String(connectorTypeCode ?? '')
+    .replace(/^JDBC_/, '')
+    .replace(/^FILE_/, '')
+    .replace(/_/g, ' ')
+    .trim();
+}
 
 function SourceConfig({ nodeId, config, onChange }: {
   nodeId: string;
@@ -152,44 +232,63 @@ function SourceConfig({ nodeId, config, onChange }: {
   const dispatch = useAppDispatch();
   const connectorsByTech = useAppSelector(s => s.connections.connectorsByTech);
   const allConnectors = selectAllConnectors(connectorsByTech);
-  const [techFilter, setTechFilter] = useState<string>('__ALL__');
   const [schemas, setSchemas] = useState<string[]>([]);
   const [tables, setTables] = useState<{ tableName: string; tableType: string }[]>([]);
   const [loadingSchemas, setLoadingSchemas] = useState(false);
   const [loadingTables, setLoadingTables] = useState(false);
+  const [fileFormatOptions, setFileFormatOptions] = useState<Record<string, unknown> | null>(null);
 
-  const srcType = config.sourceType ?? 'jdbc';
+  const selectedConnector = allConnectors.find(c => c.connectorId === config.connectionId);
+  const srcType = selectedConnector
+    ? isFileConnectorType(selectedConnector.connectorTypeCode)
+      ? 'file'
+      : isKafkaConnectorType(selectedConnector.connectorTypeCode)
+      ? 'kafka'
+      : 'jdbc'
+    : (config.sourceType ?? 'jdbc');
+  const supportsCatalogObject = srcType === 'file' || srcType === 'jdbc';
+  const availableConnectors = useMemo(
+    () => [...allConnectors].sort((left, right) =>
+      `${left.connectorDisplayName} ${left.connectorTypeCode ?? ''}`.localeCompare(
+        `${right.connectorDisplayName} ${right.connectorTypeCode ?? ''}`,
+      ),
+    ),
+    [allConnectors],
+  );
+  const inheritedFileFormat = String(
+    fileFormatOptions?.['file_format_code']
+      ?? prettyConnectorType(selectedConnector?.connectorTypeCode)
+      ?? 'FILE',
+  ).replace(/^FILE_/, '').toUpperCase();
+  const inheritedHeaderMode = fileFormatOptions?.['has_header_flag'] === false ? 'Header disabled' : 'Header enabled';
+  const inheritedDelimiter = String(fileFormatOptions?.['field_separator_char'] ?? ',');
+  const inheritedEncoding = String(fileFormatOptions?.['encoding_standard_code'] ?? 'UTF-8');
+  const inheritedDateFormat = String(fileFormatOptions?.['date_format_text'] ?? 'yyyy-MM-dd');
+  const inheritedTimestampFormat = String(fileFormatOptions?.['timestamp_format_text'] ?? 'yyyy-MM-dd HH:mm:ss');
 
   useEffect(() => { dispatch(fetchConnectors()); }, [dispatch]);
 
-  const filteredConnectors: ConnectorSummary[] = techFilter === '__ALL__'
-    ? allConnectors
-    : allConnectors.filter(c =>
-        c.connectorTypeCode?.toUpperCase().includes(techFilter.toUpperCase()) ||
-        (c as any).techCode?.toUpperCase() === techFilter.toUpperCase()
-      );
-
   useEffect(() => {
-    if (!config.connectionId || srcType !== 'jdbc') { setSchemas([]); setTables([]); return; }
+    if (!config.connectionId || !supportsCatalogObject) { setSchemas([]); setTables([]); return; }
     setLoadingSchemas(true);
     api.introspectSchemas(config.connectionId)
       .then(r => setSchemas((r.data?.data ?? []).map((s: any) => s.schemaName ?? s)))
       .catch(() => setSchemas([]))
       .finally(() => setLoadingSchemas(false));
-  }, [config.connectionId, srcType]);
+  }, [config.connectionId, supportsCatalogObject]);
 
   useEffect(() => {
-    if (!config.connectionId || !config.schema || srcType !== 'jdbc') { setTables([]); return; }
+    if (!config.connectionId || !config.schema || !supportsCatalogObject) { setTables([]); return; }
     setLoadingTables(true);
     api.introspectTables(config.connectionId, config.schema)
       .then(r => setTables(r.data?.data ?? []))
       .catch(() => setTables([]))
       .finally(() => setLoadingTables(false));
-  }, [config.connectionId, config.schema, srcType]);
+  }, [config.connectionId, config.schema, supportsCatalogObject]);
 
   // F-23: cache columns on the node config when table is selected so downstream nodes can read them
   useEffect(() => {
-    if (!config.connectionId || !config.table || srcType !== 'jdbc') return;
+    if (!config.connectionId || !config.table || !supportsCatalogObject) return;
     api.introspectColumns(config.connectionId, config.schema ?? '', config.table)
       .then(r => {
         const cols = (r.data?.data ?? []) as Array<{ columnName?: string; dataType?: string; columnType?: string; udtName?: string }>;
@@ -202,76 +301,93 @@ function SourceConfig({ nodeId, config, onChange }: {
         if (compact.length > 0) onChange({ cachedColumns: JSON.stringify(compact) });
       })
       .catch(() => { /* silently ignore — columns just won't be cached */ });
-  }, [config.connectionId, config.schema, config.table]);
+  }, [config.connectionId, config.schema, config.table, supportsCatalogObject]);
 
-  const techCategories = Array.from(new Set(
-    allConnectors.map(c => c.connectorTypeCode?.replace(/^JDBC_/, '').replace(/_/g, ' ') ?? '')
-  )).filter(Boolean).sort();
+  useEffect(() => {
+    if (!config.connectionId || srcType !== 'file') {
+      setFileFormatOptions(null);
+      return;
+    }
+    api.getConnection(config.connectionId)
+      .then(r => setFileFormatOptions((r.data?.data?.fileFormatOptions ?? null) as Record<string, unknown> | null))
+      .catch(() => setFileFormatOptions(null));
+  }, [config.connectionId, srcType]);
 
-  const selectedConnector = allConnectors.find(c => c.connectorId === config.connectionId);
+  const insertSuffixPreset = (token: string) => {
+    if (!token) return;
+    if ((config.filePath ?? '').includes(token)) return;
+    onChange({ filePath: `${config.filePath ?? ''}${token}` });
+  };
+
+  const handleConnectionChange = (connectorId: string) => {
+    const nextConnector = allConnectors.find(c => c.connectorId === connectorId);
+    const derivedSourceType = nextConnector
+      ? isFileConnectorType(nextConnector.connectorTypeCode)
+        ? 'file'
+        : isKafkaConnectorType(nextConnector.connectorTypeCode)
+          ? 'kafka'
+          : 'jdbc'
+      : 'jdbc';
+
+    onChange({
+      connectionId: connectorId,
+      schema: '',
+      table: '',
+      sourceType: derivedSourceType,
+      fileFormat: '',
+      header: '',
+      delimiter: '',
+      inferSchema: '',
+    });
+  };
 
   return (
     <div>
-      <SectionLabel>Source Type</SectionLabel>
-      <div className="flex gap-2 mb-3">
-        {[
-          { val: 'jdbc',  label: '⬡ Database' },
-          { val: 'file',  label: '📄 File'    },
-          { val: 'kafka', label: '⚡ Kafka'   },
-        ].map(({ val, label }) => (
-          <button key={val}
-            onClick={() => onChange({ sourceType: val, connectionId: '', schema: '', table: '', filePath: '', fileFormat: '' })}
-            className={`flex-1 h-8 rounded text-[11px] font-semibold border transition-colors ${
-              srcType === val
-                ? 'bg-blue-600 text-white border-blue-500'
-                : 'bg-[#1e2035] text-slate-300 border-slate-600 hover:border-slate-400 hover:text-white'
-            }`}>{label}</button>
-        ))}
-      </div>
-
-      {srcType === 'jdbc' && (<>
-        <SectionLabel>Technology Filter</SectionLabel>
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          <button onClick={() => setTechFilter('__ALL__')}
-            className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
-              techFilter === '__ALL__' ? 'bg-blue-600 text-white border-blue-500' : 'bg-[#1e2035] text-slate-300 border-slate-500 hover:text-white hover:border-slate-400'
-            }`}>All</button>
-          {techCategories.slice(0, 8).map(t => (
-            <button key={t} onClick={() => setTechFilter(t)}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-colors ${
-                techFilter === t ? 'bg-blue-600 text-white border-blue-500' : 'bg-[#1e2035] text-slate-300 border-slate-500 hover:text-white hover:border-slate-400'
-              }`}>{t}</button>
+      <SectionLabel>Connection</SectionLabel>
+      <Field label="Connection" required>
+        <Select
+          value={config.connectionId ?? ''}
+          onChange={handleConnectionChange}
+        >
+          <option value="">— select connection —</option>
+          {availableConnectors.map(c => (
+            <option key={c.connectorId} value={c.connectorId}>
+              {c.connectorDisplayName} ({prettyConnectorType(c.connectorTypeCode)})
+            </option>
           ))}
-        </div>
-        <SectionLabel>Connection</SectionLabel>
-        <Field label="Connection" required>
-          <Select value={config.connectionId ?? ''} onChange={v => onChange({ connectionId: v, schema: '', table: '' })}>
-            <option value="">— select connection —</option>
-            {filteredConnectors.map(c => (
-              <option key={c.connectorId} value={c.connectorId}>
-                {c.connectorDisplayName} ({c.connectorTypeCode?.replace(/^JDBC_/, '')})
-              </option>
-            ))}
-          </Select>
-          {selectedConnector && (
-            <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-300">
-              <span className={`w-1.5 h-1.5 rounded-full ${selectedConnector.healthStatusCode === 'HEALTHY' ? 'bg-green-500' : 'bg-yellow-500'}`} />
-              {selectedConnector.healthStatusCode ?? 'Unknown'}
+        </Select>
+        {selectedConnector && (
+          <div className="mt-1 space-y-1 text-[12px] text-slate-300">
+            <div className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${
+                selectedConnector.healthStatusCode === 'HEALTHY'
+                  ? 'bg-green-500'
+                  : selectedConnector.healthStatusCode
+                    ? 'bg-yellow-500'
+                    : 'bg-slate-500'
+              }`} />
+              {selectedConnector.healthStatusCode?.trim() || 'Not tested'}
             </div>
-          )}
-        </Field>
-        <SectionLabel>Dataset Location</SectionLabel>
-        <Field label="Schema" required>
+            <div className="text-slate-300">
+              Source category is derived automatically from this connection: <span className="text-slate-300">{srcType.toUpperCase()}</span>
+            </div>
+          </div>
+        )}
+      </Field>
+
+      {supportsCatalogObject && (<>
+        <SectionLabel>{srcType === 'file' ? 'Imported Object' : 'Dataset Location'}</SectionLabel>
+        <Field label={srcType === 'file' ? 'Catalog Path' : 'Schema'} required>
           <Select value={config.schema ?? ''} onChange={v => onChange({ schema: v, table: '' })}
             disabled={!config.connectionId} loading={loadingSchemas}>
-            <option value="">— select schema —</option>
+            <option value="">— select {srcType === 'file' ? 'path' : 'schema'} —</option>
             {schemas.map(s => <option key={s} value={s}>{s}</option>)}
           </Select>
         </Field>
-        <Field label="Table / View" required>
+        <Field label={srcType === 'file' ? 'Imported Object' : 'Table / View'} required>
           <Select value={config.table ?? ''} onChange={v => onChange({ table: v })}
             disabled={!config.schema} loading={loadingTables}>
-            <option value="">— select table —</option>
+            <option value="">— select {srcType === 'file' ? 'object' : 'table'} —</option>
             {tables.map(t => (
               <option key={t.tableName} value={t.tableName}>
                 {t.tableName}{t.tableType === 'VIEW' ? ' (view)' : ''}
@@ -279,6 +395,9 @@ function SourceConfig({ nodeId, config, onChange }: {
             ))}
           </Select>
         </Field>
+      </>)}
+
+      {srcType === 'jdbc' && (<>
         <SectionLabel>Options</SectionLabel>
         <Field label="Read Mode">
           <Select value={config.readMode ?? 'FULL'} onChange={v => onChange({ readMode: v })}>
@@ -296,7 +415,7 @@ function SourceConfig({ nodeId, config, onChange }: {
           <Field label="Custom SQL">
             <textarea value={config.customQuery ?? ''} onChange={e => onChange({ customQuery: e.target.value })}
               placeholder="SELECT * FROM schema.table WHERE ..."
-              className="w-full px-2.5 py-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[11px] font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
+              className="w-full px-2.5 py-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
               rows={4} />
           </Field>
         )}
@@ -306,46 +425,42 @@ function SourceConfig({ nodeId, config, onChange }: {
       </>)}
 
       {srcType === 'file' && (<>
-        <SectionLabel>File Location</SectionLabel>
-        <Field label="File Path / URI" required>
+        <SectionLabel>Runtime Source</SectionLabel>
+        <div className="mb-3 px-1 text-[12px] leading-5 text-slate-400">
+          <div>Schema comes from the imported catalog object. File format and CSV parsing stay inherited from the selected connection and metadata catalog.</div>
+          <div className="mt-1 text-slate-300">
+            <span className="font-semibold text-slate-200">{inheritedFileFormat}</span>
+            <span className="mx-1.5 text-slate-400">|</span>
+            {inheritedHeaderMode}
+            <span className="mx-1.5 text-slate-400">|</span>
+            Delimiter <span className="font-mono text-slate-200">{inheritedDelimiter}</span>
+            <span className="mx-1.5 text-slate-400">|</span>
+            Encoding <span className="font-mono text-slate-200">{inheritedEncoding}</span>
+          </div>
+          <div className="text-slate-300">
+            Date parse <span className="font-mono text-slate-300">{inheritedDateFormat}</span>
+            <span className="mx-1.5 text-slate-400">|</span>
+            Timestamp parse <span className="font-mono text-slate-300">{inheritedTimestampFormat}</span>
+          </div>
+        </div>
+        <Field label="Runtime Object / Path Pattern">
           <TextInput value={config.filePath ?? ''} onChange={v => onChange({ filePath: v })}
-            placeholder="s3://bucket/path/  or  /data/file.csv  or  hdfs://…" />
-          <div className="text-[10px] text-slate-500 mt-1">Supports S3, HDFS, ADLS, GCS, local paths</div>
+            placeholder="/data/orders_{YYYYMMDD}.csv  or  s3://bucket/path/orders_*.csv  or  leave blank to use the imported object path" />
+          <div className="text-[12px] text-slate-300 mt-1">Use this only when runtime file names vary. Leave blank to read the imported catalog object path exactly as stored.</div>
         </Field>
-        <Field label="File Format" required>
-          <Select value={config.fileFormat ?? ''} onChange={v => onChange({ fileFormat: v })}>
-            <option value="">— select format —</option>
-            {FILE_FORMATS.map(f => <option key={f} value={f}>{f.toUpperCase()}</option>)}
+        <Field label="Filename Suffix Token">
+          <Select value="" onChange={v => insertSuffixPreset(v)}>
+            {FILE_SUFFIX_PRESETS.map(option => <option key={option.label} value={option.value}>{option.label}</option>)}
           </Select>
+          <div className="text-[12px] text-slate-300 mt-1">Common presets are listed here, but the runtime path also accepts custom tokens like <span className="font-mono">{'{DD-MON-YYYY}'}</span> or <span className="font-mono">{'{YYYY-MM-DD_HH24MISS}'}</span>.</div>
         </Field>
-        {config.fileFormat === 'csv' && (<>
-          <SectionLabel>CSV Options</SectionLabel>
-          <Field label="Header Row">
-            <Select value={config.header ?? 'true'} onChange={v => onChange({ header: v })}>
-              <option value="true">Yes — first row is header</option>
-              <option value="false">No header</option>
-            </Select>
-          </Field>
-          <Field label="Delimiter">
-            <TextInput value={config.delimiter ?? ','} onChange={v => onChange({ delimiter: v })} placeholder="," />
-          </Field>
-          <Field label="Infer Schema">
-            <Select value={config.inferSchema ?? 'true'} onChange={v => onChange({ inferSchema: v })}>
-              <option value="true">Auto-infer</option>
-              <option value="false">String columns only</option>
-            </Select>
-          </Field>
-        </>)}
-        {config.fileFormat === 'json' && (
-          <Field label="Multi-line JSON">
-            <Select value={config.multiLine ?? 'false'} onChange={v => onChange({ multiLine: v })}>
-              <option value="false">Single-line (NDJSON)</option>
-              <option value="true">Multi-line (one object per file)</option>
-            </Select>
-          </Field>
-        )}
-        <SectionLabel>Options</SectionLabel>
-        <Field label="Recursive Lookup">
+        <SectionLabel>Runtime Matching</SectionLabel>
+        <Field label="Wildcard Filter">
+          <TextInput value={config.pathGlobFilter ?? ''} onChange={v => onChange({ pathGlobFilter: v })}
+            placeholder="*.csv  or  part-*.parquet" />
+          <div className="text-[12px] text-slate-300 mt-1">Optional extra filter when runtime path points to a directory tree. Leave blank if the runtime path already contains the wildcard or token.</div>
+        </Field>
+        <Field label="Subdirectories">
           <Select value={config.recursiveFileLookup ?? 'false'} onChange={v => onChange({ recursiveFileLookup: v })}>
             <option value="false">No</option>
             <option value="true">Yes — scan subdirectories</option>
@@ -386,6 +501,15 @@ const SINK_WRITE_MODES_FILE = [
   { value: 'OVERWRITE', label: 'Overwrite', desc: 'Replace all existing data' },
 ];
 
+function uniqueOrderedStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter(value => {
+    if (!value || seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
 function TargetConfig({ config, onChange, nodeId, openSignal }: {
   config: Record<string, string>;
   onChange: (patch: Record<string, string>) => void;
@@ -407,13 +531,28 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
   const [newKey, setNewKey] = useState('');
   const { columns: sourceColumns, loading: loadingSourceColumns } = useUpstreamColumns(nodeId);
   const [showTargetMappingPopup, setShowTargetMappingPopup] = useState(false);
+  const [autoMapMode, setAutoMapMode] = useState<'name_ci' | 'name_cs' | 'position'>('name_ci');
+  const lastHandledOpenSignalRef = useRef<number | undefined>(undefined);
 
   const sinkType = config.sinkType ?? 'jdbc';
   const writeMode = config.writeMode ?? 'APPEND';
   const needsKeyColumns = ['SCD1', 'SCD2', 'SCD3', 'UPSERT', 'MERGE'].includes(writeMode);
   const selectedMode = WRITE_MODES.find(m => m.value === writeMode);
+  const canOpenMappingEditor = canOpenTargetMappingEditor(config, sinkType);
 
   useEffect(() => { dispatch(fetchConnectors()); }, [dispatch]);
+
+  useEffect(() => {
+    if (openSignal === undefined || lastHandledOpenSignalRef.current === openSignal) return;
+    lastHandledOpenSignalRef.current = openSignal;
+    if (!canOpenMappingEditor) return;
+    setShowTargetMappingPopup(true);
+  }, [canOpenMappingEditor, openSignal]);
+
+  useEffect(() => {
+    if (!showTargetMappingPopup || canOpenMappingEditor) return;
+    setShowTargetMappingPopup(false);
+  }, [canOpenMappingEditor, showTargetMappingPopup]);
 
   useEffect(() => {
     if (!config.connectionId || sinkType !== 'jdbc') { setSchemas([]); setTables([]); return; }
@@ -440,17 +579,10 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
     }
     setLoadingTargetColumns(true);
     api.introspectColumns(config.connectionId, config.schema, config.table)
-      .then(r => setTargetColumns((r.data?.data ?? []).map((c: { columnName: string }) => c.columnName).filter(Boolean)))
+      .then(r => setTargetColumns(uniqueOrderedStrings((r.data?.data ?? []).map((c: { columnName: string }) => c.columnName))))
       .catch(() => setTargetColumns([]))
       .finally(() => setLoadingTargetColumns(false));
   }, [config.connectionId, config.schema, config.table, sinkType]);
-
-  useEffect(() => {
-    if (openSignal === undefined) return;
-    if (sinkType === 'jdbc') {
-      setShowTargetMappingPopup(true);
-    }
-  }, [openSignal, sinkType]);
 
   const existingMappings: Array<{ src: string; tgt: string }> = useMemo(() => {
     try { return config.columnMappings ? JSON.parse(config.columnMappings) : []; }
@@ -472,15 +604,34 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
     onChange({ columnMappings: JSON.stringify(compact) });
   }, [onChange]);
 
-  const autoMapByName = useCallback(() => {
+  const autoMapTargetRows = useCallback(() => {
     if (targetColumns.length === 0 || sourceColumns.length === 0) return;
-    const sourceLookup = new Map(sourceColumns.map(source => [source.toLowerCase(), source]));
-    const auto = targetColumns.map(target => ({
-      tgt: target,
-      src: sourceLookup.get(target.toLowerCase()) ?? '',
-    }));
+    const sourceLookupInsensitive = new Map(sourceColumns.map(source => [source.toLowerCase(), source]));
+    const sourceLookupSensitive = new Map(sourceColumns.map(source => [source, source]));
+    const auto = targetColumns.map((target, index) => {
+      if (autoMapMode === 'position') {
+        return { tgt: target, src: sourceColumns[index] ?? '' };
+      }
+      if (autoMapMode === 'name_cs') {
+        return { tgt: target, src: sourceLookupSensitive.get(target) ?? '' };
+      }
+      return {
+        tgt: target,
+        src: sourceLookupInsensitive.get(target.toLowerCase()) ?? '',
+      };
+    });
     persistTargetMappingRows(auto);
-  }, [persistTargetMappingRows, sourceColumns, targetColumns]);
+  }, [autoMapMode, persistTargetMappingRows, sourceColumns, targetColumns]);
+
+  const updateTargetMappingRow = useCallback((rowIndex: number, src: string) => {
+    const updated = targetMappingRows.map((entry, index) => index === rowIndex ? { ...entry, src } : entry);
+    persistTargetMappingRows(updated);
+  }, [persistTargetMappingRows, targetMappingRows]);
+
+  const mappedTargetCount = useMemo(
+    () => targetMappingRows.filter(row => row.src).length,
+    [targetMappingRows],
+  );
 
   const addKey = () => {
     if (!newKey.trim()) return;
@@ -501,11 +652,11 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
       <>
         <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm" onClick={() => setShowTargetMappingPopup(false)} />
         <div className="fixed inset-0 z-[71] flex items-center justify-center p-2">
-          <div className="h-[min(82vh,820px)] w-[min(1240px,96vw)] overflow-hidden rounded-2xl border border-slate-700 bg-[#0d0f1a] shadow-[0_28px_90px_rgba(2,6,23,0.76)]">
+          <div className="flex h-[min(82vh,820px)] w-[min(1240px,96vw)] flex-col overflow-hidden rounded-2xl border border-slate-700 bg-[#0d0f1a] shadow-[0_28px_90px_rgba(2,6,23,0.76)]">
             <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
               <div>
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300">Target Mapping</div>
-                <div className="mt-0.5 text-[11px] text-slate-300">Empty source means skip that target in generated code.</div>
+                <div className="text-[12px] font-bold uppercase tracking-[0.18em] text-emerald-300">Target Mapping</div>
+                <div className="mt-0.5 text-[12px] text-slate-300">Map source columns, audit values, or leave a target empty to skip it.</div>
               </div>
               <button
                 type="button"
@@ -517,7 +668,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
               </button>
             </div>
 
-            <div className="h-[calc(100%-94px)] overflow-auto px-2 py-2">
+            <div className="min-h-0 flex-1 overflow-auto px-2 py-2">
               {sinkType !== 'jdbc' ? (
                 <div className="rounded-lg border border-slate-700 bg-[#111320] px-4 py-5 text-[12px] text-slate-300">
                   Target bulk mapping popup is available for JDBC targets. Choose JDBC sink type.
@@ -528,72 +679,95 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-lg border border-slate-700">
-                  <table className="w-full table-fixed">
-                    <colgroup>
-                      <col className="w-[220px]" />
-                      <col className="w-[220px]" />
-                      <col />
-                    </colgroup>
-                    <thead className="bg-[#101426] text-left text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                      <tr>
-                        <th className="px-2 py-1">Source</th>
-                        <th className="px-2 py-1">Target</th>
-                        <th className="px-2 py-1">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {targetMappingRows.map((row, index) => (
-                        <tr key={`${row.tgt}_${index}`} className={`border-t border-slate-700 ${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'}`}>
-                          <td className="px-2 py-0.5 align-top">
-                            <select
-                              value={row.src}
-                              onChange={e => {
-                                const updated = targetMappingRows.map((entry, rowIndex) => rowIndex === index ? { ...entry, src: e.target.value } : entry);
-                                persistTargetMappingRows(updated);
-                              }}
-                              className="h-6 w-full rounded border border-slate-600 bg-[#1e2035] px-1.5 text-[10px] text-slate-100"
-                            >
-                              <option value="">-- skip this target column --</option>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-700 bg-[#101426] px-2 py-2">
+                    <div className="flex flex-wrap items-center gap-3 text-[12px] text-slate-400">
+                      <span>Targets {targetColumns.length}</span>
+                      <span>Mapped {mappedTargetCount}</span>
+                      <span>Skipped {Math.max(targetColumns.length - mappedTargetCount, 0)}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[12px] font-semibold uppercase tracking-[0.14em] text-slate-400">Auto-map</span>
+                      <select
+                        value={autoMapMode}
+                        onChange={e => setAutoMapMode(e.target.value as 'name_ci' | 'name_cs' | 'position')}
+                        className="h-6 rounded border border-slate-600 bg-[#1a2139] px-2 text-[12px] text-slate-100"
+                      >
+                        <option value="name_ci">Name · Case-insensitive</option>
+                        <option value="name_cs">Name · Case-sensitive</option>
+                        <option value="position">Position</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={autoMapTargetRows}
+                        disabled={loadingTargetColumns || loadingSourceColumns || targetColumns.length === 0}
+                        className="h-6 rounded border border-blue-500/40 bg-blue-500/10 px-2 text-[12px] font-semibold text-blue-300 disabled:opacity-40"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-[240px_minmax(0,1fr)_140px] border-b border-slate-700 bg-[#0f1527] px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.12em] text-slate-300">
+                    <div>Target Column</div>
+                    <div>Source / Audit Value</div>
+                    <div>Status</div>
+                  </div>
+
+                  <div className="max-h-[58vh] overflow-auto">
+                    {targetMappingRows.map((row, index) => {
+                      const usesAuditValue = isAuditMappingValue(row.src);
+                      const statusLabel = !row.src ? 'Skipped' : usesAuditValue ? 'Audit Value' : 'Mapped';
+                      const statusClass = !row.src
+                        ? 'text-slate-400'
+                        : usesAuditValue
+                          ? 'text-amber-300'
+                          : 'text-emerald-400';
+
+                      return (
+                        <div
+                          key={`${row.tgt}_${index}`}
+                          className={`grid grid-cols-[240px_minmax(0,1fr)_140px] items-center gap-3 border-t border-slate-800/60 px-3 py-0.5 ${index % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'}`}
+                        >
+                          <div className="truncate text-[12px] font-semibold font-mono text-white" title={row.tgt}>
+                            {row.tgt}
+                          </div>
+                          <InlineSelect value={row.src} onChange={value => updateTargetMappingRow(index, value)}>
+                            <option value="">Skip this target column</option>
+                            <optgroup label="Source columns">
                               {sourceColumns.map(source => (
                                 <option key={source} value={source}>{source}</option>
                               ))}
-                            </select>
-                          </td>
-                          <td className="px-2 py-0.5 align-top">
-                            <div className="h-6 rounded border border-slate-700 bg-[#0d1020] px-1.5 text-[10px] text-slate-200 flex items-center">
-                              {row.tgt}
-                            </div>
-                          </td>
-                          <td className="px-2 py-0.5 align-top">
-                            <div className={`h-6 rounded border px-1.5 text-[9px] flex items-center ${row.src ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-slate-700 bg-[#0d1020] text-slate-500'}`}>
-                              {row.src ? 'Mapped' : 'Skipped'}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                            </optgroup>
+                            <optgroup label="Audit values">
+                              {TARGET_AUDIT_VALUE_OPTIONS.map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                              ))}
+                            </optgroup>
+                          </InlineSelect>
+                          <div className={`truncate text-[12px] font-semibold ${statusClass}`} title={row.src ? (usesAuditValue ? getAuditMappingLabel(row.src) : row.src) : 'Skipped'}>
+                            {row.src
+                              ? usesAuditValue
+                                ? `${statusLabel} · ${getAuditMappingLabel(row.src)}`
+                                : `${statusLabel} · ${row.src}`
+                              : statusLabel}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-700 px-3 py-2">
-              <div className="text-[10px] text-slate-500">
-                Sources: {loadingSourceColumns ? 'loading...' : sourceColumns.length} · Targets: {loadingTargetColumns ? 'loading...' : targetColumns.length}
+              <div className="text-[12px] text-slate-400">
+                Sources {loadingSourceColumns ? 'loading…' : sourceColumns.length} · Targets {loadingTargetColumns ? 'loading…' : targetColumns.length} · Audit values available in every row
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={autoMapByName}
-                  disabled={loadingTargetColumns || loadingSourceColumns || targetColumns.length === 0}
-                  className="h-6 rounded border border-blue-500/40 bg-blue-500/10 px-2 text-[10px] font-semibold text-blue-300 disabled:opacity-40"
-                >
-                  Auto-map by Name
-                </button>
-                <button
-                  type="button"
                   onClick={() => setShowTargetMappingPopup(false)}
-                  className="h-6 rounded border border-slate-600 bg-[#1a2139] px-2 text-[10px] font-semibold text-slate-200"
+                  className="h-6 rounded border border-slate-600 bg-[#1a2139] px-2 text-[12px] font-semibold text-slate-200"
                 >
                   Done
                 </button>
@@ -617,7 +791,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
         ].map(({ val, label }) => (
           <button key={val}
             onClick={() => onChange({ sinkType: val, connectionId: '', schema: '', table: '', targetPath: '', fileFormat: '', deltaPath: '', deltaTable: '', catalogTable: '' })}
-            className={`h-8 rounded text-[11px] font-semibold border transition-colors ${
+            className={`h-8 rounded text-[12px] font-semibold border transition-colors ${
               sinkType === val
                 ? 'bg-blue-600 text-white border-blue-500'
                 : 'bg-[#1e2035] text-slate-300 border-slate-600 hover:border-slate-400 hover:text-white'
@@ -654,7 +828,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
               </Select>
             </div>
             <TextInput value={config.table ?? ''} onChange={v => onChange({ table: v })}
-              placeholder="or type name" className="flex-1 text-[11px]" />
+              placeholder="or type name" className="flex-1 text-[12px]" />
           </div>
         </Field>
         <SectionLabel>Loading Strategy</SectionLabel>
@@ -663,7 +837,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
             {WRITE_MODES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </Select>
           {selectedMode && (
-            <p className="mt-1.5 text-[10px] text-slate-300 leading-relaxed">{selectedMode.desc}</p>
+            <p className="mt-1.5 text-[12px] text-slate-300 leading-relaxed">{selectedMode.desc}</p>
           )}
         </Field>
         {needsKeyColumns && (
@@ -671,7 +845,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
             <div className="space-y-1">
               {keyColumns.map((k, i) => (
                 <div key={i} className="flex items-center gap-1.5 h-7 px-2 rounded bg-[#1e2035] border border-slate-500">
-                  <span className="flex-1 text-[11px] text-slate-300 font-mono">{k}</span>
+                  <span className="flex-1 text-[12px] text-slate-300 font-mono">{k}</span>
                   <button onClick={() => removeKey(i)} className="text-slate-400 hover:text-red-300 transition-colors">
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -679,7 +853,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
               ))}
               <div className="flex gap-1.5">
                 <TextInput value={newKey} onChange={setNewKey} placeholder="column_name" className="flex-1" />
-                <button onClick={addKey} className="h-8 px-2.5 rounded bg-blue-700 hover:bg-blue-600 text-white text-[11px] font-medium transition-colors">
+                <button onClick={addKey} className="h-8 px-2.5 rounded bg-blue-700 hover:bg-blue-600 text-white text-[12px] font-medium transition-colors">
                   <Plus className="w-3 h-3" />
                 </button>
               </div>
@@ -706,20 +880,21 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
             <option value="QUARANTINE">Quarantine bad rows to error table</option>
           </Select>
         </Field>
-        <TargetAuditColumnsPanel
-          config={config}
-          onChange={onChange}
-          targetColumns={targetColumns}
-          loading={loadingTargetColumns}
-        />
         <button
           type="button"
           onClick={() => setShowTargetMappingPopup(true)}
-          className="mb-2 flex items-center gap-1.5 h-8 px-3 rounded bg-[#1e2035] border border-emerald-500/40 text-[11px] text-emerald-300 hover:bg-emerald-500/10 transition-colors"
+          disabled={!canOpenMappingEditor}
+          className="mb-2 flex items-center gap-1.5 h-8 px-3 rounded bg-[#1e2035] border border-emerald-500/40 text-[12px] text-emerald-300 hover:bg-emerald-500/10 transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#1e2035]"
         >
-          Open Target Mapping Popup
+          Open Target Mapping
         </button>
-        <ColumnMappingPanel config={config} onChange={onChange} nodeId={nodeId} />
+        <div className="mb-2 rounded border border-slate-700 bg-[#101629] px-3 py-2 text-[12px] text-slate-400">
+          {!canOpenMappingEditor
+            ? 'Select connection, schema, and table first. Then double-click the target node or use the mapping button.'
+            : mappedTargetCount > 0
+            ? `${mappedTargetCount} target column${mappedTargetCount === 1 ? '' : 's'} mapped. Use the popup for auto-map, audit values, and manual overrides.`
+            : 'No target mappings saved yet. Use the popup to auto-map by name or position, then override rows inline.'}
+        </div>
       </>)}
 
       {sinkType === 'file' && (<>
@@ -727,7 +902,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
         <Field label="Output Path / URI" required>
           <TextInput value={config.targetPath ?? ''} onChange={v => onChange({ targetPath: v })}
             placeholder="s3://bucket/path/  or  /output/data/  or  hdfs://…" />
-          <div className="text-[10px] text-slate-500 mt-1">Supports S3, HDFS, ADLS, GCS, local paths</div>
+          <div className="text-[12px] text-slate-300 mt-1">Supports S3, HDFS, ADLS, GCS, local paths</div>
         </Field>
         <Field label="File Format" required>
           <Select value={config.fileFormat ?? ''} onChange={v => onChange({ fileFormat: v })}>
@@ -749,7 +924,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
             {SINK_WRITE_MODES_FILE.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </Select>
           {SINK_WRITE_MODES_FILE.find(m => m.value === writeMode) && (
-            <p className="mt-1.5 text-[10px] text-slate-300">{SINK_WRITE_MODES_FILE.find(m => m.value === writeMode)!.desc}</p>
+            <p className="mt-1.5 text-[12px] text-slate-300">{SINK_WRITE_MODES_FILE.find(m => m.value === writeMode)!.desc}</p>
           )}
         </Field>
         <Field label="Compression">
@@ -776,7 +951,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
         <Field label="Table Name (optional)">
           <TextInput value={config.deltaTable ?? ''} onChange={v => onChange({ deltaTable: v })}
             placeholder="catalog.schema.table_name" />
-          <div className="text-[10px] text-slate-500 mt-1">Use Table Name for managed Delta tables; Path for external storage</div>
+          <div className="text-[12px] text-slate-300 mt-1">Use Table Name for managed Delta tables; Path for external storage</div>
         </Field>
         <SectionLabel>Write Strategy</SectionLabel>
         <Field label="Write Mode" required>
@@ -790,7 +965,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
           <Field label="Merge Key Columns" required>
             <TextInput value={config.mergeKeys ?? ''} onChange={v => onChange({ mergeKeys: v })}
               placeholder="id,tenant_id" />
-            <div className="text-[10px] text-slate-500 mt-1">Comma-separated columns used to match rows</div>
+            <div className="text-[12px] text-slate-300 mt-1">Comma-separated columns used to match rows</div>
           </Field>
         )}
         <Field label="Partition By (columns)">
@@ -807,7 +982,7 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
         <Field label="Catalog Table Name" required>
           <TextInput value={config.catalogTable ?? ''} onChange={v => onChange({ catalogTable: v })}
             placeholder="catalog.schema.table_name" />
-          <div className="text-[10px] text-slate-500 mt-1">Must be a registered Iceberg catalog table</div>
+          <div className="text-[12px] text-slate-300 mt-1">Must be a registered Iceberg catalog table</div>
         </Field>
         <SectionLabel>Write Strategy</SectionLabel>
         <Field label="Write Mode" required>
@@ -824,92 +999,6 @@ function TargetConfig({ config, onChange, nodeId, openSignal }: {
         )}
       </>)}
     </div>
-  );
-}
-
-function TargetAuditColumnsPanel({
-  config,
-  onChange,
-  targetColumns,
-  loading,
-}: {
-  config: Record<string, string>;
-  onChange: (patch: Record<string, string>) => void;
-  targetColumns: string[];
-  loading: boolean;
-}) {
-  const enabled = config.auditColumnsEnabled === 'true';
-
-  const renderColumnField = (label: string, key: 'loadTsColumn' | 'runIdColumn' | 'runUserColumn', placeholder: string) => (
-    <Field label={label}>
-      {targetColumns.length > 0 ? (
-        <Select value={config[key] ?? ''} onChange={v => onChange({ [key]: v })} loading={loading}>
-          <option value="">— skip this audit value —</option>
-          {targetColumns.map(col => <option key={col} value={col}>{col}</option>)}
-        </Select>
-      ) : (
-        <TextInput
-          value={config[key] ?? ''}
-          onChange={v => onChange({ [key]: v })}
-          placeholder={placeholder}
-        />
-      )}
-    </Field>
-  );
-
-  return (
-    <>
-      <SectionLabel>Audit Values On Write</SectionLabel>
-      <p className="text-[10px] text-slate-500 italic mb-2 px-1">
-        Configure pipeline audit values directly on the target instead of using a separate Audit node.
-      </p>
-      <div className="flex gap-1.5 mb-2">
-        <button
-          type="button"
-          onClick={() => onChange({ auditColumnsEnabled: 'false', loadTsColumn: '', runIdColumn: '', runUserColumn: '' })}
-          className={`flex-1 h-7 rounded text-[10px] font-semibold border transition-colors ${
-            !enabled
-              ? 'bg-blue-600 text-white border-blue-500'
-              : 'bg-[#1e2035] text-slate-300 border-slate-600 hover:border-slate-400 hover:text-white'
-          }`}
-        >
-          Off
-        </button>
-        <button
-          type="button"
-          onClick={() => onChange({
-            auditColumnsEnabled: 'true',
-            loadTsColumn: config.loadTsColumn ?? '_load_ts',
-            runIdColumn: config.runIdColumn ?? '_run_id',
-            runUserColumn: config.runUserColumn ?? '_run_user',
-            useScaffoldArgs: config.useScaffoldArgs ?? 'true',
-          })}
-          className={`flex-1 h-7 rounded text-[10px] font-semibold border transition-colors ${
-            enabled
-              ? 'bg-blue-600 text-white border-blue-500'
-              : 'bg-[#1e2035] text-slate-300 border-slate-600 hover:border-slate-400 hover:text-white'
-          }`}
-        >
-          On
-        </button>
-      </div>
-      {enabled && (
-        <>
-          <p className="text-[10px] text-slate-400 mb-2 px-1">
-            Pick which target columns should receive load timestamp, run ID, and run user values. Leave a field blank to skip it.
-          </p>
-          {renderColumnField('Load Timestamp → Target Column', 'loadTsColumn', '_load_ts')}
-          {renderColumnField('Run ID → Target Column', 'runIdColumn', '_run_id')}
-          {renderColumnField('Run User → Target Column', 'runUserColumn', '_run_user')}
-          <Field label="Runtime Value Source">
-            <Select value={config.useScaffoldArgs ?? 'true'} onChange={v => onChange({ useScaffoldArgs: v })}>
-              <option value="true">Use pipeline run args (--run-id, --run-user)</option>
-              <option value="false">Use literal defaults (empty string / system)</option>
-            </Select>
-          </Field>
-        </>
-      )}
-    </>
   );
 }
 
@@ -955,7 +1044,7 @@ function FilterConfig({ config, onChange, nodeId }: {
               setVisualMode(false);
               onChange({ authoringMode: 'sql', conditionLanguage: 'spark_sql' });
             }}
-            className={`h-9 rounded-lg text-[11px] font-semibold border transition-colors ${
+            className={`h-9 rounded-lg text-[12px] font-semibold border transition-colors ${
               !visualMode ? 'bg-blue-600 text-white border-blue-500' : 'bg-[#1e2035] text-slate-300 border-slate-600 hover:text-white'
             }`}
           >
@@ -967,7 +1056,7 @@ function FilterConfig({ config, onChange, nodeId }: {
               setVisualMode(true);
               onChange({ authoringMode: 'visual', conditionLanguage: 'spark_sql' });
             }}
-            className={`h-9 rounded-lg text-[11px] font-semibold border transition-colors ${
+            className={`h-9 rounded-lg text-[12px] font-semibold border transition-colors ${
               visualMode ? 'bg-blue-600 text-white border-blue-500' : 'bg-[#1e2035] text-slate-300 border-slate-600 hover:text-white'
             }`}
           >
@@ -977,11 +1066,11 @@ function FilterConfig({ config, onChange, nodeId }: {
       </Field>
 
       <div className="mb-3 rounded-xl border border-slate-700 bg-[#111426] px-3 py-2.5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Execution Semantics</div>
-        <p className="mt-2 text-[11px] leading-5 text-slate-300">
+        <div className="text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">Execution Semantics</div>
+        <p className="mt-2 text-[12px] leading-5 text-slate-300">
           Manual mode accepts a Spark SQL predicate. The generated PySpark uses that predicate directly inside Spark, not a custom SQL-to-PySpark translator.
         </p>
-        <p className="mt-1 text-[11px] leading-5 text-slate-500">
+        <p className="mt-1 text-[12px] leading-5 text-slate-300">
           Omit the <code className="font-mono text-slate-300">WHERE</code> keyword if you want, but if someone types it anyway we strip it automatically during generation.
         </p>
       </div>
@@ -999,14 +1088,14 @@ function FilterConfig({ config, onChange, nodeId }: {
             className="w-full rounded-xl bg-[#1e2035] border border-slate-500 px-3 py-3 text-[12px] font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 resize-y"
             rows={6}
           />
-          <p className="mt-1.5 px-1 text-[10px] text-slate-500">
+          <p className="mt-1.5 px-1 text-[12px] text-slate-300">
             Write only the predicate expression. Do not write a full SELECT statement.
           </p>
         </Field>
       ) : (
         <div className="mb-3">
           {fields.length === 0 && (
-            <p className="mb-2 px-1 text-[10px] italic text-slate-500">Connect an upstream node to enable column pickers.</p>
+            <p className="mb-2 px-1 text-[12px] italic text-slate-300">Connect an upstream node to enable column pickers.</p>
           )}
           <ConditionBuilder
             value={conditionValue}
@@ -1015,8 +1104,8 @@ function FilterConfig({ config, onChange, nodeId }: {
           />
           {normalizedExpression && (
             <div className="mt-2 rounded-xl border border-slate-700 bg-[#111426] px-3 py-2.5">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Generated Predicate</p>
-              <code className="block text-[11px] font-mono leading-5 text-blue-300 break-all">{normalizedExpression}</code>
+              <p className="mb-1 text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">Generated Predicate</p>
+              <code className="block text-[12px] font-mono leading-5 text-blue-300 break-all">{normalizedExpression}</code>
             </div>
           )}
         </div>
@@ -1030,8 +1119,8 @@ function FilterConfig({ config, onChange, nodeId }: {
       </Field>
 
       <div className="rounded-xl border border-slate-700 bg-[#111426] px-3 py-2.5">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Effective Predicate</div>
-        <code className="mt-2 block text-[11px] font-mono leading-5 text-slate-200 break-all">{effectivePredicate}</code>
+        <div className="text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">Effective Predicate</div>
+        <code className="mt-2 block text-[12px] font-mono leading-5 text-slate-200 break-all">{effectivePredicate}</code>
       </div>
     </div>
   );
@@ -1097,12 +1186,10 @@ function JoinConfig({ config, onChange, nodeId }: {
   const ColPicker = ({ value, cols, loading, onSelect, side }: {
     value: string; cols: string[]; loading: boolean; onSelect: (v: string) => void; side: string;
   }) => (
-    <select value={value} onChange={e => onSelect(e.target.value)}
-      className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono
-                 focus:outline-none focus:border-blue-400 min-w-0">
+    <InlineSelect value={value} onChange={onSelect} loading={loading}>
       <option value="">{loading ? 'Loading…' : cols.length ? `— ${side} col —` : `type ${side} col`}</option>
       {cols.map(c => <option key={c} value={c}>{c}</option>)}
-    </select>
+    </InlineSelect>
   );
 
   return (
@@ -1115,7 +1202,7 @@ function JoinConfig({ config, onChange, nodeId }: {
       </Field>
 
       <SectionLabel>Join Conditions</SectionLabel>
-      <div className="flex text-[10px] text-slate-500 font-semibold px-1 mb-1 gap-1.5">
+      <div className="flex text-[12px] text-slate-300 font-semibold px-1 mb-1 gap-1.5">
         <span className="flex-1 truncate">{leftName}</span>
         <span className="w-5" />
         <span className="flex-1 truncate">{rightName}</span>
@@ -1127,13 +1214,13 @@ function JoinConfig({ config, onChange, nodeId }: {
             {leftCols.length > 0 || loadingL ? (
               <ColPicker value={k.left} cols={leftCols} loading={loadingL} onSelect={v => updateKey(i, 'left', v)} side="left" />
             ) : (
-              <TextInput value={k.left} onChange={v => updateKey(i, 'left', v)} placeholder="left.col" className="h-6 px-1.5 text-[10px]" />
+              <TextInput value={k.left} onChange={v => updateKey(i, 'left', v)} placeholder="left.col" className="h-6 px-1.5 text-[12px]" />
             )}
-            <span className="text-slate-500 text-[10px] shrink-0">=</span>
+            <span className="text-slate-300 text-[12px] shrink-0">=</span>
             {rightCols.length > 0 || loadingR ? (
               <ColPicker value={k.right} cols={rightCols} loading={loadingR} onSelect={v => updateKey(i, 'right', v)} side="right" />
             ) : (
-              <TextInput value={k.right} onChange={v => updateKey(i, 'right', v)} placeholder="right.col" className="h-6 px-1.5 text-[10px]" />
+              <TextInput value={k.right} onChange={v => updateKey(i, 'right', v)} placeholder="right.col" className="h-6 px-1.5 text-[12px]" />
             )}
             <CompactIconButton
               title="Delete join key"
@@ -1150,7 +1237,7 @@ function JoinConfig({ config, onChange, nodeId }: {
         ))}
       </ZebraList>
       <div className="mt-1.5 flex items-center justify-between px-1">
-        <span className="text-[10px] text-slate-500">Rows {keys.length}</span>
+        <span className="text-[12px] text-slate-300">Rows {keys.length}</span>
         <CompactIconButton
           title="Add join key"
           onClick={() => {
@@ -1163,7 +1250,7 @@ function JoinConfig({ config, onChange, nodeId }: {
         </CompactIconButton>
       </div>
       {(!leftSource || !rightSource) && (
-        <p className="text-[11px] text-slate-600 italic mt-2 px-1">Connect two nodes to enable column pickers.</p>
+        <p className="text-[12px] text-slate-400 italic mt-2 px-1">Connect two nodes to enable column pickers.</p>
       )}
     </div>
   );
@@ -1214,7 +1301,7 @@ function renderCompactParamControl(
   onChange: (next: unknown) => void,
   disabled?: boolean,
 ) {
-  const className = 'h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[11px] text-slate-100 focus:outline-none focus:border-blue-400';
+  const className = 'h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[12px] text-slate-100 focus:outline-none focus:border-blue-400';
   const inputValue = typeof value === 'number' || typeof value === 'string' ? value : '';
 
   if (param.type === 'number') {
@@ -1249,7 +1336,7 @@ function renderCompactParamControl(
 
   if (param.type === 'toggle') {
     return (
-      <label className="flex h-8 items-center gap-2 text-[11px] text-slate-200">
+      <label className="flex h-8 items-center gap-2 text-[12px] text-slate-200">
         <input
           type="checkbox"
           checked={Boolean(value)}
@@ -1454,8 +1541,8 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
           <div className="h-[min(88vh,900px)] w-[min(1500px,98vw)] overflow-hidden rounded-2xl border border-slate-700 bg-[#0d0f1a] shadow-[0_28px_90px_rgba(2,6,23,0.76)]">
             <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
               <div>
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-blue-300">Column Mapping</div>
-                <div className="mt-0.5 text-[11px] text-slate-300">Compact zebra rows on the left, inline properties editor on the right.</div>
+                <div className="text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">Column Mapping</div>
+                <div className="mt-0.5 text-[12px] text-slate-300">Compact zebra rows on the left, inline properties editor on the right.</div>
               </div>
               <button
                 type="button"
@@ -1472,18 +1559,18 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                 {sequences.length === 0 ? (
                   <div className="h-full px-4 py-6 text-center">
                     <div className="text-[12px] text-slate-300">No target mapping rows yet.</div>
-                    <div className="mt-1 text-[11px] text-slate-500">Use one-click prefill to create one row per source column.</div>
+                    <div className="mt-1 text-[12px] text-slate-300">Use one-click prefill to create one row per source column.</div>
                     <button
                       type="button"
                       onClick={seedMappingsFromColumns}
-                      className="mt-3 rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-[11px] font-semibold text-blue-300"
+                      className="mt-3 rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-1.5 text-[12px] font-semibold text-blue-300"
                     >
                       Prefill from Source Columns
                     </button>
                   </div>
                 ) : (
                   <div className="grid h-full grid-rows-[32px_minmax(0,1fr)]">
-                    <div className="grid grid-cols-[200px_200px_minmax(0,1fr)_44px] border-b border-slate-700 bg-[#101426] px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                    <div className="grid grid-cols-[200px_200px_minmax(0,1fr)_44px] border-b border-slate-700 bg-[#101426] px-3 text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
                       <div className="flex items-center">Target</div>
                       <div className="flex items-center">Source</div>
                       <div className="flex items-center">Status</div>
@@ -1504,7 +1591,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                                 value={seq.columnName}
                                 onClick={e => e.stopPropagation()}
                                 onChange={e => patchSequence(seq.id, { columnName: e.target.value })}
-                                className="h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[11px] text-slate-100"
+                                className="h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[12px] text-slate-100"
                                 placeholder="target_column"
                               />
                             </div>
@@ -1513,7 +1600,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                                 value={seq.sourceColumn ?? ''}
                                 onClick={e => e.stopPropagation()}
                                 onChange={e => patchSequence(seq.id, { sourceColumn: e.target.value })}
-                                className="h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[11px] text-slate-100"
+                                className="h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[12px] text-slate-100"
                               >
                                 <option value="">-- skip --</option>
                                 {upstreamColumns.map(column => (
@@ -1521,8 +1608,8 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                                 ))}
                               </select>
                             </div>
-                            <div className="flex min-w-0 items-center text-[11px]">
-                              <span className={`${String(seq.sourceColumn ?? '').trim() ? 'text-emerald-300' : 'text-slate-500'} truncate`}>
+                            <div className="flex min-w-0 items-center text-[12px]">
+                              <span className={`${String(seq.sourceColumn ?? '').trim() ? 'text-emerald-300' : 'text-slate-300'} truncate`}>
                                 {summarizeSequence(seq)}
                               </span>
                             </div>
@@ -1551,26 +1638,26 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                 {selectedSequence ? (
                   <div className="grid h-full grid-rows-[72px_minmax(0,1fr)]">
                     <div className="border-b border-slate-700 px-3 py-2">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">Properties Editor</div>
+                      <div className="text-[12px] font-bold uppercase tracking-[0.16em] text-blue-300">Properties Editor</div>
                       <div className="mt-1 text-[12px] text-slate-100">
                         {selectedSequence.sourceColumn || '∅'} {'->'} {selectedSequence.columnName || '∅'}
                       </div>
-                      <div className="mt-1 text-[10px] text-slate-500">
+                      <div className="mt-1 text-[12px] text-slate-300">
                         Direct map when no transformation rows are listed.
                       </div>
                     </div>
 
                     <div className="min-h-0 overflow-auto">
                       {selectedHasLegacyExpression && (
-                        <div className="border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                        <div className="border-b border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-200">
                           Legacy expression rule detected. Adding flat transformation rows will replace it with the new inline model.
                         </div>
                       )}
 
                       <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
                         <div>
-                          <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">Transform</div>
-                          <div className="text-[10px] text-slate-500">Flat zebra rows. No groups.</div>
+                          <div className="text-[12px] font-bold uppercase tracking-[0.16em] text-blue-300">Transform</div>
+                          <div className="text-[12px] text-slate-300">Flat zebra rows. No groups.</div>
                         </div>
                         <button
                           type="button"
@@ -1582,7 +1669,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-[46px_220px_minmax(0,1fr)_150px] border-b border-slate-700 bg-[#101426] px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                      <div className="grid grid-cols-[46px_220px_minmax(0,1fr)_150px] border-b border-slate-700 bg-[#101426] px-3 text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
                         <div className="flex items-center py-2">#</div>
                         <div className="flex items-center py-2">Transformation</div>
                         <div className="flex items-center py-2">Properties</div>
@@ -1590,7 +1677,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                       </div>
 
                       {selectedEditableSteps.length === 0 ? (
-                        <div className="px-3 py-6 text-[11px] text-slate-500">No transformation rows. This mapping is currently a direct source-to-target pass-through.</div>
+                        <div className="px-3 py-6 text-[12px] text-slate-300">No transformation rows. This mapping is currently a direct source-to-target pass-through.</div>
                       ) : (
                         selectedEditableSteps.map((step, index) => {
                           const primitive = TRANSFORM_REGISTRY[step.type];
@@ -1603,7 +1690,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                           return (
                             <React.Fragment key={step.stepId}>
                               <div className={`grid grid-cols-[46px_220px_minmax(0,1fr)_150px] border-b border-slate-800 px-3 py-1 ${rowTone}`}>
-                                <div className="flex items-center gap-2 text-[11px] text-slate-300">
+                                <div className="flex items-center gap-2 text-[12px] text-slate-300">
                                   <input
                                     type="checkbox"
                                     checked={step.enabled}
@@ -1617,7 +1704,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                                   <select
                                     value={step.type}
                                     onChange={e => patchSelectedSteps(selectedEditableSteps.map(current => current.stepId === step.stepId ? { ...current, type: e.target.value, params: buildDefaultTransformParams(e.target.value) } : current))}
-                                    className="h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[11px] text-slate-100"
+                                    className="h-8 w-full rounded border border-slate-600 bg-[#1a1f31] px-2 text-[12px] text-slate-100"
                                   >
                                     {transformOptions.map(option => (
                                       <option key={option.id} value={option.id}>
@@ -1627,7 +1714,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                                   </select>
                                 </div>
 
-                                <div className="flex items-center py-1 pr-2 text-[11px] text-slate-300">
+                                <div className="flex items-center py-1 pr-2 text-[12px] text-slate-300">
                                   {primitive ? (
                                     inlineParam ? (
                                       renderCompactParamControl(
@@ -1640,7 +1727,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                                         !step.enabled,
                                       )
                                     ) : primitive.parameters.length === 0 ? (
-                                      <span className="text-slate-500">No parameters</span>
+                                      <span className="text-slate-300">No parameters</span>
                                     ) : (
                                       <span className="truncate text-slate-400">
                                         {primitive.parameters.length} field{primitive.parameters.length === 1 ? '' : 's'} configured in details
@@ -1700,11 +1787,11 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                               {expanded && primitive && primitive.parameters.length > 0 && (
                                 <div className={`grid grid-cols-[46px_220px_minmax(0,1fr)_150px] border-b border-slate-800 px-3 py-2 ${rowTone}`}>
                                   <div />
-                                  <div className="py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Details</div>
+                                  <div className="py-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-300">Details</div>
                                   <div className="grid gap-2 md:grid-cols-2">
                                     {primitive.parameters.map(param => (
                                       <div key={param.id} className="min-w-0">
-                                        <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.label}</div>
+                                        <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">{param.label}</div>
                                         {renderCompactParamControl(
                                           param,
                                           step.params[param.id] ?? param.default,
@@ -1733,7 +1820,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-700 px-3 py-2">
-              <div className="text-[10px] text-slate-500">Rows {sequences.length} · Source {upstreamColumns.length}</div>
+              <div className="text-[12px] text-slate-300">Rows {sequences.length} · Source {upstreamColumns.length}</div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -1750,7 +1837,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                 <button
                   type="button"
                   onClick={() => setEditing('pattern')}
-                  className="h-5 rounded border border-purple-500/40 bg-purple-500/10 px-1.5 text-[9px] font-semibold text-purple-300"
+                  className="h-5 rounded border border-purple-500/40 bg-purple-500/10 px-1.5 text-[12px] font-semibold text-purple-300"
                 >
                   Pattern Library
                 </button>
@@ -1818,12 +1905,12 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
     <div>
       <SectionLabel>Column Transformations</SectionLabel>
       {sequences.length === 0 ? (
-        <p className="text-[11px] text-slate-500 italic py-2 px-1">
+        <p className="text-[12px] text-slate-300 italic py-2 px-1">
           No column transformations yet. Add one below.
         </p>
       ) : (
         <div className="mb-3">
-          <div className="grid grid-cols-[28px_minmax(0,1fr)_52px_44px_32px] border-b border-slate-700 bg-[#101426] px-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <div className="grid grid-cols-[28px_minmax(0,1fr)_52px_44px_32px] border-b border-slate-700 bg-[#101426] px-2 text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
             <div className="py-1.5" />
             <div className="py-1.5">Mapping</div>
             <div className="py-1.5">Open</div>
@@ -1860,12 +1947,12 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                     </button>
 
                     <div className="min-w-0">
-                      <div className="truncate text-[11px] font-mono text-slate-100">
+                      <div className="truncate text-[12px] font-mono text-slate-100">
                         {seq.sourceColumn && seq.sourceColumn !== seq.columnName
                           ? `${seq.sourceColumn} -> ${seq.columnName}`
                           : seq.columnName}
                       </div>
-                      <div className="mt-0.5 text-[10px] text-slate-500">{summary}</div>
+                      <div className="mt-0.5 text-[12px] text-slate-300">{summary}</div>
                     </div>
 
                     <button
@@ -1874,12 +1961,12 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                         setSelectedSequenceId(seq.id);
                         setEditing('matrix');
                       }}
-                      className="h-6 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 text-[10px] font-semibold text-blue-300 transition hover:bg-blue-500/20"
+                      className="h-6 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 text-[12px] font-semibold text-blue-300 transition hover:bg-blue-500/20"
                     >
                       Open
                     </button>
 
-                    <div className={`flex h-6 items-center justify-center text-[10px] font-semibold ${
+                    <div className={`flex h-6 items-center justify-center text-[12px] font-semibold ${
                       seq.enabled === false ? 'text-slate-400' : 'text-emerald-300'
                     }`}>
                       {seq.enabled === false ? 'Off' : 'On'}
@@ -1888,7 +1975,7 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                     <button
                       type="button"
                       onClick={() => handleDelete(seq.id)}
-                      className="flex h-6 w-6 items-center justify-center rounded text-slate-500 transition hover:bg-red-500/10 hover:text-red-400"
+                      className="flex h-6 w-6 items-center justify-center rounded text-slate-300 transition hover:bg-red-500/10 hover:text-red-400"
                       title="Delete mapping"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -1898,15 +1985,15 @@ function TransformNodeConfig({ config, onChange, nodeId, pipelineId, onSaveSeque
                   {expanded && (
                     <div className="border-t border-slate-800 bg-[#0f1320] px-3 py-2">
                       {seq.steps.length === 0 ? (
-                        <div className="text-[10px] italic text-slate-500">No transformation rows configured.</div>
+                        <div className="text-[12px] italic text-slate-300">No transformation rows configured.</div>
                       ) : (
                         <div className="space-y-1">
                           {seq.steps.map((step, stepIndex) => {
                             const primitive = TRANSFORM_REGISTRY[step.type];
                             return (
-                              <div key={step.stepId} className="flex items-center gap-2 text-[10px]">
+                              <div key={step.stepId} className="flex items-center gap-2 text-[12px]">
                                 <span className={`h-1.5 w-1.5 rounded-full ${step.enabled ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-                                <span className="text-slate-500">#{stepIndex + 1}</span>
+                                <span className="text-slate-300">#{stepIndex + 1}</span>
                                 <span className="text-slate-200">{primitive?.label ?? step.type}</span>
                               </div>
                             );
@@ -1979,7 +2066,7 @@ function TransformConfig({ config, onChange, nodeId }: {
     return (
       <div className="absolute inset-0 z-10 flex flex-col overflow-hidden bg-[#0d0f1a]">
         <div className="h-10 flex items-center px-3 border-b border-slate-700 bg-[#0e1022] shrink-0">
-          <span className="text-[11px] font-bold text-blue-300 uppercase tracking-widest flex-1">Transformation Builder</span>
+          <span className="text-[12px] font-bold text-blue-300 uppercase tracking-widest flex-1">Transformation Builder</span>
           <button onClick={() => setShowBuilder(false)} className="text-slate-400 hover:text-white">
             <X className="w-4 h-4" />
           </button>
@@ -2005,13 +2092,13 @@ function TransformConfig({ config, onChange, nodeId }: {
       <Field label="SELECT / Expression" required>
         <textarea value={config.expression ?? ''} onChange={e => onChange({ expression: e.target.value })}
           placeholder="SELECT *, UPPER(name) AS name_upper, amount * 1.1 AS amount_incl_tax FROM __input__"
-          className="w-full px-2.5 py-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[11px]
+          className="w-full px-2.5 py-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px]
                      font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
           rows={6} />
-        <p className="text-[10px] text-slate-300 mt-1">Use <code className="text-blue-300">__input__</code> to reference the incoming dataset</p>
+        <p className="text-[12px] text-slate-300 mt-1">Use <code className="text-blue-300">__input__</code> to reference the incoming dataset</p>
       </Field>
       <button onClick={() => setShowBuilder(true)}
-        className="flex items-center gap-1.5 w-full h-8 px-3 rounded bg-[#1e2035] border border-dashed border-slate-600 hover:border-blue-500 text-[11px] text-slate-400 hover:text-blue-300 transition-colors">
+        className="flex items-center gap-1.5 w-full h-8 px-3 rounded bg-[#1e2035] border border-dashed border-slate-600 hover:border-blue-500 text-[12px] text-slate-400 hover:text-blue-300 transition-colors">
         <Plus className="w-3 h-3" /> Open Transformation Builder (visual column mapping)
       </button>
     </div>
@@ -2041,7 +2128,12 @@ function useUpstreamColumns(nodeId: string) {
       queue.push(...parentIds);
     }
 
-    if (!sourceNode) return;
+    if (!sourceNode) {
+      setColumns([]);
+      setColumnTypeMap({});
+      setLoading(false);
+      return;
+    }
     const cfg = sourceNode.config as Record<string, string>;
 
     // Check cached columns first (F-23: avoid re-fetching on every render)
@@ -2071,7 +2163,12 @@ function useUpstreamColumns(nodeId: string) {
     const connectionId = cfg.connectionId;
     const schema       = cfg.schema ?? '';
     const table        = cfg.table  ?? '';
-    if (!connectionId || !table) return;
+    if (!connectionId || !table) {
+      setColumns([]);
+      setColumnTypeMap({});
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     api.introspectColumns(connectionId, schema, table)
@@ -2092,7 +2189,7 @@ function useUpstreamColumns(nodeId: string) {
         setColumnTypeMap({});
       })
       .finally(() => setLoading(false));
-  }, [nodeId]);
+  }, [nodeId, nodes, edges]);
 
   return { columns, columnTypeMap, loading };
 }
@@ -2151,7 +2248,7 @@ function AggregateConfig({ config, onChange, nodeId }: {
 
   const ColPicker = ({ value, onSelect }: { value: string; onSelect: (v: string) => void }) => (
     <select value={value} onChange={e => onSelect(e.target.value)}
-      className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono
+      className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono
                  focus:outline-none focus:border-blue-400">
       <option value="">{loading ? 'Loading…' : '— column —'}</option>
       {columns.map(c => <option key={c} value={c}>{c}</option>)}
@@ -2161,7 +2258,7 @@ function AggregateConfig({ config, onChange, nodeId }: {
   return (
     <div>
       <SectionLabel>Group By Columns</SectionLabel>
-      {loading && <p className="text-[11px] text-slate-600 italic mb-2 px-1">Loading schema…</p>}
+      {loading && <p className="text-[12px] text-slate-400 italic mb-2 px-1">Loading schema…</p>}
       {columns.length > 0 ? (
         <ZebraList className="mb-2">
           {columns.map((col, i) => {
@@ -2171,11 +2268,11 @@ function AggregateConfig({ config, onChange, nodeId }: {
                 key={col}
                 type="button"
                 onClick={() => toggleGroupCol(col)}
-                className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}
+                className={`w-full text-left ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1 py-0.5 transition-colors hover:bg-[#162038]`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>
+                  <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>
                     {selected ? 'Group' : 'Skip'}
                   </span>
                 </div>
@@ -2188,7 +2285,7 @@ function AggregateConfig({ config, onChange, nodeId }: {
           <ZebraList>
             {groupCols.map((c, i) => (
               <ZebraRow key={i} index={i}>
-                <span className="flex-1 text-[10px] text-slate-300 font-mono">{c}</span>
+                <span className="flex-1 text-[12px] text-slate-300 font-mono">{c}</span>
                 <CompactIconButton
                   title="Remove group column"
                   tone="danger"
@@ -2215,15 +2312,15 @@ function AggregateConfig({ config, onChange, nodeId }: {
         {aggRows.map((row, i) => (
           <ZebraRow key={i} index={i}>
             <select value={row.fn} onChange={e => updateAggRow(i, { fn: e.target.value })}
-              className="w-28 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+              className="w-28 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
               {AGG_FUNCTIONS.map(f => <option key={f} value={f}>{f}</option>)}
             </select>
             <ColPicker value={row.col} onSelect={v => updateAggRow(i, { col: v, alias: row.alias || v.toLowerCase() + '_agg' })} />
-            <span className="text-slate-600 text-[10px] shrink-0">AS</span>
+            <span className="text-slate-400 text-[12px] shrink-0">AS</span>
             <input value={row.alias} onChange={e => updateAggRow(i, { alias: e.target.value })}
               placeholder="alias"
-              className="w-24 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono
-                         placeholder-slate-600 focus:outline-none focus:border-blue-400" />
+              className="w-24 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono
+                         placeholder-slate-500 focus:outline-none focus:border-blue-400" />
             <CompactIconButton title="Delete aggregation" tone="danger" onClick={() => removeAggRow(i)}>
               <Trash2 className="h-3 w-3" />
             </CompactIconButton>
@@ -2231,7 +2328,7 @@ function AggregateConfig({ config, onChange, nodeId }: {
         ))}
       </ZebraList>
       <div className="mt-1.5 flex items-center justify-between px-1">
-        <span className="text-[10px] text-slate-500">Rows {aggRows.length}</span>
+        <span className="text-[12px] text-slate-300">Rows {aggRows.length}</span>
         <CompactIconButton
           title="Add aggregation"
           onClick={() => {
@@ -2273,7 +2370,7 @@ function CaseWhenConfig({ config, onChange, nodeId }: {
         <TextInput value={config.outputColumn ?? 'result'} onChange={v => onChange({ outputColumn: v })} placeholder="result" />
       </Field>
       {columns.length > 0 && (
-        <p className="text-[10px] text-slate-500 italic mb-2 px-1">Available columns: {columns.slice(0, 8).join(', ')}{columns.length > 8 ? '…' : ''}</p>
+        <p className="text-[12px] text-slate-300 italic mb-2 px-1">Available columns: {columns.slice(0, 8).join(', ')}{columns.length > 8 ? '…' : ''}</p>
       )}
       <SectionLabel>Conditions</SectionLabel>
       <ZebraList className="mb-2">
@@ -2281,22 +2378,22 @@ function CaseWhenConfig({ config, onChange, nodeId }: {
           <ZebraRow key={i} index={i} className="items-start">
             <div className="w-full space-y-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-blue-300 font-bold w-10 shrink-0">WHEN</span>
-                <TextInput value={c.when} onChange={v => update(i, 'when', v)} placeholder="col > 100 OR status = 'A'" className="h-6 px-1.5 text-[10px]" />
+                <span className="text-[12px] text-blue-300 font-bold w-10 shrink-0">WHEN</span>
+                <TextInput value={c.when} onChange={v => update(i, 'when', v)} placeholder="col > 100 OR status = 'A'" className="h-6 px-1.5 text-[12px]" />
                 <CompactIconButton title="Delete WHEN clause" tone="danger" onClick={() => onChange({ cases: JSON.stringify(cases.filter((_,j)=>j!==i)) })}>
                   <Trash2 className="h-3 w-3" />
                 </CompactIconButton>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-emerald-300 font-bold w-10 shrink-0">THEN</span>
-                <TextInput value={c.then} onChange={v => update(i, 'then', v)} placeholder="'High'  or  col * 1.2  or  F.lit(1)" className="h-6 px-1.5 text-[10px]" />
+                <span className="text-[12px] text-emerald-300 font-bold w-10 shrink-0">THEN</span>
+                <TextInput value={c.then} onChange={v => update(i, 'then', v)} placeholder="'High'  or  col * 1.2  or  F.lit(1)" className="h-6 px-1.5 text-[12px]" />
               </div>
             </div>
           </ZebraRow>
         ))}
       </ZebraList>
       <div className="mb-3 mt-1.5 flex items-center justify-between px-1">
-        <span className="text-[10px] text-slate-500">Rows {cases.length}</span>
+        <span className="text-[12px] text-slate-300">Rows {cases.length}</span>
         <CompactIconButton title="Add WHEN clause" onClick={() => onChange({ cases: JSON.stringify([...cases, { when: '', then: '' }]) })}>
           <Plus className="h-3 w-3" />
         </CompactIconButton>
@@ -2350,11 +2447,11 @@ function ColumnMappingPanel({ config, onChange, nodeId }: {
   return (
     <>
       <SectionLabel>Column Mapping (optional)</SectionLabel>
-      <p className="text-[10px] text-slate-500 italic mb-1.5 px-1">
+      <p className="text-[12px] text-slate-300 italic mb-1.5 px-1">
         Leave empty to pass all upstream columns. Define mappings to control which columns write to which target columns.
       </p>
       {(srcCols.length > 0 || tgtCols.length > 0) && (
-        <button onClick={autoMap} className="text-[10px] text-blue-400 hover:text-blue-300 mb-1.5 flex items-center gap-1 transition-colors">
+        <button onClick={autoMap} className="text-[12px] text-blue-400 hover:text-blue-300 mb-1.5 flex items-center gap-1 transition-colors">
           ⚡ Auto-map by name
         </button>
       )}
@@ -2362,13 +2459,13 @@ function ColumnMappingPanel({ config, onChange, nodeId }: {
         {mappings.map((m, i) => (
           <div key={i} className={`flex items-center gap-1 px-1.5 py-0.5 border-t border-slate-700 ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'}`}>
             <select value={m.src} onChange={e => updateRow(i, 'src', e.target.value)}
-              className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+              className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
               <option value="">{srcLoading ? 'Loading…' : '— source col —'}</option>
               {srcCols.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
-            <span className="text-slate-500 text-[10px] shrink-0">→</span>
+            <span className="text-slate-300 text-[12px] shrink-0">→</span>
             <select value={m.tgt} onChange={e => updateRow(i, 'tgt', e.target.value)}
-              className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+              className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
               <option value="">{loadingTgt ? 'Loading…' : '— target col —'}</option>
               {tgtCols.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -2410,7 +2507,7 @@ function SelectColumnsConfig({ config, onChange, nodeId }: {
   return (
     <div>
       <SectionLabel>Columns to Project</SectionLabel>
-      {loading && <p className="text-[11px] text-slate-600 italic mb-2 px-1">Loading schema…</p>}
+      {loading && <p className="text-[12px] text-slate-400 italic mb-2 px-1">Loading schema…</p>}
       {columns.length > 0 ? (
         <>
           <ZebraList className="mb-1.5">
@@ -2424,8 +2521,8 @@ function SelectColumnsConfig({ config, onChange, nodeId }: {
                   className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${included ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>
+                    <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${included ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>
                       {included ? 'Keep' : 'Skip'}
                     </span>
                   </div>
@@ -2433,7 +2530,7 @@ function SelectColumnsConfig({ config, onChange, nodeId }: {
               );
             })}
           </ZebraList>
-          <p className="mb-3 px-1 text-[10px] text-slate-500">If every row is kept, the config stores an empty selection and projects all columns.</p>
+          <p className="mb-3 px-1 text-[12px] text-slate-300">If every row is kept, the config stores an empty selection and projects all columns.</p>
         </>
       ) : (
         <Field label="Column names (comma-separated)">
@@ -2443,7 +2540,7 @@ function SelectColumnsConfig({ config, onChange, nodeId }: {
       <Field label="SQL Expressions (optional)">
         <textarea value={config.expressions ?? ''} onChange={e => onChange({ expressions: e.target.value })}
           placeholder={'col1 AS alias1\ncol2 * 1.1 AS col2_adjusted'}
-          className="w-full px-2.5 py-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[11px] font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
+          className="w-full px-2.5 py-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-y"
           rows={4} />
       </Field>
     </div>
@@ -2472,7 +2569,7 @@ function CastRenameDropConfig({ config, onChange, nodeId }: {
 
   const ColPicker = ({ value, onSelect }: { value: string; onSelect: (v: string) => void }) => (
     <select value={value} onChange={e => onSelect(e.target.value)}
-      className="flex-1 h-8 px-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[11px] font-mono focus:outline-none focus:border-blue-400">
+      className="flex-1 h-8 px-2 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
       <option value="">{loading ? 'Loading…' : '— column —'}</option>
       {columns.map(c => <option key={c} value={c}>{c}</option>)}
     </select>
@@ -2483,7 +2580,7 @@ function CastRenameDropConfig({ config, onChange, nodeId }: {
       <div className="flex gap-1.5 mb-3">
         {(['cast', 'rename', 'drop'] as const).map(t => (
           <button key={t} onClick={() => { setTab(t); onChange({ activeTab: t }); }}
-            className={`flex-1 h-7 rounded text-[11px] font-semibold border transition-colors ${
+            className={`flex-1 h-7 rounded text-[12px] font-semibold border transition-colors ${
               tab === t ? 'bg-blue-600 text-white border-blue-500' : 'bg-[#1e2035] text-slate-300 border-slate-600 hover:text-white'
             }`}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
         ))}
@@ -2496,9 +2593,9 @@ function CastRenameDropConfig({ config, onChange, nodeId }: {
             {casts.map((c, i) => (
               <ZebraRow key={i} index={i}>
                 <ColPicker value={c.col} onSelect={v => { const u = casts.map((x, j) => j===i ? {...x, col: v} : x); onChange({ casts: JSON.stringify(u) }); }} />
-                <span className="text-slate-500 text-[10px] shrink-0">→</span>
+                <span className="text-slate-300 text-[12px] shrink-0">→</span>
                 <select value={c.type} onChange={e => { const u = casts.map((x, j) => j===i ? {...x, type: e.target.value} : x); onChange({ casts: JSON.stringify(u) }); }}
-                  className="w-28 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+                  className="w-28 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
                   {DATA_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <CompactIconButton title="Delete cast" tone="danger" onClick={() => onChange({ casts: JSON.stringify(casts.filter((_,j) => j !== i)) })}>
@@ -2508,7 +2605,7 @@ function CastRenameDropConfig({ config, onChange, nodeId }: {
             ))}
           </ZebraList>
           <div className="mt-1.5 flex items-center justify-between px-1">
-            <span className="text-[10px] text-slate-500">Rows {casts.length}</span>
+            <span className="text-[12px] text-slate-300">Rows {casts.length}</span>
             <CompactIconButton title="Add cast" onClick={() => onChange({ casts: JSON.stringify([...casts, { col: '', type: 'string' }]) })}>
               <Plus className="h-3 w-3" />
             </CompactIconButton>
@@ -2522,8 +2619,8 @@ function CastRenameDropConfig({ config, onChange, nodeId }: {
             {renames.map((r, i) => (
               <ZebraRow key={i} index={i}>
                 <ColPicker value={r.from} onSelect={v => { const u = renames.map((x,j) => j===i ? {...x, from: v} : x); onChange({ renames: JSON.stringify(u) }); }} />
-                <span className="text-slate-500 text-[10px] shrink-0">→</span>
-                <TextInput value={r.to} onChange={v => { const u = renames.map((x,j) => j===i ? {...x, to: v} : x); onChange({ renames: JSON.stringify(u) }); }} placeholder="new_name" className="h-6 px-1.5 text-[10px]" />
+                <span className="text-slate-300 text-[12px] shrink-0">→</span>
+                <TextInput value={r.to} onChange={v => { const u = renames.map((x,j) => j===i ? {...x, to: v} : x); onChange({ renames: JSON.stringify(u) }); }} placeholder="new_name" className="h-6 px-1.5 text-[12px]" />
                 <CompactIconButton title="Delete rename" tone="danger" onClick={() => onChange({ renames: JSON.stringify(renames.filter((_,j) => j !== i)) })}>
                   <Trash2 className="h-3 w-3" />
                 </CompactIconButton>
@@ -2531,7 +2628,7 @@ function CastRenameDropConfig({ config, onChange, nodeId }: {
             ))}
           </ZebraList>
           <div className="mt-1.5 flex items-center justify-between px-1">
-            <span className="text-[10px] text-slate-500">Rows {renames.length}</span>
+            <span className="text-[12px] text-slate-300">Rows {renames.length}</span>
             <CompactIconButton title="Add rename" onClick={() => onChange({ renames: JSON.stringify([...renames, { from: '', to: '' }]) })}>
               <Plus className="h-3 w-3" />
             </CompactIconButton>
@@ -2556,8 +2653,8 @@ function CastRenameDropConfig({ config, onChange, nodeId }: {
                     className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${dropped ? 'bg-red-500/15 text-red-300' : 'bg-slate-700/60 text-slate-400'}`}>
+                      <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${dropped ? 'bg-red-500/15 text-red-300' : 'bg-slate-700/60 text-slate-400'}`}>
                         {dropped ? 'Drop' : 'Keep'}
                       </span>
                     </div>
@@ -2598,21 +2695,21 @@ function DeriveConfig({ config, onChange }: {
           <ZebraRow key={i} index={i} className="items-start">
             <div className="w-full space-y-1">
               <div className="flex gap-1.5 items-center">
-                <TextInput value={d.name} onChange={v => update(i, 'name', v)} placeholder="new_column_name" className="h-6 px-1.5 text-[10px]" />
+                <TextInput value={d.name} onChange={v => update(i, 'name', v)} placeholder="new_column_name" className="h-6 px-1.5 text-[12px]" />
                 <CompactIconButton title="Delete derived column" tone="danger" onClick={() => onChange({ derivations: JSON.stringify(derivations.filter((_, j) => j !== i)) })}>
                   <Trash2 className="h-3 w-3" />
                 </CompactIconButton>
               </div>
               <textarea value={d.expression} onChange={e => update(i, 'expression', e.target.value)}
                 placeholder="col1 * col2  or  CASE WHEN status = 'A' THEN 1 ELSE 0 END"
-                className="w-full rounded border border-slate-500 bg-[#13152a] px-1.5 py-1 text-[10px] font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+                className="w-full rounded border border-slate-500 bg-[#13152a] px-1.5 py-1 text-[12px] font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
                 rows={2} />
             </div>
           </ZebraRow>
         ))}
       </ZebraList>
       <div className="mt-1.5 flex items-center justify-between px-1">
-        <span className="text-[10px] text-slate-500">Rows {derivations.length}</span>
+        <span className="text-[12px] text-slate-300">Rows {derivations.length}</span>
         <CompactIconButton title="Add derived column" onClick={() => onChange({ derivations: JSON.stringify([...derivations, { name: '', expression: '' }]) })}>
           <Plus className="h-3 w-3" />
         </CompactIconButton>
@@ -2640,7 +2737,7 @@ function WindowFnConfig({ config, onChange, nodeId }: {
       <Field label="Output Column" required>
         <TextInput value={config.outputColumn ?? ''} onChange={v => onChange({ outputColumn: v })} placeholder="row_num" />
       </Field>
-      {loading && <p className="text-[11px] text-slate-600 italic mb-2 px-1">Loading schema…</p>}
+      {loading && <p className="text-[12px] text-slate-400 italic mb-2 px-1">Loading schema…</p>}
       <Field label="Partition By (columns)">
         <TextInput value={config.partitionBy ?? ''} onChange={v => onChange({ partitionBy: v })}
           placeholder="dept_id, region" />
@@ -2660,8 +2757,8 @@ function WindowFnConfig({ config, onChange, nodeId }: {
                   className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[10px] text-slate-100">{c}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>
+                    <span className="truncate font-mono text-[12px] text-slate-100">{c}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>
                       {selected ? 'Use' : 'Skip'}
                     </span>
                   </div>
@@ -2706,7 +2803,7 @@ function PivotConfig({ config, onChange, nodeId }: {
   return (
     <div>
       <SectionLabel>Pivot Setup</SectionLabel>
-      {loading && <p className="text-[11px] text-slate-600 italic mb-1 px-1">Loading schema…</p>}
+      {loading && <p className="text-[12px] text-slate-400 italic mb-1 px-1">Loading schema…</p>}
       <Field label="Group By Columns" required>
         <TextInput value={config.groupByColumns ?? ''} onChange={v => onChange({ groupByColumns: v })} placeholder="product_id, region" />
       </Field>
@@ -2718,7 +2815,7 @@ function PivotConfig({ config, onChange, nodeId }: {
       </Field>
       <Field label="Pivot Values (optional)">
         <TextInput value={config.pivotValues ?? ''} onChange={v => onChange({ pivotValues: v })} placeholder="'Q1','Q2','Q3','Q4'" />
-        <p className="text-[10px] text-slate-500 mt-1">Leave blank to auto-discover. Specify for large datasets.</p>
+        <p className="text-[12px] text-slate-300 mt-1">Leave blank to auto-discover. Specify for large datasets.</p>
       </Field>
       <SectionLabel>Aggregation</SectionLabel>
       <Field label="Function" required>
@@ -2760,29 +2857,29 @@ function DataQualityConfig({ config, onChange, nodeId }: {
           <ZebraRow key={i} index={i} className="items-start">
             <div className="w-full space-y-1">
               <div className="flex gap-1.5">
-                <TextInput value={r.name} onChange={v => update(i, 'name', v)} placeholder="rule_name" className="h-6 px-1.5 text-[10px]" />
+                <TextInput value={r.name} onChange={v => update(i, 'name', v)} placeholder="rule_name" className="h-6 px-1.5 text-[12px]" />
                 <CompactIconButton title="Delete quality rule" tone="danger" onClick={() => onChange({ dqRules: JSON.stringify(rules.filter((_,j)=>j!==i)) })}>
                   <Trash2 className="h-3 w-3" />
                 </CompactIconButton>
               </div>
               <div className="flex gap-1.5">
                 <select value={r.type} onChange={e => update(i, 'type', e.target.value)}
-                  className="w-28 h-6 px-1.5 rounded bg-[#13152a] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+                  className="w-28 h-6 px-1.5 rounded bg-[#13152a] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
                   {DQ_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <select value={r.col} onChange={e => update(i, 'col', e.target.value)}
-                  className="flex-1 h-6 px-1.5 rounded bg-[#13152a] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+                  className="flex-1 h-6 px-1.5 rounded bg-[#13152a] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
                   <option value="">— column —</option>
                   {columns.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <TextInput value={r.expression} onChange={v => update(i, 'expression', v)} placeholder="expression / params" className="h-6 px-1.5 text-[10px]" />
+              <TextInput value={r.expression} onChange={v => update(i, 'expression', v)} placeholder="expression / params" className="h-6 px-1.5 text-[12px]" />
             </div>
           </ZebraRow>
         ))}
       </ZebraList>
       <div className="mt-1.5 flex items-center justify-between px-1">
-        <span className="text-[10px] text-slate-500">Rows {rules.length}</span>
+        <span className="text-[12px] text-slate-300">Rows {rules.length}</span>
         <CompactIconButton title="Add quality rule" onClick={() => onChange({ dqRules: JSON.stringify([...rules, { name: '', col: '', type: 'not_null', expression: '' }]) })}>
           <Plus className="h-3 w-3" />
         </CompactIconButton>
@@ -2827,12 +2924,12 @@ function MaskConfig({ config, onChange, nodeId }: {
         {rules.map((r, i) => (
           <ZebraRow key={i} index={i}>
             <select value={r.col} onChange={e => update(i, 'col', e.target.value)}
-              className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+              className="flex-1 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
               <option value="">— column —</option>
               {columns.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <select value={r.strategy} onChange={e => update(i, 'strategy', e.target.value)}
-              className="w-28 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px] font-mono focus:outline-none focus:border-blue-400">
+              className="w-28 h-6 px-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-mono focus:outline-none focus:border-blue-400">
               {STRATEGIES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <CompactIconButton title="Delete masking rule" tone="danger" onClick={() => onChange({ maskRules: JSON.stringify(rules.filter((_,j)=>j!==i)) })}>
@@ -2842,7 +2939,7 @@ function MaskConfig({ config, onChange, nodeId }: {
         ))}
       </ZebraList>
       <div className="mt-1.5 flex items-center justify-between px-1">
-        <span className="text-[10px] text-slate-500">Rows {rules.length}</span>
+        <span className="text-[12px] text-slate-300">Rows {rules.length}</span>
         <CompactIconButton title="Add masking rule" onClick={() => onChange({ maskRules: JSON.stringify([...rules, { col: '', strategy: 'hash' }]) })}>
           <Plus className="h-3 w-3" />
         </CompactIconButton>
@@ -2925,8 +3022,8 @@ function Scd1Config({ config, onChange, nodeId }: {
               return (
                 <button key={col} type="button" onClick={() => toggleMerge(col)} className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Key' : 'Skip'}</span>
+                    <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Key' : 'Skip'}</span>
                   </div>
                 </button>
               );
@@ -2944,8 +3041,8 @@ function Scd1Config({ config, onChange, nodeId }: {
               return (
                 <button key={col} type="button" onClick={() => toggleUpdate(col)} className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Update' : 'Skip'}</span>
+                    <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Update' : 'Skip'}</span>
                   </div>
                 </button>
               );
@@ -2985,8 +3082,8 @@ function Scd2Config({ config, onChange, nodeId }: {
                   onChange({ businessKeys: JSON.stringify(next) });
                 }} className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Key' : 'Skip'}</span>
+                    <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Key' : 'Skip'}</span>
                   </div>
                 </button>
               );
@@ -3007,8 +3104,8 @@ function Scd2Config({ config, onChange, nodeId }: {
                   onChange({ trackingColumns: JSON.stringify(next) });
                 }} className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Track' : 'Skip'}</span>
+                    <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${selected ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-700/60 text-slate-400'}`}>{selected ? 'Track' : 'Skip'}</span>
                   </div>
                 </button>
               );
@@ -3075,11 +3172,11 @@ function DedupConfig({ config, onChange, nodeId }: { config: Record<string, unkn
   return (
     <div>
       <SectionLabel>Deduplicate</SectionLabel>
-      <p className="text-[11px] text-slate-400 mb-2 px-1">
+      <p className="text-[12px] text-slate-400 mb-2 px-1">
         Leave all unchecked to drop fully duplicate rows. Select columns to deduplicate on specific subset.
       </p>
       {columns.length === 0 ? (
-        <p className="text-[11px] text-slate-500 italic px-1">Connect a source node to see columns.</p>
+        <p className="text-[12px] text-slate-300 italic px-1">Connect a source node to see columns.</p>
       ) : (
         <ZebraList>
           {columns.map((col, i) => {
@@ -3087,8 +3184,8 @@ function DedupConfig({ config, onChange, nodeId }: { config: Record<string, unkn
             return (
               <button key={col} type="button" onClick={() => toggle(col)} className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${active ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{active ? 'Match' : 'Skip'}</span>
+                  <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${active ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{active ? 'Match' : 'Skip'}</span>
                 </div>
               </button>
             );
@@ -3118,16 +3215,14 @@ function SortConfig({ config, onChange, nodeId }: { config: Record<string, unkno
       <ZebraList className="mb-2">
         {orderBy.map((e, i) => (
           <ZebraRow key={i} index={i}>
-            <select value={e.column} onChange={ev => updateEntry(i, { column: ev.target.value })}
-              className="flex-1 h-6 pl-1.5 pr-1 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px]">
+            <InlineSelect value={e.column} onChange={v => updateEntry(i, { column: v })}>
               {columns.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select value={e.direction} onChange={ev => updateEntry(i, { direction: ev.target.value as 'asc' | 'desc' })}
-              className="w-20 h-6 pl-1.5 rounded bg-[#1e2035] border border-slate-500 text-slate-100 text-[10px]">
+            </InlineSelect>
+            <InlineSelect value={e.direction} onChange={v => updateEntry(i, { direction: v as 'asc' | 'desc' })} className="!flex-none w-14">
               <option value="asc">ASC</option>
               <option value="desc">DESC</option>
-            </select>
-            <label className="flex items-center gap-1 text-[9px] text-slate-400 shrink-0 uppercase tracking-[0.12em]">
+            </InlineSelect>
+            <label className="flex items-center gap-1 text-[12px] text-slate-400 shrink-0 uppercase tracking-[0.12em]">
               <input type="checkbox" checked={e.nullsFirst} onChange={ev => updateEntry(i, { nullsFirst: ev.target.checked })} />
               Nulls First
             </label>
@@ -3138,7 +3233,7 @@ function SortConfig({ config, onChange, nodeId }: { config: Record<string, unkno
         ))}
       </ZebraList>
       <div className="mt-1.5 flex items-center justify-between px-1">
-        <span className="text-[10px] text-slate-500">Rows {orderBy.length}</span>
+        <span className="text-[12px] text-slate-300">Rows {orderBy.length}</span>
         <CompactIconButton title="Add sort column" onClick={addEntry}>
           <Plus className="h-3 w-3" />
         </CompactIconButton>
@@ -3155,7 +3250,7 @@ function LimitConfig({ config, onChange }: { config: Record<string, unknown>; on
       <Field label="Row Limit" required>
         <TextInput value={String(config.n ?? '')} onChange={v => onChange({ n: Number(v) || 0 })} placeholder="1000" />
       </Field>
-      <p className="text-[11px] text-amber-400 px-1">⚠ Avoid using Limit in production pipelines.</p>
+      <p className="text-[12px] text-amber-400 px-1">⚠ Avoid using Limit in production pipelines.</p>
     </div>
   );
 }
@@ -3234,8 +3329,8 @@ function RepartitionConfig({ config, onChange, nodeId }: { config: Record<string
             return (
               <button key={col} type="button" onClick={() => toggle(col)} className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${active ? 'bg-teal-500/15 text-teal-300' : 'bg-slate-700/60 text-slate-400'}`}>{active ? 'Use' : 'Skip'}</span>
+                  <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${active ? 'bg-teal-500/15 text-teal-300' : 'bg-slate-700/60 text-slate-400'}`}>{active ? 'Use' : 'Skip'}</span>
                 </div>
               </button>
             );
@@ -3271,12 +3366,12 @@ function FillNAConfig({ config, onChange, nodeId }: { config: Record<string, unk
           <ZebraList>
             {columns.map((col, i) => (
               <ZebraRow key={col} index={i}>
-                <span className="w-28 truncate text-[10px] text-slate-300 font-mono shrink-0">{col}</span>
-                <TextInput value={columnValues[col] ?? ''} onChange={v => onChange({ columnValues: { ...columnValues, [col]: v }, value: undefined })} placeholder="fill value" className="h-6 px-1.5 text-[10px]" />
+                <span className="w-28 truncate text-[12px] text-slate-300 font-mono shrink-0">{col}</span>
+                <TextInput value={columnValues[col] ?? ''} onChange={v => onChange({ columnValues: { ...columnValues, [col]: v }, value: undefined })} placeholder="fill value" className="h-6 px-1.5 text-[12px]" />
               </ZebraRow>
             ))}
           </ZebraList>
-          {columns.length === 0 && <p className="text-[11px] text-slate-500 italic">Connect a source to see columns.</p>}
+          {columns.length === 0 && <p className="text-[12px] text-slate-300 italic">Connect a source to see columns.</p>}
         </>
       )}
     </div>
@@ -3308,8 +3403,8 @@ function DropNAConfig({ config, onChange, nodeId }: { config: Record<string, unk
             return (
               <button key={col} type="button" onClick={() => toggle(col)} className={`w-full text-left ${i > 0 ? 'border-t border-slate-700' : ''} ${i % 2 === 0 ? 'bg-[#12182b]' : 'bg-[#101629]'} px-1.5 py-1 transition-colors hover:bg-[#162038]`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-mono text-[10px] text-slate-100">{col}</span>
-                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] ${active ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{active ? 'Check' : 'Skip'}</span>
+                  <span className="truncate font-mono text-[12px] text-slate-100">{col}</span>
+                  <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold uppercase tracking-[0.12em] ${active ? 'bg-blue-500/15 text-blue-300' : 'bg-slate-700/60 text-slate-400'}`}>{active ? 'Check' : 'Skip'}</span>
                 </div>
               </button>
             );
@@ -3333,8 +3428,8 @@ export function NodeConfigPanel({ nodeId, onClose, openSignal }: Props) {
   const node       = useAppSelector(s => nodeId ? s.pipeline.nodes[nodeId] : null);
   const pipelineId = useAppSelector(s => s.pipeline.activePipeline?.id ?? '');
 
-  const [localConfig, setLocalConfig] = useState<Record<string, any>>({});
-  const [localName, setLocalName]     = useState('');
+  const [localConfig, setLocalConfig] = useState<Record<string, any>>(() => (node?.config as Record<string, any>) ?? {});
+  const [localName, setLocalName]     = useState(() => node?.name ?? '');
   const [saved, setSaved]             = useState(false);
 
   useEffect(() => {
@@ -3388,7 +3483,7 @@ export function NodeConfigPanel({ nodeId, onClose, openSignal }: Props) {
 
   if (!nodeId || !node) {
     return (
-      <aside className="w-72 bg-[#13152a] border-l border-slate-600/40 flex flex-col shrink-0">
+      <aside className="w-full bg-[#13152a] border-l border-slate-600/40 flex flex-col shrink-0 h-full">
         <div className="flex-1 flex items-center justify-center text-slate-400 text-[13px] p-6 text-center font-medium">
           Double-click a node to configure it
         </div>
@@ -3400,11 +3495,11 @@ export function NodeConfigPanel({ nodeId, onClose, openSignal }: Props) {
 
   return (
     // relative is required so TransformNodeConfig's absolute overlay is constrained to this panel
-    <aside className="w-80 bg-[#13152a] border-l border-slate-600/40 flex flex-col shrink-0 overflow-hidden relative">
+    <aside className="w-full h-full bg-[#13152a] border-l border-slate-600/40 flex flex-col shrink-0 overflow-hidden relative">
       {/* Header */}
       <div className="h-11 bg-[#0e1022] border-b border-slate-600/40 flex items-center px-3 gap-2 shrink-0">
         <div className="flex-1 min-w-0">
-          <span className="text-[11px] font-bold uppercase tracking-widest text-blue-300">Configure {nodeTypeLabel}</span>
+          <span className="text-[12px] font-bold uppercase tracking-widest text-blue-300">Configure {nodeTypeLabel}</span>
         </div>
         <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors p-1 rounded hover:bg-slate-700">
           <X className="w-4 h-4" />
@@ -3413,7 +3508,7 @@ export function NodeConfigPanel({ nodeId, onClose, openSignal }: Props) {
 
       {/* Node name */}
       <div className="px-3 pt-3 pb-3 shrink-0 border-b border-slate-600/30 bg-[#0e1022]/50">
-        <label className="block text-[10px] font-bold uppercase tracking-widest text-blue-300 mb-1.5 border-l-2 border-blue-500 pl-2">Node Name</label>
+        <label className="block text-[12px] font-bold uppercase tracking-widest text-blue-300 mb-1.5 border-l-2 border-blue-500 pl-2">Node Name</label>
         <input type="text" value={localName} onChange={e => { setLocalName(e.target.value); setSaved(false); }}
           className="w-full h-9 px-3 rounded-md bg-[#1e2035] border border-slate-500 text-slate-100 text-[12px] font-semibold
                      focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30" />
@@ -3474,7 +3569,7 @@ export function NodeConfigPanel({ nodeId, onClose, openSignal }: Props) {
         {node.type === 'dropna'           && <DropNAConfig           config={localConfig as Record<string, unknown>} onChange={handleConfigChange as (p: Record<string, unknown>) => void} nodeId={nodeId} />}
         {node.type === 'add_audit_columns' && (
           <div className="space-y-3">
-            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100">
               Legacy audit node. New pipelines should configure audit values on the target instead of using a separate Audit component.
             </div>
             <SectionLabel>Audit Column Names</SectionLabel>

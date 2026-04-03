@@ -126,7 +126,7 @@ export function ExecutionSubTab({ pipelineId }: Props) {
           </div>
           <div className="space-y-2">
             <div>
-              <label className="text-[11px] text-slate-500">Environment</label>
+              <label className="text-[12px] text-slate-300">Environment</label>
               <select value={environment} onChange={e => setEnvironment(e.target.value)}
                 disabled={runState === 'running'}
                 className="w-full mt-1 px-2 py-1.5 bg-[#1e2035] border border-slate-600 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 disabled:opacity-50">
@@ -136,7 +136,7 @@ export function ExecutionSubTab({ pipelineId }: Props) {
               </select>
             </div>
             <div>
-              <label className="text-[11px] text-slate-500">Technology</label>
+              <label className="text-[12px] text-slate-300">Technology</label>
               <select value={technology} onChange={e => setTechnology(e.target.value)}
                 disabled={runState === 'running'}
                 className="w-full mt-1 px-2 py-1.5 bg-[#1e2035] border border-slate-600 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 disabled:opacity-50">
@@ -173,9 +173,9 @@ export function ExecutionSubTab({ pipelineId }: Props) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="text-[10px] font-semibold text-slate-600 mb-3 uppercase tracking-widest">Pipeline Steps</div>
+          <div className="text-[12px] font-semibold text-slate-400 mb-3 uppercase tracking-widest">Pipeline Steps</div>
           {steps.length === 0 ? (
-            <p className="text-[12px] text-slate-600 italic">Run a pipeline to see step progress.</p>
+            <p className="text-[12px] text-slate-400 italic">Run a pipeline to see step progress.</p>
           ) : (
             <div className="space-y-2">
               {steps.map((step, i) => {
@@ -189,13 +189,13 @@ export function ExecutionSubTab({ pipelineId }: Props) {
                   step.status === 'success' ? 'text-emerald-300' :
                   step.status === 'failed'  ? 'text-red-300' :
                   step.status === 'running' ? 'text-blue-300' :
-                  'text-slate-500';
+                  'text-slate-300';
                 return (
                   <div key={i} className="flex items-center gap-2.5">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotCls}`} />
                     <div className="flex-1 min-w-0">
                       <div className={`text-[12px] truncate ${textCls}`}>{step.name}</div>
-                      {step.duration && <div className="text-[11px] text-slate-600">{step.duration}</div>}
+                      {step.duration && <div className="text-[12px] text-slate-400">{step.duration}</div>}
                     </div>
                   </div>
                 );
@@ -208,12 +208,12 @@ export function ExecutionSubTab({ pipelineId }: Props) {
       {/* Right: live log console */}
       <div className="flex-1 flex flex-col overflow-hidden bg-[#070910]">
         <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800 flex-shrink-0 bg-[#0d0f1a]">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Execution Log</span>
-          <button onClick={() => setLogs([])} className="text-[11px] text-slate-600 hover:text-slate-400 transition-colors">Clear</button>
+          <span className="text-[12px] font-semibold text-slate-300 uppercase tracking-widest">Execution Log</span>
+          <button onClick={() => setLogs([])} className="text-[12px] text-slate-400 hover:text-slate-400 transition-colors">Clear</button>
         </div>
         <div ref={logRef} className="flex-1 overflow-y-auto p-4 font-mono text-[12px] space-y-0.5">
           {logs.length === 0 ? (
-            <span className="text-slate-700">Waiting for execution…</span>
+            <span className="text-slate-200">Waiting for execution…</span>
           ) : logs.map((line, i) => {
             const color = line.startsWith('[ERROR]') || line.startsWith('[FATAL]') ? 'text-red-400'
               : line.startsWith('[WARN]') ? 'text-amber-400'

@@ -219,6 +219,10 @@ CREATE TABLE catalog.connectors (
     conn_secrets_json_encrypted   TEXT,
     -- Optional JDBC driver class override; defaults are provided per connector type
     conn_jdbc_driver_class        TEXT,
+    -- Maven coordinates for the JDBC driver JAR used by Spark (e.g., org.postgresql:postgresql:42.7.3)
+    conn_jdbc_driver_maven_coords TEXT,
+    -- Connection-specific search paths or path hints for the JDBC driver JAR(s)
+    conn_jdbc_driver_paths        TEXT,
     -- Optional override for the connectivity test query (defaults per connector type)
     conn_test_query               TEXT,
     -- Additional Spark session config key-value pairs injected at codegen time
@@ -246,6 +250,8 @@ COMMENT ON COLUMN catalog.connectors.connector_type_code             IS 'Connect
 COMMENT ON COLUMN catalog.connectors.conn_config_json_encrypted      IS 'pgcrypto pgp_sym_encrypt output (TEXT armoured). Contains non-secret config: host, port, database, warehouse, role, region, auth_method, storage_bucket, etc. Decrypted only at execution or test time.';
 COMMENT ON COLUMN catalog.connectors.conn_secrets_json_encrypted     IS 'pgcrypto pgp_sym_encrypt output (TEXT armoured). Contains all secrets: passwords, access keys, SA key JSON, client secrets, private keys, OAuth tokens. NULL when connector uses identity-based auth (Instance Profile, Managed Identity, Workload Identity).';
 COMMENT ON COLUMN catalog.connectors.conn_jdbc_driver_class          IS 'Override JDBC driver class name (e.g., org.postgresql.Driver). NULL uses the platform default per connector_type_code.';
+COMMENT ON COLUMN catalog.connectors.conn_jdbc_driver_maven_coords   IS 'Maven coordinates for the JDBC driver JAR (e.g., org.postgresql:postgresql:42.7.3). Passed via --packages to spark-submit at execution time. For cluster environments use the appropriate cluster-accessible coords.';
+COMMENT ON COLUMN catalog.connectors.conn_jdbc_driver_paths          IS 'Connection-specific comma-separated path hints for JDBC driver resolution. Entries may be directories or explicit jar paths visible to the Spark submission environment.';
 COMMENT ON COLUMN catalog.connectors.conn_test_query                 IS 'Override connectivity test query (e.g., SELECT 1). NULL uses the platform default per connector_type_code.';
 COMMENT ON COLUMN catalog.connectors.conn_spark_config_json          IS 'Additional Spark session configuration key-value pairs injected at codegen time. Used for connector-specific Spark tuning (e.g., fetchsize, pushdown predicates).';
 COMMENT ON COLUMN catalog.connectors.conn_ssl_mode                   IS 'SSL/TLS enforcement: DISABLE (dev only — not recommended), REQUIRE (encrypt but skip cert verify), VERIFY_CA (verify server cert), VERIFY_FULL (verify cert + hostname). Default REQUIRE.';
@@ -296,6 +302,8 @@ CREATE TABLE catalog.dataset_columns (
     dataset_id             UUID    NOT NULL REFERENCES catalog.datasets(dataset_id) ON DELETE CASCADE,
     column_name_text       TEXT    NOT NULL,
     data_type_code         TEXT    NOT NULL,
+    override_data_type_code TEXT,
+    parse_format_text      TEXT,
     is_nullable_flag       BOOLEAN NOT NULL DEFAULT TRUE,
     ordinal_position_num   INTEGER NOT NULL,
     -- Source-system constraint tracking
@@ -313,6 +321,8 @@ COMMENT ON COLUMN catalog.dataset_columns.column_id             IS 'Surrogate pr
 COMMENT ON COLUMN catalog.dataset_columns.dataset_id            IS 'FK to the parent dataset; cascade-deleted when dataset is removed.';
 COMMENT ON COLUMN catalog.dataset_columns.column_name_text      IS 'Physical column name exactly as it exists in the source system.';
 COMMENT ON COLUMN catalog.dataset_columns.data_type_code        IS 'Source-system native data type string (e.g., VARCHAR(255), NUMBER(38,0), TIMESTAMP_TZ).';
+COMMENT ON COLUMN catalog.dataset_columns.override_data_type_code IS 'Optional user-corrected effective data type. When set, ETL code generation should prefer this over the imported source-system type.';
+COMMENT ON COLUMN catalog.dataset_columns.parse_format_text     IS 'Optional Spark-compatible format mask for parsing date/timestamp text values at this column level (e.g., dd-MMM-yyyy, yyyy-MM-dd HH:mm:ss).';
 COMMENT ON COLUMN catalog.dataset_columns.is_nullable_flag      IS 'FALSE when the source column has a NOT NULL constraint.';
 COMMENT ON COLUMN catalog.dataset_columns.ordinal_position_num  IS 'Column order position (1-indexed) as defined in the source schema.';
 COMMENT ON COLUMN catalog.dataset_columns.constraint_type_code  IS 'Source-system constraint on this column: PK (Primary Key), UK (Unique Key), FK (Foreign Key), NONE. A column can appear multiple times for composite keys.';

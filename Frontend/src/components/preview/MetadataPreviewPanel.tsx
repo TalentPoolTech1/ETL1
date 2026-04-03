@@ -48,12 +48,12 @@ export function MetadataPreviewPanel() {
         <span className="text-[12px] text-slate-300 font-semibold">
           Preview — <span className="font-mono text-violet-300">{datasetName}</span>
           {!loading && rows.length > 0 && (
-            <span className="ml-2 text-[11px] text-slate-500 font-normal">{rows.length} rows</span>
+            <span className="ml-2 text-[12px] text-slate-300 font-normal">{rows.length} rows</span>
           )}
         </span>
         <button
           onClick={() => dispatch(closeMetadataPreview())}
-          className="text-slate-600 hover:text-slate-400 transition-colors"
+          className="text-slate-400 hover:text-slate-400 transition-colors"
           title="Close preview"
         >
           <X className="w-3.5 h-3.5" />
@@ -62,20 +62,20 @@ export function MetadataPreviewPanel() {
 
       {/* Content */}
       {loading ? (
-        <div className="flex-1 flex items-center justify-center text-[12px] text-slate-500">
+        <div className="flex-1 flex items-center justify-center text-[12px] text-slate-300">
           <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading preview…
         </div>
       ) : error ? (
         <div className="flex-1 flex items-center justify-center text-[12px] text-red-400">{error}</div>
       ) : unsupported ? (
-        <div className="flex-1 flex items-center justify-center text-[12px] text-slate-500 italic">
+        <div className="flex-1 flex items-center justify-center text-[12px] text-slate-300 italic">
           Live preview not available for this format — ORC requires Spark/Hive cluster execution
         </div>
       ) : columns.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-[12px] text-slate-600 italic">No data available</div>
+        <div className="flex-1 flex items-center justify-center text-[12px] text-slate-400 italic">No data available</div>
       ) : (
         <div className="flex-1 overflow-auto">
-          <table className="text-[11px] border-collapse whitespace-nowrap">
+          <table className="text-[12px] border-collapse whitespace-nowrap">
             <thead className="sticky top-0 z-10 bg-slate-900">
               <tr>
                 {columns.map(col => (
@@ -98,7 +98,7 @@ export function MetadataPreviewPanel() {
                       title={String(row[col] ?? '')}
                     >
                       {row[col] === null || row[col] === undefined
-                        ? <span className="text-slate-600 italic">null</span>
+                        ? <span className="text-slate-400 italic">null</span>
                         : String(row[col])}
                     </td>
                   ))}

@@ -97,9 +97,9 @@ export function OrchestratorExecutionSubTab() {
   return (
     <div className="flex-1 flex overflow-hidden">
       {/* Left: config + step timeline */}
-      <div className="w-72 flex-shrink-0 flex flex-col border-r border-neutral-200 overflow-hidden">
+      <div className="w-72 flex-shrink-0 flex flex-col border-r border-slate-800 overflow-hidden">
         {/* Run controls */}
-        <div className="p-4 border-b border-neutral-200 space-y-3">
+        <div className="p-4 border-b border-slate-800 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-neutral-700">Run configuration</span>
             {runState === 'running' && (
@@ -109,7 +109,7 @@ export function OrchestratorExecutionSubTab() {
           <div className="space-y-2">
             <div>
               <label className="text-xs text-neutral-500">Environment</label>
-              <select disabled={runState === 'running'} className="w-full mt-1 px-2 py-1.5 border border-neutral-300 rounded text-sm bg-white">
+              <select disabled={runState === 'running'} className="w-full mt-1 px-2 py-1.5 border border-slate-700 rounded text-sm bg-[#161b25]">
                 <option>Development</option>
                 <option>Staging</option>
                 <option>Production</option>
@@ -117,7 +117,7 @@ export function OrchestratorExecutionSubTab() {
             </div>
             <div>
               <label className="text-xs text-neutral-500">Concurrency</label>
-              <select disabled={runState === 'running'} className="w-full mt-1 px-2 py-1.5 border border-neutral-300 rounded text-sm bg-white">
+              <select disabled={runState === 'running'} className="w-full mt-1 px-2 py-1.5 border border-slate-700 rounded text-sm bg-[#161b25]">
                 <option>Sequential</option>
                 <option>Parallel (max 4)</option>
                 <option>Parallel (unlimited)</option>

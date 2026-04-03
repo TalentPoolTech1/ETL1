@@ -178,7 +178,7 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-96 flex flex-col">
+      <div className="bg-[#161b25] rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-96 flex flex-col">
         {/* Header */}
         <div className="border-b px-6 py-4 flex justify-between items-center">
           <h2 className="text-lg font-semibold">
@@ -194,16 +194,16 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
             <div className="space-y-4">
               {PATTERN_TEMPLATES.map((category, idx) => (
                 <div key={idx}>
-                  <h3 className="font-semibold text-sm text-gray-700 mb-2">{category.category}</h3>
+                  <h3 className="font-semibold text-sm text-slate-200 mb-2">{category.category}</h3>
                   <div className="space-y-2">
                     {category.patterns.map((tmpl, pidx) => (
                       <button
                         key={pidx}
                         onClick={() => handleTemplateSelect(tmpl.value)}
-                        className="w-full text-left p-3 border border-gray-300 rounded-md hover:bg-blue-50 hover:border-blue-500 transition"
+                        className="w-full text-left p-3 border border-slate-700 rounded-md hover:bg-blue-50 hover:border-blue-500 transition"
                       >
                         <div className="font-medium text-sm">{tmpl.label}</div>
-                        <div className="text-xs text-gray-600">{tmpl.description}</div>
+                        <div className="text-xs text-slate-300">{tmpl.description}</div>
                       </button>
                     ))}
                   </div>
@@ -213,7 +213,7 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
               <div className="border-t pt-4 mt-4">
                 <button
                   onClick={() => setStep('test')}
-                  className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                  className="w-full px-4 py-2 bg-gray-200 text-slate-200 rounded-md hover:bg-gray-300"
                 >
                   Or enter a custom pattern →
                 </button>
@@ -224,7 +224,7 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
           {step === 'test' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-200 mb-2">
                   Pattern (Regular Expression)
                 </label>
                 <textarea
@@ -232,25 +232,25 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
                   onChange={e => setPattern(e.target.value)}
                   placeholder="Enter regex pattern here"
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-700 rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
-              <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+              <div className="bg-[#0d0f1a] p-4 rounded-md border border-slate-800">
                 <h4 className="font-semibold text-sm mb-3">Live Test Results</h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {testResults.length === 0 ? (
-                    <p className="text-sm text-gray-500">Enter a pattern to see results</p>
+                    <p className="text-sm text-slate-300">Enter a pattern to see results</p>
                   ) : (
                     testResults.map((result, idx) => (
-                      <div key={idx} className="p-2 bg-white border border-gray-200 rounded text-sm font-mono">
-                        <div className="text-gray-700">{result.original}</div>
+                      <div key={idx} className="p-2 bg-[#161b25] border border-slate-800 rounded text-sm font-mono">
+                        <div className="text-slate-200">{result.original}</div>
                         {result.matches.length > 0 ? (
                           <div className="text-green-600 mt-1">
                             ✓ Matches: {result.matches.map((m, i) => `[${i + 1}]: ${m}`).join(', ')}
                           </div>
                         ) : (
-                          <div className="text-gray-400 mt-1">- No match</div>
+                          <div className="text-slate-300 mt-1">- No match</div>
                         )}
                       </div>
                     ))
@@ -276,13 +276,13 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-200 mb-2">
                   Which capture group to use?
                 </label>
                 <select
                   value={groupIndex}
                   onChange={e => setGroupIndex(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-slate-700 rounded-md"
                 >
                   {Array.from({ length: Math.max(captureGroupCount, 1) }, (_, i) => (
                     <option key={i + 1} value={i + 1}>
@@ -331,7 +331,7 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
         <div className="border-t px-6 py-4 flex justify-end gap-2">
           <button
             onClick={onCancel}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+            className="px-4 py-2 bg-gray-200 text-slate-200 rounded-md hover:bg-gray-300"
           >
             Cancel
           </button>
@@ -339,7 +339,7 @@ export const PatternWizard: React.FC<PatternWizardProps> = ({
           {step !== 'template' && (
             <button
               onClick={() => setStep(step === 'test' ? 'template' : 'test')}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+              className="px-4 py-2 bg-gray-200 text-slate-200 rounded-md hover:bg-gray-300"
             >
               ← Back
             </button>

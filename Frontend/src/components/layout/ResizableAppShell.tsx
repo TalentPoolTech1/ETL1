@@ -59,18 +59,16 @@ export function ResizeHandle({
     return (
       <div
         onMouseDown={handleMouseDown}
-        className={`w-px cursor-col-resize transition-colors flex-shrink-0 ${
-          isDragging ? 'bg-blue-500' : 'bg-slate-800 hover:bg-blue-600'
-        }`}
+        className="w-px cursor-col-resize transition-colors flex-shrink-0"
+        style={{ background: isDragging ? 'var(--ac)' : 'var(--bd)' }}
       />
     );
   } else {
     return (
       <div
         onMouseDown={handleMouseDown}
-        className={`h-px cursor-row-resize transition-colors flex-shrink-0 ${
-          isDragging ? 'bg-blue-500' : 'bg-slate-800 hover:bg-blue-600'
-        }`}
+        className="h-px cursor-row-resize transition-colors flex-shrink-0"
+        style={{ background: isDragging ? 'var(--ac)' : 'var(--bd)' }}
       />
     );
   }
@@ -133,7 +131,7 @@ export function ResizableAppShell({
 
   if (focusMode) {
     return (
-      <div className="flex flex-col h-screen bg-[#0d0f1a]">
+      <div className="flex flex-col h-screen" style={{ background: 'var(--bg)' }}>
         <div className="flex-shrink-0">{header}</div>
         <div className="flex-1 overflow-hidden">{mainArea}</div>
       </div>
@@ -141,7 +139,7 @@ export function ResizableAppShell({
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0d0f1a]">
+    <div className="flex flex-col h-screen" style={{ background: 'var(--bg)' }}>
       {/* Header */}
       <div className="flex-shrink-0">{header}</div>
 
@@ -162,45 +160,51 @@ export function ResizableAppShell({
           </>
         )}
 
-        {/* Main Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">{mainArea}</div>
+        {/* Center Workspace Column */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            {/* Main Area */}
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">{mainArea}</div>
 
-        {/* Right Sidebar */}
-        {rightRailVisible && rightSidebar && (
-          <>
-            <ResizeHandle
-              position="right"
-              onResize={handleRightResize}
-              minSize={300}
-              maxSize={600}
-            />
-            <div style={{ width: `${rightRailWidth}px` }} className="flex flex-col border-l border-slate-800 overflow-hidden">
-              {rightSidebar}
-            </div>
-          </>
-        )}
+            {/* Right Sidebar */}
+            {rightRailVisible && rightSidebar && (
+              <>
+                <ResizeHandle
+                  position="right"
+                  onResize={handleRightResize}
+                  minSize={300}
+                  maxSize={600}
+                />
+                <div style={{ width: `${rightRailWidth}px`, borderLeft: '1px solid var(--bd)' }} className="flex flex-col overflow-hidden flex-shrink-0">
+                  {rightSidebar}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Bottom Panel - only under the workspace column, never under the left rail */}
+          {bottomPanelVisible && bottomPanel && (
+            <>
+              <ResizeHandle
+                position="bottom"
+                onResize={handleBottomResize}
+                minSize={150}
+                maxSize={700}
+              />
+              <div style={{ height: `${bottomPanelHeight}px`, borderTop: '1px solid var(--bd)' }} className="flex flex-col overflow-hidden flex-shrink-0">
+                {bottomPanel}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Bottom Panel - Resizable */}
-      {bottomPanelVisible && bottomPanel && (
-        <>
-          <ResizeHandle
-            position="bottom"
-            onResize={handleBottomResize}
-            minSize={150}
-            maxSize={700}
-          />
-          <div style={{ height: `${bottomPanelHeight}px` }} className="flex flex-col border-t border-slate-800 overflow-hidden">
-            {bottomPanel}
-          </div>
-        </>
-      )}
-
       {/* Status bar */}
-      <div className="h-5 bg-[#070910] border-t border-slate-800/60 flex items-center px-3 gap-3 text-[11px] text-slate-600 flex-shrink-0">
+      <div className="h-5 flex items-center px-3 gap-3 flex-shrink-0"
+        style={{ background: 'var(--bg-2)', borderTop: '1px solid var(--bd)', fontSize: 'var(--fs-sm)', color: 'var(--tx3)' }}>
         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full inline-block" />
-        <span className="text-slate-500">Connected</span>
-        <span className="text-slate-800">·</span>
+        <span style={{ color: 'var(--tx2)' }}>Connected</span>
+        <span style={{ color: 'var(--bd-2)' }}>·</span>
         <span>ETL1 Platform v1.0</span>
         <div className="flex-1" />
         <span>{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>

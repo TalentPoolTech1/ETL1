@@ -21,7 +21,7 @@ export function Toggle({ enabled, onChange, label, disabled = false }: TogglePro
       >
         <div
           className={`
-            absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform
+            absolute top-1 left-1 w-4 h-4 bg-[#161b25] rounded-full transition-transform
             ${enabled ? 'translate-x-4' : 'translate-x-0'}
           `}
         />

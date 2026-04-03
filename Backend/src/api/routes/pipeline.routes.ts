@@ -4,54 +4,327 @@ import { userIdMiddleware } from '../middleware/user-id.middleware';
 import { LoggerFactory } from '../../shared/logging';
 import { codegenService } from '../../codegen/codegen.service';
 import type { GenerationOptions, PipelineDefinition } from '../../codegen/codegen.service';
+import type { DataType, Schema } from '../../codegen/core/types/pipeline.types';
 import { artifactRepository } from '../../db/repositories/artifact.repository';
+import { executionRepository } from '../../db/repositories/execution.repository';
 import { requirePermission } from '../middleware/rbac.middleware';
+import { spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 const router = Router();
 router.use(userIdMiddleware);
 const log = LoggerFactory.get('pipelines');
 
-// ─── Execution simulator (no real Spark cluster) ──────────────────────────────
-async function simulateExecution(runId: string, userId: string, nodes: any[]): Promise<void> {
-  const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
-  const exec = async (sql: string, params: any[]) =>
-    db.transaction(async client => { await setSession(client, userId); return client.query(sql, params); });
+type PipelineRunLogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
+
+function classifySparkLogLine(
+  rawLine: string,
+  defaultLevel: PipelineRunLogLevel = 'INFO',
+): PipelineRunLogLevel | null {
+  const line = rawLine.trim();
+  if (!line) return null;
+
+  if (
+    /\bFATAL\b/i.test(line)
+    || /\bTraceback \(most recent call last\):/i.test(line)
+  ) {
+    return 'FATAL';
+  }
+
+  if (
+    /\bERROR\b/i.test(line)
+    || /\bCaused by:/i.test(line)
+    || /\bException in task\b/i.test(line)
+    || /\bBatchUpdateException\b/i.test(line)
+    || /\bPSQLException\b/i.test(line)
+    || /\bClassNotFoundException\b/i.test(line)
+    || /\bUnsupportedClassVersionError\b/i.test(line)
+    || /\bNo such file or directory\b/i.test(line)
+  ) {
+    return 'ERROR';
+  }
+
+  if (/\bWARN\b/i.test(line)) return 'WARN';
+  if (/\bINFO\b/i.test(line)) return 'INFO';
+  if (/\bDEBUG\b/i.test(line)) return 'DEBUG';
+
+  return defaultLevel;
+}
+
+async function flushSparkLogChunk(
+  chunk: string,
+  defaultLevel: PipelineRunLogLevel,
+  logToDb: (level: string, message: string) => Promise<void>,
+): Promise<void> {
+  const lines = chunk.split('\n').map(line => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const level = classifySparkLogLine(line, defaultLevel);
+    if (!level) continue;
+    await logToDb(level, line.substring(0, 500));
+  }
+}
+
+function pathExists(targetPath: string): boolean {
   try {
-    await delay(600);
-    await exec(`CALL execution.pr_start_pipeline_run($1::uuid, $2)`, [runId, 'sim-spark-' + runId.slice(0, 8)]);
-    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'Pipeline run started']);
-    await delay(700);
-    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'Generating Spark execution plan…']);
-    await delay(900);
-    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'Submitting to cluster…']);
-    const nodeList: any[] = Array.isArray(nodes) ? nodes : [];
-    let cumulativeRows = Math.floor(10000 + Math.random() * 90000);
-    for (const node of nodeList) {
-      await delay(300 + Math.floor(Math.random() * 500));
-      const nodeId  = node?.id ?? node?.data?.id ?? String(Math.random());
-      const label   = node?.data?.label ?? node?.name ?? node?.type ?? 'node';
-      const rowsIn  = cumulativeRows;
-      const rowsOut = node?.type === 'filter' || node?.type === 'data_quality'
-        ? Math.floor(rowsIn * (0.7 + Math.random() * 0.29))
-        : rowsIn;
-      cumulativeRows = rowsOut;
-      await exec(
-        `INSERT INTO execution.pipeline_node_runs
-           (pipeline_run_id, node_id_in_ir_text, node_display_name, node_status_code, start_dtm, end_dtm, rows_in_num, rows_out_num)
-         VALUES ($1::uuid, $2, $3, 'SUCCESS', NOW() - interval '2 seconds', NOW(), $4, $5)
-         ON CONFLICT (pipeline_run_id, node_id_in_ir_text) DO UPDATE
-           SET node_status_code='SUCCESS', end_dtm=NOW(), rows_in_num=$4, rows_out_num=$5`,
-        [runId, nodeId, label, rowsIn, rowsOut]
-      );
-      await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, `Step: ${label} — ${rowsOut.toLocaleString()} rows out`]);
+    return fs.existsSync(targetPath);
+  } catch {
+    return false;
+  }
+}
+
+function isUsableSparkHome(candidatePath: string): boolean {
+  return pathExists(path.join(candidatePath, 'bin', 'spark-class'))
+    && (
+      pathExists(path.join(candidatePath, 'jars'))
+      || pathExists(path.join(candidatePath, 'assembly', 'target', 'scala-2.13', 'jars'))
+    );
+}
+
+function resolveBundledPySparkHome(pysparkPath: string): string | null {
+  const trimmedPath = pysparkPath.trim();
+  if (!trimmedPath) return null;
+
+  if (isUsableSparkHome(trimmedPath)) {
+    return trimmedPath;
+  }
+
+  const libDir = path.join(trimmedPath, 'lib');
+  if (!pathExists(libDir)) return null;
+
+  try {
+    const pythonDirs = fs.readdirSync(libDir, { withFileTypes: true })
+      .filter(entry => entry.isDirectory() && /^python\d+(?:\.\d+)?$/.test(entry.name))
+      .map(entry => path.join(libDir, entry.name, 'site-packages', 'pyspark'))
+      .filter(candidate => isUsableSparkHome(candidate));
+
+    return pythonDirs[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveSparkRuntime(pysparkPath: string): {
+  sparkSubmitCmd: string;
+  sparkHome: string | null;
+  pysparkPython: string | null;
+} {
+  const trimmedPath = pysparkPath.trim();
+  if (!trimmedPath) {
+    return { sparkSubmitCmd: 'spark-submit', sparkHome: null, pysparkPython: null };
+  }
+
+  const bundledSparkHome = resolveBundledPySparkHome(trimmedPath);
+  const directSparkSubmit = path.join(trimmedPath, 'bin', 'spark-submit');
+  const sparkHomeSubmit = bundledSparkHome ? path.join(bundledSparkHome, 'bin', 'spark-submit') : '';
+  const pythonCandidate = path.join(trimmedPath, 'bin', 'python3');
+
+  return {
+    sparkSubmitCmd: pathExists(directSparkSubmit)
+      ? directSparkSubmit
+      : (sparkHomeSubmit && pathExists(sparkHomeSubmit) ? sparkHomeSubmit : 'spark-submit'),
+    sparkHome: bundledSparkHome,
+    pysparkPython: pathExists(pythonCandidate) ? pythonCandidate : null,
+  };
+}
+
+// ─── Real PySpark Execution ──────────────────────────────────────────────────
+export async function executePipelineSpark(runId: string, userId: string, pipelineId: string): Promise<void> {
+  const logToDb = async (level: string, message: string) => {
+    log.info('pipeline.run', `[${level}] ${message}`, { runId });
+    try {
+      await db.transaction(async client => {
+        await setSession(client, userId);
+        await client.query(`CALL execution.pr_append_run_log($1::uuid, $2, $3, $4)`, [runId, level, 'SPARK', message]);
+      });
+    } catch (e) { log.warn('pipeline.run', 'Failed to save log to DB', { runId, err: (e as Error).message }); }
+  };
+
+  try {
+    await db.transaction(async client => {
+      await setSession(client, userId);
+      await client.query(`CALL execution.pr_start_pipeline_run($1::uuid, $2)`, [runId, 'spark-' + runId.slice(0, 8)]);
+    });
+
+    await logToDb('INFO', 'Starting real PySpark execution...');
+
+    let pipelineData: any = null;
+    let connectionMap = new Map<string, ConnInfo>();
+    let catalogDatasetSchemas = new Map<string, CatalogDatasetSchemaInfo>();
+
+    await db.transaction(async client => {
+      await setSession(client, userId);
+      const r = await client.query('SELECT pipeline_id, pipeline_display_name, pipeline_desc_text, version_num_seq, ir_payload_json FROM catalog.fn_get_pipeline_by_id($1::uuid)', [pipelineId]);
+      pipelineData = r.rows[0];
+      if (pipelineData) {
+         const connectionIds = extractConnectionIds(pipelineData.ir_payload_json);
+         if (connectionIds.length > 0) {
+            connectionMap = await resolveConnections(client, connectionIds);
+         }
+         catalogDatasetSchemas = await resolveCatalogDatasetSchemas(client, pipelineData.ir_payload_json);
+      }
+    });
+
+    if (!pipelineData) throw new Error('Pipeline not found');
+
+    const def = toPipelineDefinition(pipelineData, 'pyspark', connectionMap, catalogDatasetSchemas);
+    await logToDb('INFO', 'Generating PySpark code...');
+    const artifact = await codegenService.generate(def);
+    
+    const errMsgs = (artifact.metadata.warnings ?? [])
+      .filter((w: any) => w.severity === 'error')
+      .map((w: any) => w.message)
+      .filter(Boolean);
+    if (errMsgs.length > 0) {
+      throw new Error(`Codegen failed with errors: ${errMsgs.join(' | ')}`);
     }
-    await delay(700);
-    await exec(`CALL execution.pr_append_run_log($1::uuid, $2, 'INFO', $3)`, [runId, null, 'All steps completed successfully.']);
-    await exec(`CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`, [runId, 'SUCCESS']);
-    log.info('pipeline.run', 'Simulated run SUCCESS', { runId });
-  } catch (err) {
-    log.warn('pipeline.run', 'Simulation error', { runId, error: (err as Error).message });
-    try { await exec(`CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`, [runId, 'FAILED']); } catch { /* already terminal */ }
+
+    const mainCodeFile = artifact.files.find((f: any) =>
+      (f.fileName ?? f.relativePath ?? '').endsWith('.py'),
+    );
+    if (!mainCodeFile) throw new Error('No python file generated in Codegen artifact');
+
+    const artifactDir = path.join(process.cwd(), '.run_artifacts', 'pipeline-runs', runId);
+    fs.mkdirSync(artifactDir, { recursive: true });
+    const generatedArtifactName = (mainCodeFile.fileName ?? mainCodeFile.relativePath ?? `pipeline_${runId}.py`).split('/').pop() ?? `pipeline_${runId}.py`;
+    const generatedArtifactPath = path.join(artifactDir, generatedArtifactName);
+    fs.writeFileSync(generatedArtifactPath, mainCodeFile.content);
+    try {
+      const artifactSizeBytes = Buffer.byteLength(mainCodeFile.content, 'utf8');
+      await db.transaction(async client => {
+        await setSession(client, userId);
+        await client.query(
+          `CALL execution.pr_record_run_artifact($1::uuid, $2, $3, $4, $5)`,
+          [runId, 'GENERATED_CODE', generatedArtifactName, generatedArtifactPath, artifactSizeBytes],
+        );
+      });
+    } catch (artifactErr) {
+      log.warn('pipeline.run', 'Failed to persist generated code artifact metadata', {
+        runId,
+        err: (artifactErr as Error).message,
+      });
+    }
+
+    let settings: any = {};
+    try {
+      await db.transaction(async client => {
+         await setSession(client, userId);
+         const r = await client.query('SELECT catalog.fn_get_compute_settings() AS s');
+         settings = r.rows[0]?.s ?? {};
+      });
+    } catch { /* use defaults */ }
+
+    const pysparkPath = settings.pysparkPath?.trim() || '';
+    const sparkMaster = settings.sparkMaster?.trim() || 'local[*]';
+    // Collect connector/global dependency declarations, resolve local driver jars first,
+    // and fall back to Spark --packages when no cached local jar is available.
+    const globalLibs = splitSearchPaths(settings.additionalLibraries);
+    const allPackagesSet = new Set<string>();
+    const allJarsSet = new Set<string>();
+
+    const mergeResolvedDependencies = (resolved: { localJars: string[]; packages: string[] }) => {
+      resolved.localJars.forEach(jar => allJarsSet.add(jar));
+      resolved.packages.forEach(pkg => allPackagesSet.add(pkg));
+    };
+
+    mergeResolvedDependencies(resolveSparkDependencies(globalLibs));
+    for (const conn of connectionMap.values()) {
+      const { explicitJars, searchPaths } = partitionDriverPathHints(conn.driverPaths);
+      if (explicitJars.length) {
+        mergeResolvedDependencies(resolveSparkDependencies(explicitJars));
+      }
+      const mavenCoord = conn.mavenCoords?.trim();
+      if (!mavenCoord) continue;
+      mergeResolvedDependencies(resolveSparkDependencies([mavenCoord], searchPaths));
+    }
+
+    const allPackages = [...allPackagesSet].join(',');
+    const allJars = [...allJarsSet].join(',');
+
+    const tmpDir = path.join(process.cwd(), '.tmp_executions');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+
+    const scriptPath = path.join(tmpDir, `pipeline_${runId}.py`);
+    fs.writeFileSync(scriptPath, mainCodeFile.content);
+
+    const { sparkSubmitCmd, sparkHome, pysparkPython } = resolveSparkRuntime(pysparkPath);
+
+    const args = ['--master', sparkMaster];
+    if (allJars) args.push('--jars', allJars);
+    if (allPackages) args.push('--packages', allPackages);
+    args.push(scriptPath);
+
+    // Build spawn environment: inherit current env, inject venv-specific vars
+    const spawnEnv: Record<string, string> = { ...(process.env as Record<string, string>) };
+    if (pysparkPython) {
+      spawnEnv['PYSPARK_PYTHON'] = pysparkPython;
+      spawnEnv['PYSPARK_DRIVER_PYTHON'] = pysparkPython;
+    }
+    if (pysparkPath) {
+      if (sparkHome) {
+        spawnEnv['SPARK_HOME'] = sparkHome;
+      } else {
+        delete spawnEnv['SPARK_HOME'];
+      }
+    }
+    if (!spawnEnv['JAVA_HOME']) {
+      spawnEnv['JAVA_HOME'] = '/usr/lib/jvm/java-21-openjdk-amd64';
+    }
+
+    await logToDb('INFO', `Script written to: ${scriptPath}`);
+    if (allJarsSet.size) {
+      await logToDb('INFO', `Resolved local driver jars: ${[...allJarsSet].join(', ')}`);
+    }
+    if (allPackagesSet.size) {
+      await logToDb('INFO', `Resolved remote Spark packages: ${[...allPackagesSet].join(', ')}`);
+    }
+    await logToDb('INFO', `Submitting: ${sparkSubmitCmd} ${args.join(' ')}`);
+    await logToDb('INFO', `PYSPARK_PYTHON=${spawnEnv['PYSPARK_PYTHON'] ?? 'system'}, PYSPARK_DRIVER_PYTHON=${spawnEnv['PYSPARK_DRIVER_PYTHON'] ?? 'system'}, SPARK_HOME=${spawnEnv['SPARK_HOME'] ?? 'auto'}, JAVA_HOME=${spawnEnv['JAVA_HOME']}`);
+
+    const child = spawn(sparkSubmitCmd, args, { env: spawnEnv });
+
+    child.stdout.on('data', async (data) => {
+      await flushSparkLogChunk(data.toString(), 'INFO', logToDb);
+    });
+
+    child.stderr.on('data', async (data) => {
+      await flushSparkLogChunk(data.toString(), 'WARN', logToDb);
+    });
+
+    child.on('error', async (spawnErr) => {
+      const errMsg = `Failed to start spark-submit: ${spawnErr.message} (cmd: ${sparkSubmitCmd})`;
+      log.error('pipeline.run', errMsg, spawnErr, { runId });
+      await logToDb('ERROR', errMsg);
+      try {
+        await db.transaction(async client => {
+          await setSession(client, userId);
+          await client.query(`CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`, [runId, 'FAILED']);
+        });
+      } catch (e) { log.warn('pipeline.run', 'Failed to finalize run after spawn error', { runId, err: (e as Error).message }); }
+      try { fs.unlinkSync(scriptPath); } catch {}
+    });
+
+    child.on('close', async (code) => {
+      const finalStatus = code === 0 ? 'SUCCESS' : 'FAILED';
+      await logToDb(code === 0 ? 'INFO' : 'ERROR', `Job exited with code ${code} → ${finalStatus}`);
+      try {
+        await db.transaction(async client => {
+          await setSession(client, userId);
+          await client.query(`CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`, [runId, finalStatus]);
+        });
+      } catch (e) { log.warn('pipeline.run', 'Failed to finalize run', { runId, err: (e as Error).message }); }
+      try { fs.unlinkSync(scriptPath); } catch {}
+    });
+    
+  } catch(err: any) {
+    log.warn('pipeline.run', 'Execution error', { runId, error: err.message });
+    await logToDb('ERROR', `Execution Error: ${err.message}`);
+    try {
+      await db.transaction(async client => {
+        await setSession(client, userId);
+        await client.query(`CALL execution.pr_finalize_pipeline_run($1::uuid, $2)`, [runId, 'FAILED']);
+      });
+    } catch {}
   }
 }
 
@@ -69,6 +342,111 @@ type PermissionGrantPayload = {
   id: string; userId: string; roleId: string; principal: string; principalType: 'user';
   role: string; inherited: true; expiry: null; grantedDtm: string | null;
 };
+
+function splitSearchPaths(raw: unknown): string[] {
+  if (typeof raw !== 'string') return [];
+  return raw.split(',').map(part => part.trim()).filter(Boolean);
+}
+
+function listExistingDriverPaths(configuredPaths: string[] = []): string[] {
+  const candidates = [
+    ...configuredPaths,
+    ...splitSearchPaths(process.env['ETL1_DRIVER_PATHS']),
+    ...splitSearchPaths(process.env['ETL1_DRIVER_DIR']),
+    path.resolve(process.cwd(), 'drivers'),
+    path.resolve(process.cwd(), 'Backend', 'drivers'),
+  ];
+  return [...new Set(candidates)]
+    .filter(candidate => fs.existsSync(candidate));
+}
+
+function findJarInDir(dir: string, prefix: string): string | null {
+  const stack = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    const entries = fs.readdirSync(current, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(fullPath);
+        continue;
+      }
+      if (entry.isFile() && entry.name.toLowerCase().endsWith('.jar') && entry.name.startsWith(prefix)) {
+        return fullPath;
+      }
+    }
+  }
+  return null;
+}
+
+function resolveSparkDependencies(dependencies: string[], configuredPaths: string[] = []): { localJars: string[]; packages: string[] } {
+  const driverPaths = listExistingDriverPaths(configuredPaths);
+  const localJars = new Set<string>();
+  const packages = new Set<string>();
+
+  for (const rawDependency of dependencies) {
+    const dependency = rawDependency.trim();
+    if (!dependency) continue;
+
+    if (dependency.toLowerCase().endsWith('.jar') || dependency.includes('/') || dependency.includes(path.sep)) {
+      const candidatePath = path.isAbsolute(dependency) ? dependency : path.resolve(process.cwd(), dependency);
+      if (fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
+        localJars.add(candidatePath);
+      } else {
+        packages.add(dependency);
+      }
+      continue;
+    }
+
+    const parts = dependency.split(':').map(part => part.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      const artifactId = parts[1];
+      const version = parts[2];
+      const expectedPrefix = `${artifactId}-${version}`;
+      let resolvedJar: string | null = null;
+      for (const candidate of driverPaths) {
+        const stat = fs.statSync(candidate);
+        if (stat.isDirectory()) {
+          resolvedJar = findJarInDir(candidate, expectedPrefix);
+        } else if (stat.isFile() && candidate.toLowerCase().endsWith('.jar') && path.basename(candidate).startsWith(expectedPrefix)) {
+          resolvedJar = candidate;
+        }
+        if (resolvedJar) break;
+      }
+      if (resolvedJar) {
+        localJars.add(resolvedJar);
+        continue;
+      }
+    }
+
+    packages.add(dependency);
+  }
+
+  return { localJars: [...localJars], packages: [...packages] };
+}
+
+function partitionDriverPathHints(pathHints: string[]): { explicitJars: string[]; searchPaths: string[] } {
+  const explicitJars = new Set<string>();
+  const searchPaths = new Set<string>();
+
+  for (const rawPathHint of pathHints) {
+    const pathHint = rawPathHint.trim();
+    if (!pathHint) continue;
+
+    const candidatePath = path.isAbsolute(pathHint) ? pathHint : path.resolve(process.cwd(), pathHint);
+    if (!fs.existsSync(candidatePath)) continue;
+
+    const stat = fs.statSync(candidatePath);
+    if (stat.isFile() && candidatePath.toLowerCase().endsWith('.jar')) {
+      explicitJars.add(candidatePath);
+      continue;
+    }
+
+    searchPaths.add(candidatePath);
+  }
+
+  return { explicitJars: [...explicitJars], searchPaths: [...searchPaths] };
+}
 
 function normalizePermissionGrants(rawGrants: unknown): Array<{ userId: string; roleId: string }> {
   if (!Array.isArray(rawGrants)) return [];
@@ -123,7 +501,12 @@ function extractConnectionIds(irPayload: unknown): string[] {
 }
 
 interface ConnInfo {
-  url: string; driverClass: string; displayName: string; typeCode: string; configJson: Record<string, unknown>;
+  url: string; driverClass: string; displayName: string; typeCode: string; configJson: Record<string, unknown>; mavenCoords: string | null; driverPaths: string[];
+}
+
+interface CatalogDatasetSchemaInfo {
+  datasetId: string;
+  schema: Schema;
 }
 
 const JDBC_URL_TEMPLATES: Record<string, string> = {
@@ -192,6 +575,62 @@ function joinPathFragments(basePath: string, childPath: string): string {
   return `${normalizedBase}/${normalizedChild}`;
 }
 
+const FILE_PATTERN_TOKEN_MAP: Array<{ token: string; glob: string }> = [
+  { token: '{YYYYMMDDHH24MISS}', glob: '??????????????' },
+  { token: '{YYYYMMDD_HH24MISS}', glob: '????????_??????' },
+  { token: '{YYYY-MM-DD_HH24MISS}', glob: '????-??-??_??????' },
+  { token: '{YYYY-MM-DD}', glob: '????-??-??' },
+  { token: '{YYYY_MM_DD}', glob: '????_??_??' },
+  { token: '{DD-MON-YYYY}', glob: '??-???-????' },
+  { token: '{DD-MON-YY}', glob: '??-???-??' },
+  { token: '{YYYYMMDD}', glob: '????????' },
+  { token: '{YYYYMM}', glob: '??????' },
+  { token: '{YYYY}', glob: '????' },
+];
+
+const FILE_PATTERN_SEGMENT_MAP: Array<{ pattern: RegExp; glob: string }> = [
+  { pattern: /HH24|HH12|HH/g, glob: '??' },
+  { pattern: /YYYY/g, glob: '????' },
+  { pattern: /YYY/g, glob: '???' },
+  { pattern: /YY/g, glob: '??' },
+  { pattern: /MONTH/g, glob: '*' },
+  { pattern: /MON/g, glob: '???' },
+  { pattern: /MM/g, glob: '??' },
+  { pattern: /DDD/g, glob: '???' },
+  { pattern: /DD/g, glob: '??' },
+  { pattern: /MI/g, glob: '??' },
+  { pattern: /SS/g, glob: '??' },
+  { pattern: /FF9/g, glob: '?????????' },
+  { pattern: /FF6/g, glob: '??????' },
+  { pattern: /FF3/g, glob: '???' },
+  { pattern: /FF2/g, glob: '??' },
+  { pattern: /FF1/g, glob: '?' },
+  { pattern: /Q/g, glob: '?' },
+];
+
+function dateTokenToGlob(tokenBody: string): string {
+  const trimmed = tokenBody.trim().toUpperCase();
+  if (!trimmed) return '*';
+
+  const exact = FILE_PATTERN_TOKEN_MAP.find(entry => entry.token.slice(1, -1).toUpperCase() === trimmed);
+  if (exact) return exact.glob;
+
+  let normalized = trimmed;
+  for (const entry of FILE_PATTERN_SEGMENT_MAP) {
+    normalized = normalized.replace(entry.pattern, entry.glob);
+  }
+
+  if (/[A-Z]/.test(normalized)) {
+    normalized = normalized.replace(/[A-Z0-9]+/g, '*');
+  }
+
+  return normalized || '*';
+}
+
+function normalizeRuntimeFilePattern(pathValue: string): string {
+  return pathValue.replace(/\{([^{}]+)\}/g, (_fullMatch, tokenBody: string) => dateTokenToGlob(tokenBody));
+}
+
 function resolveFilePath(cfg: Record<string, unknown>, connInfo?: ConnInfo): string {
   const connectorCfg = connInfo?.configJson ?? {};
   const explicitPath = firstNonEmptyString(
@@ -206,13 +645,13 @@ function resolveFilePath(cfg: Record<string, unknown>, connInfo?: ConnInfo): str
     connectorCfg['remote_path'],
     connectorCfg['path'],
   );
-  if (explicitPath) return explicitPath;
+  if (explicitPath) return normalizeRuntimeFilePattern(explicitPath);
 
   const schemaPath = firstNonEmptyString(cfg['schema'], cfg['schemaName']);
   const tableName = firstNonEmptyString(cfg['tableName'], cfg['table']);
-  if (schemaPath && tableName) return joinPathFragments(schemaPath, tableName);
-  if (schemaPath) return schemaPath;
-  if (tableName) return tableName;
+  if (schemaPath && tableName) return normalizeRuntimeFilePattern(joinPathFragments(schemaPath, tableName));
+  if (schemaPath) return normalizeRuntimeFilePattern(schemaPath);
+  if (tableName) return normalizeRuntimeFilePattern(tableName);
   return '<not_configured>';
 }
 
@@ -241,23 +680,126 @@ async function resolveConnections(client: any, connectionIds: string[]): Promise
   if (!connectionIds.length) return map;
   try {
     const r = await client.query(
-      `SELECT connector_id::text, connector_display_name, connector_type_code, conn_jdbc_driver_class,
-         pgp_sym_decrypt(conn_config_json_encrypted::bytea, current_setting('app.encryption_key'))::jsonb AS cfg
-       FROM catalog.connectors WHERE connector_id = ANY($1::uuid[])`,
+      `SELECT c.connector_id::text, c.connector_display_name, c.connector_type_code, c.conn_jdbc_driver_class,
+         conn_jdbc_driver_maven_coords,
+         conn_jdbc_driver_paths,
+         pgp_sym_decrypt(c.conn_config_json_encrypted::bytea, current_setting('app.encryption_key'))::jsonb AS cfg,
+         to_jsonb(ffo.*) AS file_format_options
+       FROM catalog.connectors c
+       LEFT JOIN LATERAL catalog.fn_get_file_format_options(c.connector_id) AS ffo ON TRUE
+       WHERE c.connector_id = ANY($1::uuid[])`,
       [connectionIds],
     );
     for (const row of r.rows) {
-      const cfg = (row.cfg ?? {}) as Record<string, unknown>;
+      const cfg = {
+        ...((row.cfg ?? {}) as Record<string, unknown>),
+        ...((row.file_format_options ?? {}) as Record<string, unknown>),
+      };
       const typeCode = String(row.connector_type_code ?? '').toUpperCase();
       map.set(row.connector_id as string, {
         url: buildJdbcUrlFromConfig(typeCode, cfg),
         driverClass: row.conn_jdbc_driver_class as string ?? JDBC_DRIVER_MAP[typeCode] ?? 'UNKNOWN_DRIVER',
         displayName: row.connector_display_name as string ?? row.connector_id,
         typeCode, configJson: cfg,
+        mavenCoords: (row.conn_jdbc_driver_maven_coords as string | null) ?? null,
+        driverPaths: splitSearchPaths(row.conn_jdbc_driver_paths),
       });
     }
   } catch { /* Non-fatal */ }
   return map;
+}
+
+function normalizeCatalogDatasetKey(connectionId: string, schemaValue: unknown, tableValue: unknown): string {
+  return [
+    connectionId.trim().toLowerCase(),
+    firstNonEmptyString(schemaValue)?.toLowerCase() ?? '',
+    firstNonEmptyString(tableValue)?.toLowerCase() ?? '',
+  ].join('::');
+}
+
+function parseCatalogDataType(raw: unknown): DataType {
+  const normalized = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!normalized) return { name: 'string' };
+
+  const decimalMatch = normalized.match(/(?:decimal|numeric|number)\s*\((\d+)\s*,\s*(\d+)\)/i);
+  if (decimalMatch) {
+    return {
+      name: 'decimal',
+      precision: Number(decimalMatch[1]),
+      scale: Number(decimalMatch[2]),
+    };
+  }
+
+  if (/^(bigint|int8|bigserial|serial8)\b/.test(normalized)) return { name: 'long' };
+  if (/^(smallint|int2|integer|int4|int|serial|serial2|serial4)\b/.test(normalized)) return { name: 'integer' };
+  if (/^(double precision|float8|double)\b/.test(normalized)) return { name: 'double' };
+  if (/^(real|float4|float)\b/.test(normalized)) return { name: 'float' };
+  if (/^(boolean|bool)\b/.test(normalized)) return { name: 'boolean' };
+  if (/^(date)\b/.test(normalized)) return { name: 'date' };
+  if (/^(timestamp|timestamptz|datetime)\b/.test(normalized)) return { name: 'timestamp' };
+  if (/^(bytea|binary|varbinary)\b/.test(normalized)) return { name: 'binary' };
+  if (/^(decimal|numeric|number)\b/.test(normalized)) return { name: 'decimal', precision: 18, scale: 2 };
+
+  return { name: 'string' };
+}
+
+async function resolveCatalogDatasetSchemas(client: any, irPayload: unknown): Promise<Map<string, CatalogDatasetSchemaInfo>> {
+  const payload = (irPayload ?? {}) as { nodes?: unknown[] };
+  const irNodes = ensureArray<Record<string, unknown>>(payload.nodes);
+  const sourceRefs = irNodes
+    .filter(node => (node['type'] ?? '') === 'source')
+    .map(node => {
+      const cfg = (node['config'] ?? {}) as Record<string, unknown>;
+      const connectionId = typeof cfg['connectionId'] === 'string' ? cfg['connectionId'].trim() : '';
+      const table = firstNonEmptyString(cfg['table'] ?? cfg['tableName']);
+      const schema = firstNonEmptyString(cfg['schema'] ?? cfg['schemaName']);
+      return connectionId && table ? { connectionId, schema: schema ?? '', table } : null;
+    })
+    .filter((ref): ref is { connectionId: string; schema: string; table: string } => Boolean(ref));
+
+  if (!sourceRefs.length) return new Map();
+
+  const connectionIds = [...new Set(sourceRefs.map(ref => ref.connectionId))];
+  const wantedKeys = new Set(sourceRefs.map(ref => normalizeCatalogDatasetKey(ref.connectionId, ref.schema, ref.table)));
+  const result = await client.query(
+    `SELECT
+        d.dataset_id::text,
+        d.connector_id::text,
+        COALESCE(d.schema_name_text, '') AS schema_name_text,
+        d.table_name_text,
+        c.column_name_text,
+        COALESCE(c.override_data_type_code, c.data_type_code) AS effective_data_type_code,
+        c.parse_format_text,
+        c.is_nullable_flag,
+        c.ordinal_position_num
+      FROM catalog.datasets d
+      JOIN catalog.dataset_columns c ON c.dataset_id = d.dataset_id
+      WHERE d.connector_id = ANY($1::uuid[])
+      ORDER BY d.dataset_id, c.ordinal_position_num`,
+    [connectionIds],
+  );
+
+  const schemas = new Map<string, CatalogDatasetSchemaInfo>();
+  for (const row of result.rows) {
+    const key = normalizeCatalogDatasetKey(row.connector_id, row.schema_name_text, row.table_name_text);
+    if (!wantedKeys.has(key)) continue;
+
+    const existing = schemas.get(key) ?? {
+      datasetId: row.dataset_id as string,
+      schema: { fields: [] },
+    };
+
+    existing.schema.fields.push({
+      name: row.column_name_text as string,
+      dataType: parseCatalogDataType(row.effective_data_type_code),
+      nullable: row.is_nullable_flag !== false,
+      tags: row.parse_format_text ? { parseFormat: String(row.parse_format_text) } : undefined,
+    });
+
+    schemas.set(key, existing);
+  }
+
+  return schemas;
 }
 
 function parseJoinConditions(cfg: Record<string, unknown>): Array<{ leftColumn: string; rightColumn: string }> {
@@ -296,6 +838,7 @@ function toPipelineDefinition(
   source: { pipeline_id: string; pipeline_display_name: string; pipeline_desc_text: string | null; version_num_seq: number | null; ir_payload_json: unknown; },
   technology: CodegenTechnology,
   connectionMap: Map<string, ConnInfo> = new Map(),
+  catalogDatasetSchemas: Map<string, CatalogDatasetSchemaInfo> = new Map(),
 ): PipelineDefinition {
   const payload  = (source.ir_payload_json ?? {}) as { nodes?: unknown[]; edges?: unknown[] };
   const irNodes  = ensureArray<Record<string, unknown>>(payload.nodes);
@@ -320,26 +863,80 @@ function toPipelineDefinition(
     if (rawType === 'source') {
       const connId   = typeof cfg['connectionId'] === 'string' ? cfg['connectionId'] : '';
       const connInfo = connId ? connectionMap.get(connId) : undefined;
-      const srcType  = (typeof cfg['sourceType'] === 'string' ? cfg['sourceType']
-        : connInfo && isFileConnector(connInfo.typeCode) ? 'file'
-        : cfg['filePath'] ? 'file' : cfg['bootstrapServers'] ? 'kafka' : 'jdbc') as any;
+      const catalogDataset = connId
+        ? catalogDatasetSchemas.get(normalizeCatalogDatasetKey(connId, cfg['schema'] ?? cfg['schemaName'], cfg['table'] ?? cfg['tableName']))
+        : undefined;
+      const srcType = firstNonEmptyString(
+        cfg['sourceType'],
+        connInfo && isFileConnector(connInfo.typeCode) ? 'file' : undefined,
+        cfg['filePath'] ? 'file' : undefined,
+        cfg['bootstrapServers'] ? 'kafka' : undefined,
+        'jdbc',
+      ) as any;
       const resolvedCfg: Record<string, unknown> = { ...cfg };
       if (srcType === 'file') {
         const filePath = resolveFilePath(resolvedCfg, connInfo);
+        const inheritedOptions = connInfo?.configJson ?? {};
         delete resolvedCfg['schema']; delete resolvedCfg['table']; delete resolvedCfg['tableName'];
         delete resolvedCfg['readMode']; delete resolvedCfg['url']; delete resolvedCfg['driver'];
         resolvedCfg['path'] = filePath;
-        if (!resolvedCfg['format']) resolvedCfg['format'] = resolvedCfg['fileFormat'] ?? (connInfo ? fileFormatFromTypeCode(connInfo.typeCode) : null) ?? 'parquet';
-        if (resolvedCfg['header'] !== undefined) resolvedCfg['header'] = resolvedCfg['header'] !== 'false';
-        if (resolvedCfg['inferSchema'] !== undefined) resolvedCfg['inferSchema'] = resolvedCfg['inferSchema'] !== 'false';
+        resolvedCfg['format'] =
+          firstNonEmptyString(inheritedOptions['file_format_code'])?.toLowerCase()
+          ?? firstNonEmptyString(resolvedCfg['fileFormat'])?.toLowerCase()
+          ?? (connInfo ? fileFormatFromTypeCode(connInfo.typeCode) : null)
+          ?? 'parquet';
+        if (typeof inheritedOptions['has_header_flag'] === 'boolean') {
+          resolvedCfg['header'] = inheritedOptions['has_header_flag'];
+        } else if (resolvedCfg['header'] !== undefined) {
+          resolvedCfg['header'] = resolvedCfg['header'] !== 'false';
+        }
+        if (typeof inheritedOptions['field_separator_char'] === 'string' && inheritedOptions['field_separator_char']) {
+          resolvedCfg['delimiter'] = inheritedOptions['field_separator_char'];
+        } else if (firstNonEmptyString(resolvedCfg['delimiter'])) {
+          resolvedCfg['delimiter'] = firstNonEmptyString(resolvedCfg['delimiter']);
+        }
+        if (catalogDataset?.schema.fields.length) {
+          resolvedCfg['inferSchema'] = false;
+        } else if (resolvedCfg['inferSchema'] !== undefined) {
+          resolvedCfg['inferSchema'] = resolvedCfg['inferSchema'] !== 'false';
+        } else {
+          resolvedCfg['inferSchema'] = false;
+        }
         if (resolvedCfg['recursiveFileLookup'] !== undefined) resolvedCfg['recursiveFileLookup'] = resolvedCfg['recursiveFileLookup'] === 'true';
-      } else if (srcType !== 'kafka') {
-        if (!resolvedCfg['url']) resolvedCfg['url'] = connInfo?.url ? connInfo.url : connId ? `\${JDBC_URL}` : 'jdbc:<not_configured>';
-        if (!resolvedCfg['driver'] && connInfo?.driverClass) resolvedCfg['driver'] = connInfo.driverClass;
-        if (!resolvedCfg['query']) {
-          resolvedCfg['table'] = qualifyTableName(
-            resolvedCfg['schema'] ?? resolvedCfg['schemaName'],
-            resolvedCfg['table'] ?? resolvedCfg['tableName'],
+        const inheritedCustomOptions: Record<string, string> = {};
+        if (typeof inheritedOptions['encoding_standard_code'] === 'string') inheritedCustomOptions['encoding'] = String(inheritedOptions['encoding_standard_code']);
+        if (typeof inheritedOptions['date_format_text'] === 'string') inheritedCustomOptions['dateFormat'] = String(inheritedOptions['date_format_text']);
+        if (typeof inheritedOptions['timestamp_format_text'] === 'string') inheritedCustomOptions['timestampFormat'] = String(inheritedOptions['timestamp_format_text']);
+        if (typeof inheritedOptions['quote_char_text'] === 'string') inheritedCustomOptions['quote'] = String(inheritedOptions['quote_char_text']);
+        if (typeof inheritedOptions['escape_char_text'] === 'string') inheritedCustomOptions['escape'] = String(inheritedOptions['escape_char_text']);
+        if (typeof inheritedOptions['null_value_text'] === 'string') inheritedCustomOptions['nullValue'] = String(inheritedOptions['null_value_text']);
+        if (typeof inheritedOptions['line_separator_text'] === 'string') inheritedCustomOptions['lineSep'] = String(inheritedOptions['line_separator_text']);
+        if (typeof inheritedOptions['corrupt_record_mode'] === 'string') inheritedCustomOptions['mode'] = String(inheritedOptions['corrupt_record_mode']);
+        if (typeof inheritedOptions['skip_rows_num'] === 'number') inheritedCustomOptions['skipRows'] = String(inheritedOptions['skip_rows_num']);
+        if (typeof inheritedOptions['compression_code'] === 'string' && inheritedOptions['compression_code'] !== 'NONE') {
+          inheritedCustomOptions['compression'] = String(inheritedOptions['compression_code']).toLowerCase();
+        }
+        const existingCustomOptions = resolvedCfg['customOptions'] && typeof resolvedCfg['customOptions'] === 'object'
+          ? (resolvedCfg['customOptions'] as Record<string, string>)
+          : {};
+        resolvedCfg['customOptions'] = {
+          ...inheritedCustomOptions,
+          ...existingCustomOptions,
+        };
+        if (catalogDataset?.schema.fields.length) {
+          resolvedCfg['schema'] = catalogDataset.schema;
+          resolvedCfg['inferSchema'] = false;
+          resolvedCfg['datasetId'] = catalogDataset.datasetId;
+        }
+	      } else if (srcType !== 'kafka') {
+	        if (!resolvedCfg['url']) resolvedCfg['url'] = connInfo?.url ? connInfo.url : connId ? `\${JDBC_URL}` : 'jdbc:<not_configured>';
+	        if (!resolvedCfg['driver'] && connInfo?.driverClass) resolvedCfg['driver'] = connInfo.driverClass;
+	        if (connInfo?.mavenCoords) resolvedCfg['mavenCoords'] = connInfo.mavenCoords;
+	        if (connInfo?.driverPaths?.length) resolvedCfg['driverPaths'] = connInfo.driverPaths;
+	        if (!resolvedCfg['query']) {
+	          resolvedCfg['table'] = qualifyTableName(
+	            resolvedCfg['schema'] ?? resolvedCfg['schemaName'],
+	            resolvedCfg['table'] ?? resolvedCfg['tableName'],
           );
         }
       }
@@ -365,15 +962,17 @@ function toPipelineDefinition(
         }
       } else if (sinkType === 'iceberg') {
         if (!resolvedCfg['tableName']) resolvedCfg['tableName'] = resolvedCfg['catalogTable'] ?? '<not_configured>';
-      } else {
-        const connId = String(resolvedCfg['connectionId'] ?? '');
-        const connInfo = connId ? connectionMap.get(connId) : undefined;
-        if (!resolvedCfg['url']) resolvedCfg['url'] = connInfo?.url ? connInfo.url : connId ? `\${JDBC_URL}` : 'jdbc:<not_configured>';
-        if (!resolvedCfg['driver']) resolvedCfg['driver'] = connInfo?.driverClass ?? 'UNKNOWN_DRIVER';
-        resolvedCfg['table'] = qualifyTableName(
-          resolvedCfg['schema'] ?? resolvedCfg['schemaName'],
-          resolvedCfg['table'] ?? resolvedCfg['tableName'],
-        );
+	      } else {
+	        const connId = String(resolvedCfg['connectionId'] ?? '');
+	        const connInfo = connId ? connectionMap.get(connId) : undefined;
+	        if (!resolvedCfg['url']) resolvedCfg['url'] = connInfo?.url ? connInfo.url : connId ? `\${JDBC_URL}` : 'jdbc:<not_configured>';
+	        if (!resolvedCfg['driver']) resolvedCfg['driver'] = connInfo?.driverClass ?? 'UNKNOWN_DRIVER';
+	        if (connInfo?.mavenCoords) resolvedCfg['mavenCoords'] = connInfo.mavenCoords;
+	        if (connInfo?.driverPaths?.length) resolvedCfg['driverPaths'] = connInfo.driverPaths;
+	        resolvedCfg['table'] = qualifyTableName(
+	          resolvedCfg['schema'] ?? resolvedCfg['schemaName'],
+	          resolvedCfg['table'] ?? resolvedCfg['tableName'],
+	        );
       }
       return { id: nodeId, name: nodeName, type: 'sink', sinkType, config: resolvedCfg as any, inputs };
     }
@@ -856,10 +1455,16 @@ router.post('/:id/validate', requirePermission('PIPELINE_VIEW'), async (req: Req
     if (!source.version_id || !source.ir_payload_json) return res.status(409).json({ success: false, userMessage: 'Pipeline has no active version' });
     const technology    = normalizeTechnology((req.body ?? {}).technology ?? (req.body ?? {}).options?.technology);
     const connectionIds = extractConnectionIds(source.ir_payload_json);
-    const connectionMap = connectionIds.length > 0
-      ? await db.transaction(async client => { await setSession(client, userId); return resolveConnections(client, connectionIds); })
-      : new Map<string, ConnInfo>();
-    const definition = toPipelineDefinition(source, technology, connectionMap);
+    const [connectionMap, catalogDatasetSchemas] = connectionIds.length > 0
+      ? await db.transaction(async client => {
+          await setSession(client, userId);
+          return Promise.all([
+            resolveConnections(client, connectionIds),
+            resolveCatalogDatasetSchemas(client, source.ir_payload_json),
+          ]);
+        })
+      : [new Map<string, ConnInfo>(), new Map<string, CatalogDatasetSchemaInfo>()];
+    const definition = toPipelineDefinition(source, technology, connectionMap, catalogDatasetSchemas);
     const validation = codegenService.validate(definition);
     await db.transaction(async client => {
       await setSession(client, userId);
@@ -886,12 +1491,19 @@ router.post('/:id/generate', requirePermission('PIPELINE_VIEW'), async (req: Req
     const requestedTech = normalizeTechnology(options.technology ?? (req.body ?? {}).technology);
     const technology: CodegenTechnology = requestedTech === 'sql' ? 'pyspark' : requestedTech;
     const connectionIds = extractConnectionIds(source.ir_payload_json);
-    const connectionMap = connectionIds.length > 0
-      ? await db.transaction(async client => { await setSession(client, userId); return resolveConnections(client, connectionIds); })
-      : new Map<string, ConnInfo>();
-    const definition = toPipelineDefinition(source, technology, connectionMap);
+    const [connectionMap, catalogDatasetSchemas] = connectionIds.length > 0
+      ? await db.transaction(async client => {
+          await setSession(client, userId);
+          return Promise.all([
+            resolveConnections(client, connectionIds),
+            resolveCatalogDatasetSchemas(client, source.ir_payload_json),
+          ]);
+        })
+      : [new Map<string, ConnInfo>(), new Map<string, CatalogDatasetSchemaInfo>()];
+    const definition = toPipelineDefinition(source, technology, connectionMap, catalogDatasetSchemas);
     const validation = codegenService.validate(definition);
-    if (!validation.valid) return res.status(422).json({ success: false, userMessage: 'Pipeline validation failed', errors: validation.errors, warnings: validation.warnings });
+    const hardErrors  = (validation.errors ?? []).filter((e: any) => e.severity === 'error' || !e.severity);
+    if (hardErrors.length > 0) return res.status(422).json({ success: false, userMessage: 'Pipeline validation failed', errors: validation.errors, warnings: validation.warnings });
     const artifact      = await codegenService.generate(definition, options);
     const savedArtifact = await artifactRepository.save(artifact, options, userId);
     await artifactRepository.deleteOldArtifacts(req.params['id']!, 10);
@@ -981,16 +1593,21 @@ router.get('/:id/history', requirePermission('PIPELINE_VIEW'), async (req: Reque
 
 router.get('/:id/executions', requirePermission('PIPELINE_VIEW'), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const userId = getUserId(res);
     const limit  = Math.min(Math.max(parseInt(String(req.query['limit'] ?? '20'), 10) || 20, 1), 200);
-    const rows = await db.transaction(async client => {
-      await setSession(client, userId);
-      const r = await client.query(
-        `SELECT pipeline_run_id, run_status_code, trigger_type_code, start_dtm, end_dtm, created_dtm
-         FROM execution.fn_get_pipeline_run_history($1::uuid, $2)`, [req.params['id'], limit]);
-      return r.rows;
+    const history = await executionRepository.getHistory(req.params['id']!, limit);
+    return res.json({
+      success: true,
+      executions: history.map(run => ({
+        pipeline_run_id: run.runId,
+        pipeline_id: run.pipelineId,
+        pipeline_name: run.pipelineName ?? null,
+        run_status_code: run.status,
+        trigger_type_code: run.triggerType,
+        start_dtm: run.startedAt,
+        end_dtm: run.endedAt,
+        created_dtm: run.createdAt,
+      })),
     });
-    return res.json({ success: true, executions: rows });
   } catch (err) { return next(err); }
 });
 
@@ -1012,12 +1629,9 @@ router.post('/:id/run', requirePermission('PIPELINE_RUN'), async (req: Request, 
         [pipelineRunId, JSON.stringify({ environment: environment?.trim() || null, technology: technology?.trim() || null, requestedBy: userId })]);
       return { pipeline_run_id: pipelineRunId, environmentApplied: Boolean(envId) };
     });
-    const pipelineNodes = await db.transaction(async client => {
-      await setSession(client, userId);
-      const r = await client.query(`SELECT ir_payload_json FROM catalog.fn_get_pipeline_by_id($1::uuid)`, [req.params['id']]);
-      return (r.rows[0]?.ir_payload_json as any)?.nodes ?? [];
-    }).catch(() => []);
-    simulateExecution(row.pipeline_run_id, userId, pipelineNodes).catch(() => {});
+    executePipelineSpark(row.pipeline_run_id, userId, req.params['id']).catch((err) => {
+      log.error('pipeline.run', 'Unhandled error in async spark execution', err as Error, { runId: row.pipeline_run_id });
+    });
     return res.status(202).json({ success: true, data: { pipelineRunId: row.pipeline_run_id, environment: environment ?? null, technology: technology ?? null, environmentApplied: row.environmentApplied } });
   } catch (err: any) {
     if (err.status === 404) return res.status(404).json({ success: false, userMessage: 'Pipeline not found' });

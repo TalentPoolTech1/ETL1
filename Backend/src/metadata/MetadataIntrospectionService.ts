@@ -37,23 +37,33 @@ export interface ImportResult { imported: number; skipped: number; errors: strin
 
 // ─── CSV header introspection ─────────────────────────────────────────────────
 
-async function inferCsvSchema(filePath: string, delimiter = ','): Promise<ColumnEntry[]> {
+async function inferCsvSchema(filePath: string, delimiter = ',', hasHeader = true): Promise<ColumnEntry[]> {
     return new Promise((resolve, reject) => {
         const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
         const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-        let headerLine: string | null = null;
+        let firstLine: string | null = null;
         let sampleLines: string[] = [];
         let lineCount = 0;
 
         rl.on('line', (line) => {
-            if (!headerLine) { headerLine = line; return; }
+            if (!firstLine) {
+                firstLine = line;
+                if (!hasHeader) {
+                    sampleLines.push(line);
+                    lineCount++;
+                }
+                return;
+            }
             if (lineCount < 10) sampleLines.push(line);
             lineCount++;
             if (lineCount >= 10) rl.close();
         });
         rl.on('close', () => {
-            if (!headerLine) return resolve([]);
-            const headers = headerLine.split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+            if (!firstLine) return resolve([]);
+            const firstValues = firstLine.split(delimiter).map(h => h.trim().replace(/^"|"$/g, ''));
+            const headers = hasHeader
+                ? firstValues
+                : firstValues.map((_, idx) => `column_${idx + 1}`);
             // Infer type by sampling up to 10 rows
             const samples: string[][] = sampleLines.map(l =>
                 l.split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''))
@@ -165,6 +175,13 @@ function coerceStr(val: unknown, fallback = ''): string {
     return String(val) || fallback;
 }
 
+function coerceBool(val: unknown, fallback = false): boolean {
+    if (val === null || val === undefined || val === '') return fallback;
+    if (typeof val === 'boolean') return val;
+    const normalized = String(val).trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y'].includes(normalized);
+}
+
 function buildPgClient(config: ConnectorConfig, secrets: ConnectorSecrets): PgClient {
     const host     = coerceStr(config['host'] ?? config['hostname'] ?? config['jdbc_host'], 'localhost');
     const port     = Number(config['port'] ?? config['jdbc_port'] ?? 5432);
@@ -185,6 +202,7 @@ function previewCsv(
     filePath: string,
     delimiter: string,
     limit: number,
+    hasHeader = true,
 ): Promise<{ columns: string[]; rows: Array<Record<string, unknown>> }> {
     return new Promise((resolve, reject) => {
         const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
@@ -195,7 +213,15 @@ function previewCsv(
             const trimmed = line.trim();
             if (!trimmed) return;
             if (headers.length === 0) {
-                headers = trimmed.split(delimiter).map(h => h.replace(/^"|"$/g, '').trim());
+                const firstValues = trimmed.split(delimiter).map(h => h.replace(/^"|"$/g, '').trim());
+                headers = hasHeader
+                    ? firstValues
+                    : firstValues.map((_, idx) => `column_${idx + 1}`);
+                if (!hasHeader) {
+                    const firstRow: Record<string, unknown> = {};
+                    headers.forEach((h, i) => { firstRow[h] = firstValues[i] ?? null; });
+                    rows.push(firstRow);
+                }
                 return;
             }
             if (rows.length >= limit) { rl.close(); return; }
@@ -316,6 +342,191 @@ function previewAvro(
     });
 }
 
+function hasGlobPattern(input: string): boolean {
+    return /[*?[\\]{}]/.test(input);
+}
+
+function escapeRegex(input: string): string {
+    return input.replace(/[|\\{}()[\]^$+?.]/g, '\\$&');
+}
+
+function globToRegex(pattern: string): RegExp {
+    const normalized = pattern.replace(/\\/g, '/');
+    let regex = '^';
+    for (let i = 0; i < normalized.length; i++) {
+        const ch = normalized[i];
+        if (ch === '*') {
+            const next = normalized[i + 1];
+            if (next === '*') {
+                regex += '.*';
+                i++;
+            } else {
+                regex += '[^/]*';
+            }
+            continue;
+        }
+        if (ch === '?') {
+            regex += '.';
+            continue;
+        }
+        regex += escapeRegex(ch);
+    }
+    regex += '$';
+    return new RegExp(regex, 'i');
+}
+
+const PREVIEW_FILE_PATTERN_TOKEN_MAP: Array<{ token: string; glob: string }> = [
+    { token: '{YYYYMMDDHH24MISS}', glob: '??????????????' },
+    { token: '{YYYYMMDD_HH24MISS}', glob: '????????_??????' },
+    { token: '{YYYY-MM-DD_HH24MISS}', glob: '????-??-??_??????' },
+    { token: '{YYYY-MM-DD}', glob: '????-??-??' },
+    { token: '{YYYY_MM_DD}', glob: '????_??_??' },
+    { token: '{DD-MON-YYYY}', glob: '??-???-????' },
+    { token: '{DD-MON-YY}', glob: '??-???-??' },
+    { token: '{YYYYMMDD}', glob: '????????' },
+    { token: '{YYYYMM}', glob: '??????' },
+    { token: '{YYYY}', glob: '????' },
+];
+
+const PREVIEW_FILE_PATTERN_SEGMENT_MAP: Array<{ pattern: RegExp; glob: string }> = [
+    { pattern: /HH24|HH12|HH/g, glob: '??' },
+    { pattern: /YYYY/g, glob: '????' },
+    { pattern: /YYY/g, glob: '???' },
+    { pattern: /YY/g, glob: '??' },
+    { pattern: /MONTH/g, glob: '*' },
+    { pattern: /MON/g, glob: '???' },
+    { pattern: /MM/g, glob: '??' },
+    { pattern: /DDD/g, glob: '???' },
+    { pattern: /DD/g, glob: '??' },
+    { pattern: /MI/g, glob: '??' },
+    { pattern: /SS/g, glob: '??' },
+    { pattern: /FF9/g, glob: '?????????' },
+    { pattern: /FF6/g, glob: '??????' },
+    { pattern: /FF3/g, glob: '???' },
+    { pattern: /FF2/g, glob: '??' },
+    { pattern: /FF1/g, glob: '?' },
+    { pattern: /Q/g, glob: '?' },
+];
+
+function normalizePreviewPathPattern(pathValue: string): string {
+    return pathValue.replace(/\{([^{}]+)\}/g, (_fullMatch, tokenBody: string) => {
+        const trimmed = tokenBody.trim().toUpperCase();
+        if (!trimmed) return '*';
+
+        const exact = PREVIEW_FILE_PATTERN_TOKEN_MAP.find(entry => entry.token.slice(1, -1).toUpperCase() === trimmed);
+        if (exact) return exact.glob;
+
+        let normalized = trimmed;
+        for (const entry of PREVIEW_FILE_PATTERN_SEGMENT_MAP) {
+            normalized = normalized.replace(entry.pattern, entry.glob);
+        }
+
+        if (/[A-Z]/.test(normalized)) {
+            normalized = normalized.replace(/[A-Z0-9]+/g, '*');
+        }
+
+        return normalized || '*';
+    });
+}
+
+function wildcardRoot(pattern: string): string {
+    const normalized = pattern.replace(/\\/g, '/');
+    const wildcardIndex = normalized.search(/[*?[\\]{}]/);
+    if (wildcardIndex === -1) return normalized;
+    const slashIndex = normalized.lastIndexOf('/', wildcardIndex);
+    if (slashIndex <= 0) return normalized.startsWith('/') ? '/' : '.';
+    return normalized.slice(0, slashIndex);
+}
+
+function collectFiles(dirPath: string, recursive: boolean): string[] {
+    if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) return [];
+    const out: string[] = [];
+    const stack = [dirPath];
+
+    while (stack.length > 0) {
+        const current = stack.pop()!;
+        let entries: fs.Dirent[] = [];
+        try {
+            entries = fs.readdirSync(current, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+        for (const entry of entries) {
+            const nextPath = path.join(current, entry.name);
+            if (entry.isDirectory()) {
+                if (recursive) stack.push(nextPath);
+                continue;
+            }
+            if (entry.isFile()) out.push(nextPath);
+        }
+    }
+
+    return out.sort((a, b) => a.localeCompare(b));
+}
+
+function resolvePreviewFilePath(params: {
+    basePath: string;
+    schemaName?: string;
+    tableName?: string;
+    recursive?: boolean;
+    pathGlobFilter?: string;
+}): string {
+    const basePath = normalizePreviewPathPattern(params.basePath.trim());
+    const recursive = params.recursive ?? false;
+    const pathGlobFilter = params.pathGlobFilter?.trim() ?? '';
+    const schemaName = params.schemaName?.trim() ?? '';
+    const tableName = params.tableName?.trim() ?? '';
+
+    const pickFirstMatch = (candidates: string[], filterPattern?: string): string | null => {
+        const matcher = filterPattern ? globToRegex(filterPattern) : null;
+        for (const candidate of candidates) {
+            const normalizedCandidate = candidate.replace(/\\/g, '/');
+            if (!matcher || matcher.test(path.basename(normalizedCandidate)) || matcher.test(normalizedCandidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    };
+
+    if (basePath) {
+        if (fs.existsSync(basePath) && fs.statSync(basePath).isFile()) return basePath;
+
+        if (hasGlobPattern(basePath)) {
+            const root = wildcardRoot(basePath);
+            const matcher = globToRegex(basePath);
+            const candidates = collectFiles(root, true).filter(file => matcher.test(file.replace(/\\/g, '/')));
+            const matched = pickFirstMatch(candidates, pathGlobFilter || undefined);
+            if (matched) return matched;
+        }
+
+        if (fs.existsSync(basePath) && fs.statSync(basePath).isDirectory()) {
+            if (schemaName && tableName) {
+                const explicit = path.join(basePath, schemaName, tableName);
+                if (fs.existsSync(explicit) && fs.statSync(explicit).isFile()) return explicit;
+            }
+            if (tableName) {
+                const direct = path.join(basePath, tableName);
+                if (fs.existsSync(direct) && fs.statSync(direct).isFile()) return direct;
+            }
+            const matched = pickFirstMatch(collectFiles(basePath, recursive), pathGlobFilter || undefined);
+            if (matched) return matched;
+        }
+    }
+
+    if (schemaName && tableName) {
+        const joined = path.join(schemaName, tableName);
+        if (fs.existsSync(joined) && fs.statSync(joined).isFile()) return joined;
+    }
+
+    if (tableName && fs.existsSync(tableName) && fs.statSync(tableName).isFile()) return tableName;
+
+    throw new Error(
+        basePath
+            ? `No matching file found for path/pattern: ${basePath}`
+            : `File not found for selected object ${schemaName ? `${schemaName}/` : ''}${tableName}`,
+    );
+}
+
 // ─── Public service ───────────────────────────────────────────────────────────
 
 export class MetadataIntrospectionService {
@@ -381,8 +592,9 @@ export class MetadataIntrospectionService {
                 if (this.isFileType(tc)) {
                     const filePath = String(config['storage_base_path'] ?? config['file_path'] ?? config['path'] ?? '');
                     const delim = String(config['delimiter'] ?? config['field_separator_char'] ?? ',');
+                    const hasHeader = coerceBool(config['has_header_flag'] ?? config['header'], true);
                     if (tc === 'FILE_CSV' || tc === 'CSV') {
-                        columns = await inferCsvSchema(filePath, delim);
+                        columns = await inferCsvSchema(filePath, delim, hasHeader);
                     }
                     // For Parquet/Avro/ORC — schema inference needs Spark; register without columns for now
                 } else if (tc === 'POSTGRESQL' || tc === 'JDBC_POSTGRESQL' || tc === 'REDSHIFT') {
@@ -456,11 +668,20 @@ export class MetadataIntrospectionService {
 
         // ── File sources ──────────────────────────────────────────────────────
         if (this.isFileType(tc)) {
-            const basePath = coerceStr(config['storage_base_path'] ?? config['file_path'] ?? config['path'] ?? '');
-            // Resolve the actual file path
-            const filePath = fs.existsSync(basePath) && !fs.statSync(basePath).isDirectory()
-                ? basePath
-                : path.join(schemaName, tableName);
+            const basePath = coerceStr(
+                config['preview_path']
+                ?? config['file_path']
+                ?? config['storage_base_path']
+                ?? config['path']
+                ?? '',
+            );
+            const filePath = resolvePreviewFilePath({
+                basePath,
+                schemaName,
+                tableName,
+                recursive: coerceBool(config['recursiveFileLookup'] ?? config['recursive_file_lookup']),
+                pathGlobFilter: coerceStr(config['pathGlobFilter'] ?? config['path_glob_filter']),
+            });
 
             if (!fs.existsSync(filePath)) {
                 throw new Error(`File not found: ${filePath}`);
@@ -469,7 +690,8 @@ export class MetadataIntrospectionService {
             // CSV / TSV / delimiter-separated
             if (/^(file_csv|csv|file_tsv|tsv)$/i.test(tc)) {
                 const delimiter = coerceStr(config['field_separator_char'] ?? config['delimiter'] ?? ',', ',');
-                return previewCsv(filePath, delimiter, safeLimit);
+                const hasHeader = coerceBool(config['has_header_flag'] ?? config['header'], true);
+                return previewCsv(filePath, delimiter, safeLimit, hasHeader);
             }
 
             // Newline-delimited JSON or JSON array
@@ -748,7 +970,8 @@ export class MetadataIntrospectionService {
             const filePath = fs.existsSync(basePath) && !fs.statSync(basePath).isDirectory() ? basePath : '';
             if (filePath && /csv/i.test(tc)) {
                 const delim = coerceStr(config['field_separator_char'] ?? config['delimiter'] ?? ',', ',');
-                return inferCsvSchema(filePath, delim);
+                const hasHeader = coerceBool(config['has_header_flag'] ?? config['header'], true);
+                return inferCsvSchema(filePath, delim, hasHeader);
             }
         }
 
@@ -757,4 +980,3 @@ export class MetadataIntrospectionService {
 }
 
 export const metadataIntrospectionService = new MetadataIntrospectionService();
-

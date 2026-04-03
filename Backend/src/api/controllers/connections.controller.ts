@@ -52,6 +52,9 @@ export class ConnectionsController {
             if (!id) throw connErrors.notFound('missing');
             const userId = this.getUserId(res);
             const connector = await connectionsService.getConnector(id, userId);
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
             res.json({ success: true, data: connector });
         } catch (err) {
             next(err);
@@ -73,6 +76,8 @@ export class ConnectionsController {
                 config: body.config ?? {},
                 secrets: body.secrets,
                 jdbcDriverClass: body.jdbcDriverClass,
+                jdbcDriverMavenCoords: body.jdbcDriverMavenCoords,
+                jdbcDriverPaths: body.jdbcDriverPaths,
                 testQuery: body.testQuery,
                 sparkConfig: body.sparkConfig,
                 sslMode: body.sslMode,
@@ -105,6 +110,8 @@ export class ConnectionsController {
                 config: body.config,
                 secrets: body.secrets,
                 jdbcDriverClass: body.jdbcDriverClass,
+                jdbcDriverMavenCoords: body.jdbcDriverMavenCoords,
+                jdbcDriverPaths: body.jdbcDriverPaths,
                 testQuery: body.testQuery,
                 sparkConfig: body.sparkConfig,
                 sslMode: body.sslMode,
@@ -113,10 +120,12 @@ export class ConnectionsController {
                 maxPoolSize: body.maxPoolSize,
                 idleTimeoutSec: body.idleTimeoutSec,
                 userId,
+                technologyId: typeof body.technologyId === 'string' ? body.technologyId : undefined,
             };
 
             await connectionsService.updateConnector(input);
-            res.json({ success: true });
+            const connector = await connectionsService.getConnector(id, userId);
+            res.json({ success: true, data: connector });
         } catch (err) {
             next(err);
         }

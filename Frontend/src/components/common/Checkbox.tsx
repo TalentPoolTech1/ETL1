@@ -17,7 +17,7 @@ export function Checkbox({ checked, onChange, label, disabled = false, id }: Che
         checked={checked}
         onChange={e => onChange(e.target.checked)}
         disabled={disabled}
-        className="w-4 h-4 border border-neutral-300 rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-4 h-4 border border-slate-700 rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
       />
       {label && (
         <label htmlFor={id} className="text-sm text-neutral-700 cursor-pointer">

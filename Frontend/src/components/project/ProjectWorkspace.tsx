@@ -87,8 +87,8 @@ function apiUserMessage(err: unknown, fallback: string): string {
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-start gap-2 text-[12px]">
-      <span className="text-slate-500 w-32 flex-shrink-0">{label}</span>
-      <span className={`text-slate-300 break-all ${mono ? 'font-mono text-[11px]' : ''}`}>{value || '—'}</span>
+      <span className="text-slate-300 w-32 flex-shrink-0">{label}</span>
+      <span className={`text-slate-300 break-all ${mono ? 'font-mono text-[12px]' : ''}`}>{value || '—'}</span>
     </div>
   );
 }
@@ -109,13 +109,13 @@ function OverviewTab({ data }: { data: FormData }) {
         {stats.map(s => (
           <div key={s.label} className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 text-center">
             <div className="text-2xl font-bold text-slate-100">{String(s.value)}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{s.label}</div>
+            <div className="text-[12px] text-slate-300 mt-0.5">{s.label}</div>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4 space-y-2">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Details</div>
+          <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Details</div>
           <InfoRow label="Project ID" value={String(data.projectId ?? '')} mono />
           <InfoRow label="Status" value={String(data.status ?? 'draft')} />
           <InfoRow label="Created By" value={String(data.createdBy ?? '')} />
@@ -125,12 +125,12 @@ function OverviewTab({ data }: { data: FormData }) {
           <InfoRow label="Version" value={String(data.version ?? '1')} />
         </div>
         <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Description</div>
+          <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Description</div>
           <p className="text-[13px] text-slate-300 leading-relaxed">{String(data.description || 'No description provided.')}</p>
           {Array.isArray(data.tags) && (data.tags as string[]).length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1">
               {(data.tags as string[]).map(t => (
-                <span key={t} className="px-2 py-0.5 bg-blue-900/30 border border-blue-700/50 text-blue-300 text-[11px] rounded">{t}</span>
+                <span key={t} className="px-2 py-0.5 bg-blue-900/30 border border-blue-700/50 text-blue-300 text-[12px] rounded">{t}</span>
               ))}
             </div>
           )}
@@ -145,9 +145,9 @@ function OverviewTab({ data }: { data: FormData }) {
 function PropertiesTab({ data, onChange }: { data: FormData; onChange: (f: string, v: string) => void }) {
   const Field = ({ label, field, ro, ta }: { label: string; field: string; ro?: boolean; ta?: boolean }) => (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="field-label">{label}</label>
       {ro ? (
-        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-500 font-mono">
+        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-300 font-mono">
           {String(data[field] ?? '—')}
         </div>
       ) : ta ? (
@@ -162,7 +162,7 @@ function PropertiesTab({ data, onChange }: { data: FormData; onChange: (f: strin
           type="text"
           value={String(data[field] ?? '')}
           onChange={e => onChange(field, e.target.value)}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500"
+          className="field-input"
         />
       )}
     </div>
@@ -398,7 +398,7 @@ function ProjectPermissionsTab({ projectId }: { projectId: string }) {
             <tbody className="divide-y divide-slate-800">
               {members.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-5 text-center text-slate-500">No project members assigned.</td>
+                  <td colSpan={5} className="px-3 py-5 text-center text-slate-300">No project members assigned.</td>
                 </tr>
               )}
               {members.map(member => (
@@ -423,7 +423,7 @@ function ProjectPermissionsTab({ projectId }: { projectId: string }) {
                       type="button"
                       onClick={() => { void removeMember(member.userId); }}
                       disabled={saving}
-                      className="text-[11px] text-red-300 hover:text-red-200 disabled:opacity-50"
+                      className="text-[12px] text-red-300 hover:text-red-200 disabled:opacity-50"
                     >
                       Remove
                     </button>

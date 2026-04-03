@@ -66,6 +66,15 @@ function normalizeFilterCondition(raw: unknown): string {
   return normalized || 'true';
 }
 
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return undefined;
+}
+
 export function serializePipelineToDefinition(
   pipeline: { id: string; name: string; description?: string; version?: number },
   nodes: Record<string, FrontendNode>,
@@ -119,7 +128,12 @@ function serializeNode(node: FrontendNode, inputs: string[]): BackendNode {
         id: node.id,
         name: node.name,
         type: 'source',
-        sourceType: cfg.sourceType ?? 'jdbc',
+        sourceType: firstNonEmptyString(
+          cfg.sourceType,
+          cfg.filePath ? 'file' : undefined,
+          cfg.bootstrapServers ? 'kafka' : undefined,
+          'jdbc',
+        )!,
         config: cfg,
         inputs: [],
       };
@@ -201,7 +215,7 @@ function serializeNode(node: FrontendNode, inputs: string[]): BackendNode {
         id: node.id,
         name: node.name,
         type: 'sink',
-        sinkType: cfg.sinkType ?? 'file',
+        sinkType: firstNonEmptyString(cfg.sinkType, 'file')!,
         config: cfg,
         inputs,
       };

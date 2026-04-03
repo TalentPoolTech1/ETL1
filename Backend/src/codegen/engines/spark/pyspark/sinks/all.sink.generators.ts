@@ -6,9 +6,55 @@ import {
 import { CodeBuilder, toVarName, pyStringLiteral } from '../../../../utils/codegen.utils';
 import { PYSPARK_IMPORTS } from '../../../../core/constants/codegen.constants';
 
+type SinkColumnMapping = { src: string; tgt: string };
+
+const AUDIT_MAPPING_PREFIX = '__audit__:';
+
 function getInputVar(node: PipelineNode, context: GenerationContext): string {
   const inputId = node.inputs[0];
   return context.resolvedNodes.get(inputId)?.varName ?? 'MISSING_INPUT';
+}
+
+function parseColumnMappings(raw: unknown): SinkColumnMapping[] {
+  const parsed = (() => {
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw !== 'string' || !raw.trim()) return [];
+    try {
+      const decoded = JSON.parse(raw);
+      return Array.isArray(decoded) ? decoded : [];
+    } catch {
+      return [];
+    }
+  })();
+
+  return parsed
+    .map((entry): SinkColumnMapping | null => {
+      if (!entry || typeof entry !== 'object') return null;
+      const src = typeof (entry as { src?: unknown }).src === 'string' ? (entry as { src: string }).src.trim() : '';
+      const tgt = typeof (entry as { tgt?: unknown }).tgt === 'string' ? (entry as { tgt: string }).tgt.trim() : '';
+      if (!src || !tgt) return null;
+      return { src, tgt };
+    })
+    .filter((entry): entry is SinkColumnMapping => entry !== null);
+}
+
+function getAuditMappingExpression(source: string, useScaffoldArgs: boolean): string | null {
+  switch (source) {
+    case `${AUDIT_MAPPING_PREFIX}current_timestamp`:
+      return 'F.current_timestamp()';
+    case `${AUDIT_MAPPING_PREFIX}current_date`:
+      return 'F.current_date()';
+    case `${AUDIT_MAPPING_PREFIX}current_time`:
+      return 'F.date_format(F.current_timestamp(), "HH:mm:ss")';
+    case `${AUDIT_MAPPING_PREFIX}job_name`:
+      return 'F.lit(spark.sparkContext.appName)';
+    case `${AUDIT_MAPPING_PREFIX}run_id`:
+      return useScaffoldArgs ? 'F.lit(args.run_id)' : 'F.lit("")';
+    case `${AUDIT_MAPPING_PREFIX}user_name`:
+      return useScaffoldArgs ? 'F.lit(args.run_user)' : 'F.lit("system")';
+    default:
+      return null;
+  }
 }
 
 function prepareSinkInput(
@@ -19,6 +65,7 @@ function prepareSinkInput(
   builder: CodeBuilder,
 ): { inputVar: string; needsFunctions: boolean } {
   const cfg = node.config as {
+    columnMappings?: unknown;
     auditColumnsEnabled?: boolean | string;
     loadTsColumn?: string;
     runIdColumn?: string;
@@ -26,20 +73,56 @@ function prepareSinkInput(
     useScaffoldArgs?: boolean | string;
   };
 
+  let currentInputVar = inputVar;
+  let needsFunctions = false;
+  const useScaffoldArgs = cfg.useScaffoldArgs !== false && cfg.useScaffoldArgs !== 'false';
+  const columnMappings = parseColumnMappings(cfg.columnMappings);
+
+  if (columnMappings.length > 0) {
+    const mappedVarName = `${varName}_mapped`;
+
+    if (context.options.includeComments) {
+      builder.line(`# Apply explicit target column mapping for ${node.name}`);
+    }
+
+    builder.line(`${mappedVarName} = (`);
+    builder.indent(b2 => {
+      b2.line(`${currentInputVar}`);
+      b2.indent(b3 => {
+        b3.line(`.select(`);
+        b3.indent(b4 => {
+          columnMappings.forEach(({ src, tgt }, index) => {
+            const auditExpr = getAuditMappingExpression(src, useScaffoldArgs);
+            const expression = auditExpr
+              ? `${auditExpr}.alias(${pyStringLiteral(tgt)})`
+              : `F.col(${pyStringLiteral(src)}).alias(${pyStringLiteral(tgt)})`;
+            const suffix = index === columnMappings.length - 1 ? '' : ',';
+            b4.line(`${expression}${suffix}`);
+          });
+        });
+        b3.line(`)`);
+      });
+    });
+    builder.line(`)`);
+    builder.blank();
+
+    currentInputVar = mappedVarName;
+    needsFunctions = true;
+  }
+
   const auditEnabled = cfg.auditColumnsEnabled === true || cfg.auditColumnsEnabled === 'true';
-  if (!auditEnabled) return { inputVar, needsFunctions: false };
+  if (!auditEnabled) return { inputVar: currentInputVar, needsFunctions };
 
   const loadTsColumn = typeof cfg.loadTsColumn === 'string' ? cfg.loadTsColumn.trim() : '_load_ts';
   const runIdColumn = typeof cfg.runIdColumn === 'string' ? cfg.runIdColumn.trim() : '_run_id';
   const runUserColumn = typeof cfg.runUserColumn === 'string' ? cfg.runUserColumn.trim() : '_run_user';
-  const useScaffoldArgs = cfg.useScaffoldArgs !== false && cfg.useScaffoldArgs !== 'false';
 
   const auditAssignments: Array<{ column: string; expression: string }> = [];
   if (loadTsColumn) auditAssignments.push({ column: loadTsColumn, expression: 'F.current_timestamp()' });
   if (runIdColumn) auditAssignments.push({ column: runIdColumn, expression: useScaffoldArgs ? 'F.lit(args.run_id)' : 'F.lit("")' });
   if (runUserColumn) auditAssignments.push({ column: runUserColumn, expression: useScaffoldArgs ? 'F.lit(args.run_user)' : 'F.lit("system")' });
 
-  if (auditAssignments.length === 0) return { inputVar, needsFunctions: false };
+  if (auditAssignments.length === 0) return { inputVar: currentInputVar, needsFunctions };
 
   const auditedVarName = `${varName}_audited`;
 
@@ -49,7 +132,7 @@ function prepareSinkInput(
 
   builder.line(`${auditedVarName} = (`);
   builder.indent(b2 => {
-    b2.line(`${inputVar}`);
+    b2.line(`${currentInputVar}`);
     b2.indent(b3 => {
       auditAssignments.forEach(({ column, expression }) => {
         b3.line(`.withColumn(${pyStringLiteral(column)}, ${expression})`);

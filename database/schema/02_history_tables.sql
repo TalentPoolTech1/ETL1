@@ -108,6 +108,10 @@ CREATE TABLE history.orchestrators_history (
     hist_action_by  UUID
 );
 
+-- Existing databases may have been created before inherit_project_permissions was added.
+ALTER TABLE history.orchestrators_history
+    ADD COLUMN IF NOT EXISTS inherit_project_permissions BOOLEAN NOT NULL DEFAULT TRUE;
+
 COMMENT ON TABLE history.orchestrators_history IS 'Immutable row-image history for catalog.orchestrators.';
 COMMENT ON COLUMN history.orchestrators_history.hist_id IS 'Sequential audit record identifier.';
 COMMENT ON COLUMN history.orchestrators_history.hist_action_cd IS 'I=Insert, U=Update, D=Delete.';

@@ -7,6 +7,7 @@ import { openTab } from '@/store/slices/tabsSlice';
 import { Play, Clock, RefreshCw } from 'lucide-react';
 import api from '@/services/api';
 import type { PipelineRunSummary, RunStatus } from '@/types';
+import { formatExecutionTabName } from '@/utils/executionLabels';
 
 const STATUS_DOT: Record<RunStatus, string> = {
   PENDING:             'bg-slate-500',
@@ -76,7 +77,7 @@ export function OverviewSubTab({ pipelineId }: Props) {
   };
 
   if (!pipeline) {
-    return <div className="flex-1 flex items-center justify-center text-slate-500 text-[13px] bg-[#0d0f1a]">Loading pipeline…</div>;
+    return <div className="flex-1 flex items-center justify-center text-slate-300 text-[13px] bg-[#0d0f1a]">Loading pipeline…</div>;
   }
 
   const nodeCount   = Object.keys(nodes).length;
@@ -89,7 +90,7 @@ export function OverviewSubTab({ pipelineId }: Props) {
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <h2 className="text-[16px] font-semibold text-slate-100 truncate">{pipeline.name}</h2>
-          <p className="text-[12px] text-slate-500 mt-0.5">{pipeline.description || <span className="italic">No description</span>}</p>
+          <p className="text-[12px] text-slate-300 mt-0.5">{pipeline.description || <span className="italic">No description</span>}</p>
         </div>
         <div className="flex gap-2 flex-shrink-0">
           <button onClick={handleRun} disabled={running}
@@ -113,7 +114,7 @@ export function OverviewSubTab({ pipelineId }: Props) {
         ].map(stat => (
           <div key={stat.label} className="bg-[#13152a] border border-slate-800 rounded-lg p-4">
             <div className="text-[20px] font-bold text-slate-100 truncate">{stat.value}</div>
-            <div className="text-[11px] text-slate-500 mt-1">{stat.label}</div>
+            <div className="text-[12px] text-slate-300 mt-1">{stat.label}</div>
           </div>
         ))}
       </div>
@@ -126,16 +127,16 @@ export function OverviewSubTab({ pipelineId }: Props) {
             <thead>
               <tr className="border-b border-slate-800">
                 {['Run ID', 'Started', 'Duration', 'Status', 'Triggered by'].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                  <th key={h} className="px-4 py-2.5 text-left text-[12px] font-semibold text-slate-300 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {loadingRuns && (
-                <tr><td colSpan={5} className="px-4 py-5 text-center text-slate-600 text-[12px]">Loading…</td></tr>
+                <tr><td colSpan={5} className="px-4 py-5 text-center text-slate-400 text-[12px]">Loading…</td></tr>
               )}
               {!loadingRuns && runs.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-600 text-[12px]">
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-[12px]">
                   <Clock className="w-6 h-6 mx-auto mb-2 opacity-30" />
                   No runs yet.
                 </td></tr>
@@ -147,20 +148,20 @@ export function OverviewSubTab({ pipelineId }: Props) {
                     id: `execution-${run.pipelineRunId}`,
                     type: 'execution',
                     objectId: run.pipelineRunId,
-                    objectName: `Run: ${run.pipelineName}`,
+                    objectName: formatExecutionTabName(run.pipelineName, run.pipelineRunId),
                     unsaved: false, isDirty: false, executionKind: 'pipeline',
                   }))}
                 >
-                  <td className="px-4 py-2.5 font-mono text-[11px] text-blue-400">{run.pipelineRunId.slice(0, 8)}…</td>
+                  <td className="px-4 py-2.5 font-mono text-[12px] text-blue-400">{run.pipelineRunId.slice(0, 8)}…</td>
                   <td className="px-4 py-2.5 text-slate-400">{fmtDatetime(run.startDtm)}</td>
                   <td className="px-4 py-2.5 text-slate-400">{fmtDuration(run.durationMs)}</td>
                   <td className="px-4 py-2.5">
-                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium ${STATUS_TEXT[run.runStatus]}`}>
+                    <span className={`inline-flex items-center gap-1.5 text-[12px] font-medium ${STATUS_TEXT[run.runStatus]}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[run.runStatus]}`} />
                       {run.runStatus}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-slate-500 capitalize">{run.triggerType}</td>
+                  <td className="px-4 py-2.5 text-slate-300 capitalize">{run.triggerType}</td>
                 </tr>
               ))}
             </tbody>

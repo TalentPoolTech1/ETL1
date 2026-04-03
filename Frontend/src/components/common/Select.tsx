@@ -47,20 +47,20 @@ export function Select({
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className="w-full px-3 py-2 border border-neutral-300 rounded-md bg-white text-left text-sm flex items-center justify-between disabled:bg-neutral-50 disabled:text-neutral-500"
+        className="w-full px-3 py-2 border border-slate-700 rounded-md bg-[#161b25] text-left text-sm flex items-center justify-between disabled:bg-neutral-50 disabled:text-neutral-500"
       >
         <span>{selectedLabel}</span>
         <span className={`transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-neutral-300 rounded-md shadow-lg z-50 max-h-48 overflow-hidden flex flex-col">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-[#161b25] border border-slate-700 rounded-md shadow-lg z-50 max-h-48 overflow-hidden flex flex-col">
           <input
             type="text"
             placeholder="Search..."
             value={searchText}
             onChange={e => setSearchText(e.target.value)}
-            className="px-3 py-2 border-b border-neutral-200 text-sm focus:outline-none"
+            className="px-3 py-2 border-b border-slate-800 text-sm focus:outline-none"
             autoFocus
           />
           <div className="overflow-y-auto flex-1">

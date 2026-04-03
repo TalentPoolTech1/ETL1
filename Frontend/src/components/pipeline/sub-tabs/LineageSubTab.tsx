@@ -31,7 +31,7 @@ export function LineageSubTab({ pipelineId }: Props) {
   useEffect(() => { load(); }, [load]);
 
   if (!pipeline) {
-    return <div className="flex-1 flex items-center justify-center text-slate-500 text-[13px] bg-[#0d0f1a]">No pipeline loaded.</div>;
+    return <div className="flex-1 flex items-center justify-center text-slate-300 text-[13px] bg-[#0d0f1a]">No pipeline loaded.</div>;
   }
 
   let lnodes: { id: string; label: string; kind: string; isCurrent?: boolean }[] = [];
@@ -64,18 +64,18 @@ export function LineageSubTab({ pipelineId }: Props) {
         <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 bg-[#0a0c15] flex-shrink-0">
           <span className="text-[12px] font-semibold text-slate-300">Lineage graph</span>
           <button onClick={load}
-            className="ml-2 h-7 px-2.5 rounded border border-slate-700 bg-[#1e2035] text-slate-400 hover:text-slate-200 text-[11px] flex items-center gap-1 transition-colors">
+            className="ml-2 h-7 px-2.5 rounded border border-slate-700 bg-[#1e2035] text-slate-400 hover:text-slate-200 text-[12px] flex items-center gap-1 transition-colors">
             <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           <div className="flex-1" />
-          <button className="h-7 px-2.5 rounded border border-slate-700 bg-[#1e2035] text-slate-400 hover:text-slate-200 text-[11px] flex items-center gap-1 transition-colors">
+          <button className="h-7 px-2.5 rounded border border-slate-700 bg-[#1e2035] text-slate-400 hover:text-slate-200 text-[12px] flex items-center gap-1 transition-colors">
             <Download className="w-3 h-3" /> Export
           </button>
         </div>
 
         <div className="flex-1 flex items-center justify-center p-6 overflow-auto">
           {loading ? (
-            <div className="text-[13px] text-slate-500">Loading lineage…</div>
+            <div className="text-[13px] text-slate-300">Loading lineage…</div>
           ) : (
             <svg width={SVG_W} height={SVG_H} viewBox={`0 0 ${SVG_W} ${SVG_H}`} style={{ minWidth: SVG_W }}>
               <defs>
@@ -129,7 +129,7 @@ export function LineageSubTab({ pipelineId }: Props) {
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
           {lnodes.filter(n => !n.isCurrent).length === 0 ? (
-            <p className="text-[12px] text-slate-600 py-4">No upstream or downstream dependencies.</p>
+            <p className="text-[12px] text-slate-400 py-4">No upstream or downstream dependencies.</p>
           ) : lnodes.filter(n => !n.isCurrent).map(n => (
             <div key={n.id} onClick={() => setSelected(n.id === selected ? null : n.id)}
               className={`p-2.5 border rounded-md cursor-pointer transition-colors ${
@@ -138,7 +138,7 @@ export function LineageSubTab({ pipelineId }: Props) {
                   : 'border-slate-800 hover:bg-[#1e2035] hover:border-slate-700'
               }`}>
               <div className="text-[12px] font-medium text-slate-200">{n.label}</div>
-              <div className="text-[10px] text-slate-500 capitalize mt-0.5">{n.kind}</div>
+              <div className="text-[12px] text-slate-300 capitalize mt-0.5">{n.kind}</div>
             </div>
           ))}
         </div>

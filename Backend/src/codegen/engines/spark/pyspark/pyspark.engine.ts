@@ -362,6 +362,7 @@ export class PySparkEngine implements ICodeEngine {
     const sc = pipeline.sparkConfig;
     const scriptName = this.sanitizeFileName(pipeline.name);
     const packages = this.collectSparkPackages(pipeline);
+    const driverPaths = this.collectSparkDriverPaths(pipeline);
     const lines = [
       `#!/usr/bin/env bash`,
       `# Auto-generated spark-submit script for: ${pipeline.name}`,
@@ -370,20 +371,92 @@ export class PySparkEngine implements ICodeEngine {
       `SCRIPT_DIR="$(cd "$(dirname "${`$0`}")" && pwd)"`,
       `PIPELINE_SCRIPT="${`$SCRIPT_DIR`}/src/${scriptName}.py"`,
       ``,
-      `spark-submit \\`,
-      `  --master ${sc.master ?? 'yarn'} \\`,
-      `  --deploy-mode ${sc.deployMode ?? 'cluster'} \\`,
+      `DEPENDENCIES=(`,
     ];
 
-    if (sc.driverMemory) lines.push(`  --driver-memory ${sc.driverMemory} \\`);
-    if (sc.executorMemory) lines.push(`  --executor-memory ${sc.executorMemory} \\`);
-    if (sc.executorCores) lines.push(`  --executor-cores ${sc.executorCores} \\`);
-    if (sc.numExecutors && !sc.dynamicAllocation) lines.push(`  --num-executors ${sc.numExecutors} \\`);
-    if (packages.length) lines.push(`  --packages ${packages.join(',')} \\`);
-
-    lines.push(`  "${`$PIPELINE_SCRIPT`}" \\`);
-    lines.push(`  --env ${`${opts.targetPlatform ?? 'prod'}`} \\`);
-    lines.push(`  "$@"`);
+    packages.forEach(dep => lines.push(`  "${dep}"`));
+    lines.push(`)`);
+    lines.push(`CONFIGURED_DRIVER_PATHS=(`);
+    driverPaths.forEach(driverPath => lines.push(`  "${driverPath}"`));
+    lines.push(`)`);
+    lines.push(`DRIVER_SEARCH_DIRS=()`);
+    lines.push(`LOCAL_JARS=()`);
+    lines.push(`REMOTE_PACKAGES=()`);
+    lines.push(``);
+    lines.push(`SEARCH_PATHS="${`$`}{ETL1_DRIVER_PATHS:-${`$`}{ETL1_DRIVER_DIR:-}}"`);
+    lines.push(`for path_hint in "${`$`}{CONFIGURED_DRIVER_PATHS[@]}"; do`);
+    lines.push(`  [[ -n "$path_hint" ]] || continue`);
+    lines.push(`  if [[ -f "$path_hint" && "$path_hint" == *.jar ]]; then`);
+    lines.push(`    LOCAL_JARS+=("$path_hint")`);
+    lines.push(`    continue`);
+    lines.push(`  fi`);
+    lines.push(`  DRIVER_SEARCH_DIRS+=("$path_hint")`);
+    lines.push(`done`);
+    lines.push(`if [[ -n "$SEARCH_PATHS" ]]; then`);
+    lines.push(`  IFS=',' read -r -a EXTRA_DRIVER_DIRS <<< "$SEARCH_PATHS"`);
+    lines.push(`  for dir in "${`$`}{EXTRA_DRIVER_DIRS[@]}"; do`);
+    lines.push(`    [[ -n "$dir" ]] || continue`);
+    lines.push(`    DRIVER_SEARCH_DIRS+=("$dir")`);
+    lines.push(`  done`);
+    lines.push(`fi`);
+    lines.push(`DRIVER_SEARCH_DIRS+=("$SCRIPT_DIR/drivers" "$SCRIPT_DIR/../drivers")`);
+    lines.push(``);
+    lines.push(`resolve_dep_to_jar() {`);
+    lines.push(`  local dep="$1"`);
+    lines.push(`  local artifact version candidate dir`);
+    lines.push(`  IFS=':' read -r _ artifact version _ <<< "$dep"`);
+    lines.push('  [[ -n "${artifact:-}" && -n "${version:-}" ]] || return 1');
+    lines.push('  for dir in "${DRIVER_SEARCH_DIRS[@]}"; do');
+    lines.push(`    [[ -n "$dir" ]] || continue`);
+    lines.push('    if [[ -f "$dir" && "$(basename "$dir")" == ${artifact}-${version}*.jar ]]; then');
+    lines.push(`      printf '%s' "$dir"`);
+    lines.push(`      return 0`);
+    lines.push(`    fi`);
+    lines.push(`    [[ -d "$dir" ]] || continue`);
+    lines.push('    candidate="$(find "$dir" -type f -name "${artifact}-${version}*.jar" | head -n 1)"');
+    lines.push(`    if [[ -n "$candidate" ]]; then`);
+    lines.push(`      printf '%s' "$candidate"`);
+    lines.push(`      return 0`);
+    lines.push(`    fi`);
+    lines.push(`  done`);
+    lines.push(`  return 1`);
+    lines.push(`}`);
+    lines.push(``);
+    lines.push('for dep in "${DEPENDENCIES[@]}"; do');
+    lines.push(`  [[ -n "$dep" ]] || continue`);
+    lines.push(`  if [[ "$dep" == *.jar || "$dep" == */* ]]; then`);
+    lines.push(`    if [[ -f "$dep" ]]; then`);
+    lines.push(`      LOCAL_JARS+=("$dep")`);
+    lines.push(`    else`);
+    lines.push(`      REMOTE_PACKAGES+=("$dep")`);
+    lines.push(`    fi`);
+    lines.push(`    continue`);
+    lines.push(`  fi`);
+    lines.push(`  if resolved="$(resolve_dep_to_jar "$dep")"; then`);
+    lines.push(`    LOCAL_JARS+=("$resolved")`);
+    lines.push(`  else`);
+    lines.push(`    REMOTE_PACKAGES+=("$dep")`);
+    lines.push(`  fi`);
+    lines.push(`done`);
+    lines.push(``);
+    lines.push(`SUBMIT_ARGS=(`);
+    lines.push(`  --master ${sc.master ?? 'yarn'}`);
+    lines.push(`  --deploy-mode ${sc.deployMode ?? 'cluster'}`);
+    if (sc.driverMemory) lines.push(`  --driver-memory ${sc.driverMemory}`);
+    if (sc.executorMemory) lines.push(`  --executor-memory ${sc.executorMemory}`);
+    if (sc.executorCores) lines.push(`  --executor-cores ${sc.executorCores}`);
+    if (sc.numExecutors && !sc.dynamicAllocation) lines.push(`  --num-executors ${sc.numExecutors}`);
+    lines.push(`)`);
+    lines.push(``);
+    lines.push('if [[ ${#LOCAL_JARS[@]} -gt 0 ]]; then');
+    lines.push('  SUBMIT_ARGS+=(--jars "$(IFS=,; echo "${LOCAL_JARS[*]}")")');
+    lines.push(`fi`);
+    lines.push('if [[ ${#REMOTE_PACKAGES[@]} -gt 0 ]]; then');
+    lines.push('  SUBMIT_ARGS+=(--packages "$(IFS=,; echo "${REMOTE_PACKAGES[*]}")")');
+    lines.push(`fi`);
+    lines.push(``);
+    lines.push(`SUBMIT_ARGS+=("$PIPELINE_SCRIPT" --env ${opts.targetPlatform ?? 'prod'} "$@")`);
+    lines.push('spark-submit "${SUBMIT_ARGS[@]}"');
 
     return lines.join('\n');
   }
@@ -400,12 +473,29 @@ export class PySparkEngine implements ICodeEngine {
 
     pipeline.nodes.forEach(node => {
       if (node.sourceType !== 'jdbc' && node.sinkType !== 'jdbc') return;
-      const cfg = node.config as { driver?: string; url?: string };
-      const jdbcPackage = this.inferJdbcPackage(cfg.driver, cfg.url);
+      const cfg = node.config as { driver?: string; url?: string; mavenCoords?: string; driverPaths?: string[] };
+      const configuredDriverPaths = cfg.driverPaths?.map(driverPath => driverPath?.trim()).filter(Boolean) ?? [];
+      const jdbcPackage = cfg.mavenCoords?.trim()
+        || (configuredDriverPaths.length > 0 ? null : this.inferJdbcPackage(cfg.driver, cfg.url));
       if (jdbcPackage) packages.add(jdbcPackage);
     });
 
     return [...packages];
+  }
+
+  private collectSparkDriverPaths(pipeline: PipelineDefinition): string[] {
+    const driverPaths = new Set<string>();
+
+    pipeline.nodes.forEach(node => {
+      if (node.sourceType !== 'jdbc' && node.sinkType !== 'jdbc') return;
+      const cfg = node.config as { driverPaths?: string[] };
+      cfg.driverPaths?.forEach(driverPath => {
+        const normalized = driverPath?.trim();
+        if (normalized) driverPaths.add(normalized);
+      });
+    });
+
+    return [...driverPaths];
   }
 
   private inferJdbcPackage(driver?: string, url?: string): string | null {

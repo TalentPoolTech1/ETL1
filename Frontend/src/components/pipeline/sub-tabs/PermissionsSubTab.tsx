@@ -1,6 +1,4 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Button } from '@/components/common/Button';
-import { Input } from '@/components/common/Input';
 import api from '@/services/api';
 
 interface Grant {
@@ -30,9 +28,9 @@ function parseErrorMessage(error: unknown, fallback: string): string {
 
 function roleStyle(roleName: string): string {
   const normalized = roleName.toLowerCase();
-  if (normalized.includes('owner') || normalized.includes('admin')) return 'bg-warning-100 text-warning-800';
-  if (normalized.includes('edit') || normalized.includes('write')) return 'bg-primary-100 text-primary-800';
-  return 'bg-neutral-100 text-neutral-600';
+  if (normalized.includes('owner') || normalized.includes('admin')) return 'bg-amber-900/40 text-amber-300 border border-amber-700/50';
+  if (normalized.includes('edit') || normalized.includes('write')) return 'bg-blue-900/40 text-blue-300 border border-blue-700/50';
+  return 'bg-slate-700 text-slate-300 border border-slate-600';
 }
 
 interface Props { pipelineId: string; }
@@ -190,10 +188,10 @@ export function PermissionsSubTab({ pipelineId }: Props) {
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Inheritance banner */}
-      <div className="flex items-center justify-between p-4 bg-neutral-50 border border-neutral-200 rounded-lg">
+      <div className="flex items-center justify-between p-4 bg-slate-800/40 border border-slate-700/60 rounded-lg">
         <div>
-          <div className="text-sm font-medium text-neutral-800">Inherit permissions from project</div>
-          <div className="text-xs text-neutral-500 mt-0.5">
+          <div className="text-sm font-semibold text-white">Inherit permissions from project</div>
+          <div className="text-xs text-slate-400 mt-0.5">
             {!projectScoped
               ? 'Global pipelines are not tied to a project, so project grants do not apply.'
               : 'Pipeline access is project-scoped. Changes here update project member roles.'}
@@ -208,90 +206,92 @@ export function PermissionsSubTab({ pipelineId }: Props) {
             setInherit(next);
             void persist(grants, next);
           }}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!projectScoped ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${inheritFromProject ? 'bg-primary-600' : 'bg-neutral-300'}`}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${!projectScoped ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${inheritFromProject ? 'bg-blue-600' : 'bg-slate-600'}`}
         >
-          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${inheritFromProject ? 'translate-x-6' : 'translate-x-1'}`} />
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-[#161b25] shadow transition-transform ${inheritFromProject ? 'translate-x-6' : 'translate-x-1'}`} />
         </button>
       </div>
 
       {/* Grants table */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-neutral-700">Access grants {saving && <span className="text-xs text-neutral-400 font-normal ml-2">Saving…</span>}</h3>
-          <Button size="sm" onClick={() => setShowAdd(v => !v)} disabled={!projectScoped}>+ Add grant</Button>
+          <h3 className="text-sm font-semibold text-white">Access grants {saving && <span className="text-xs text-slate-400 font-normal ml-2">Saving…</span>}</h3>
+          <button onClick={() => setShowAdd(v => !v)} disabled={!projectScoped}
+            className="h-7 px-3 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50 transition-colors">
+            + Add grant
+          </button>
         </div>
 
         {errorMessage && (
-          <div className="mb-3 rounded-md border border-danger-200 bg-danger-50 px-3 py-2 text-xs text-danger-700">
+          <div className="mb-3 rounded-md border border-red-700/50 bg-red-900/20 px-3 py-2 text-xs text-red-400">
             {errorMessage}
           </div>
         )}
 
         {showAdd && (
-          <div className="space-y-2 mb-3 p-3 bg-primary-50 border border-primary-200 rounded-lg">
-            <Input
-              placeholder="Filter users"
+          <div className="space-y-2 mb-3 p-3 bg-slate-800/60 border border-slate-700 rounded-lg">
+            <input
+              placeholder="Filter users…"
               value={newPrincipalFilter}
               onChange={e => setNewPrincipalFilter(e.target.value)}
-              className="w-full"
+              className="w-full h-8 px-3 bg-slate-800 border border-slate-600 rounded text-[12px] text-white placeholder-slate-500 outline-none focus:border-blue-500"
             />
             <div className="flex items-center gap-2">
-              <select
-                value={newUserId}
-                onChange={e => setNewUserId(e.target.value)}
-                className="flex-1 px-2 py-1.5 border border-neutral-300 rounded-md text-sm bg-white"
-              >
+              <select value={newUserId} onChange={e => setNewUserId(e.target.value)}
+                className="flex-1 px-2 py-1.5 border border-slate-600 rounded text-sm bg-slate-800 text-white">
                 {filteredUsers.map(user => (
                   <option key={user.userId} value={user.userId}>{user.label}</option>
                 ))}
               </select>
               <select value={newRoleId} onChange={e => setNewRoleId(e.target.value)}
-              className="px-2 py-1.5 border border-neutral-300 rounded-md text-sm bg-white">
+                className="px-2 py-1.5 border border-slate-600 rounded text-sm bg-slate-800 text-white">
                 {roles.map(role => (
                   <option key={role.roleId} value={role.roleId}>{role.roleName}</option>
                 ))}
               </select>
-              <Button size="sm" onClick={() => { void addGrant(); }}>Add</Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
+              <button onClick={() => { void addGrant(); }}
+                className="h-8 px-3 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors">Add</button>
+              <button onClick={() => setShowAdd(false)}
+                className="h-8 px-3 text-xs border border-slate-600 text-slate-300 hover:text-white rounded transition-colors">Cancel</button>
             </div>
           </div>
         )}
 
         {loading ? (
-          <div className="text-sm text-neutral-400 py-4">Loading permissions…</div>
+          <div className="text-sm text-slate-400 py-4">Loading permissions…</div>
         ) : (
-          <div className="border border-neutral-200 rounded-lg overflow-hidden">
+          <div className="border border-slate-700/60 rounded-lg overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-neutral-50">
+              <thead className="bg-slate-800/60">
                 <tr>
                   {['Principal', 'Type', 'Role', 'Source', 'Expires', ''].map(h => (
-                    <th key={h} className="px-4 py-2 text-left text-xs font-medium text-neutral-500">{h}</th>
+                    <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-100">
+              <tbody className="divide-y divide-slate-700/50">
                 {grants.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-6 text-center text-neutral-400 text-sm">No access grants configured.</td></tr>
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm">No access grants configured.</td></tr>
                 )}
                 {grants.map(g => (
-                  <tr key={g.id} className="hover:bg-neutral-50">
-                    <td className="px-4 py-2">
-                      <span className="text-neutral-800">{g.principal}</span>
+                  <tr key={g.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="px-4 py-2.5">
+                      <span className="text-white font-medium">{g.principal}</span>
                     </td>
-                    <td className="px-4 py-2 text-neutral-500 capitalize">{g.principalType.replace('-', ' ')}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2.5 text-slate-400 capitalize text-xs">{g.principalType.replace('-', ' ')}</td>
+                    <td className="px-4 py-2.5">
                       <select value={g.roleId} onChange={e => { void changeRole(g.id, e.target.value); }}
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium border-0 outline-none cursor-pointer ${roleStyle(g.role)}`}>
+                        className={`px-2 py-0.5 rounded text-xs font-medium outline-none cursor-pointer ${roleStyle(g.role)}`}>
                         {roles.map(role => (
                           <option key={role.roleId} value={role.roleId}>{role.roleName}</option>
                         ))}
                       </select>
                     </td>
-                    <td className="px-4 py-2 text-neutral-500">{projectScoped ? 'Project' : 'None'}</td>
-                    <td className="px-4 py-2 text-neutral-500">{g.expiry ?? '—'}</td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-4 py-2.5 text-slate-400 text-xs">{projectScoped ? 'Project' : 'None'}</td>
+                    <td className="px-4 py-2.5 text-slate-400 text-xs">{g.expiry ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-right">
                       <button onClick={() => { void removeGrant(g.id); }} disabled={!projectScoped}
-                        className="text-neutral-400 hover:text-danger-600 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Remove</button>
+                        className="text-slate-400 hover:text-red-400 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Remove</button>
                     </td>
                   </tr>
                 ))}

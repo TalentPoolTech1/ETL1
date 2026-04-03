@@ -58,6 +58,7 @@ function derivedCategory(techCode: string): string {
 function mapConnectionDtoToForm(dto: Record<string, unknown>, fallbackName: string, connectionId: string): FD {
   const techCode = String(dto.connectorTypeCode ?? dto.connector_type_code ?? '');
   const cfg = (dto.configJson ?? dto.config_json ?? {}) as Record<string, unknown>;
+  const fileOpts = (dto.fileFormatOptions ?? dto.file_format_options ?? {}) as Record<string, unknown>;
   // JDBC-style connectors prefix field names with jdbc_
   return {
     connectionId,
@@ -72,10 +73,10 @@ function mapConnectionDtoToForm(dto: Record<string, unknown>, fallbackName: stri
     database: String(cfg.database ?? cfg.db ?? cfg.jdbc_database ?? cfg.bucket ?? cfg.container ?? ''),
     schema: String(cfg.schema ?? cfg.jdbc_schema ?? ''),
     region: String(cfg.region ?? ''),
-    filePath: String(cfg.filePath ?? cfg.file_path ?? cfg.storage_base_path ?? cfg.path ?? ''),
-    delimiter: String(cfg.delimiter ?? cfg.field_separator_char ?? ''),
-    encoding: String(cfg.encoding ?? ''),
-    compression: String(cfg.compression ?? ''),
+    filePath: String(cfg.storage_base_path ?? cfg.file_path ?? cfg.path ?? cfg.filePath ?? ''),
+    delimiter: String(fileOpts.field_separator_char ?? cfg.field_separator_char ?? cfg.delimiter ?? ''),
+    encoding: String(fileOpts.encoding_standard_code ?? cfg.encoding_standard_code ?? cfg.encoding ?? ''),
+    compression: String(fileOpts.compression_code ?? cfg.compression_code ?? cfg.compression ?? ''),
     bucket: String(cfg.bucket ?? cfg.container ?? ''),
     prefix: String(cfg.prefix ?? ''),
     endpoint: String(cfg.endpoint ?? ''),
@@ -95,6 +96,9 @@ function mapConnectionDtoToForm(dto: Record<string, unknown>, fallbackName: stri
     sslEnabled: String(cfg.jdbc_ssl_mode ?? cfg.ssl_mode ?? dto.connSslMode ?? dto.conn_ssl_mode ?? '').toUpperCase() !== 'DISABLE',
     certAlias: '',
     maxPoolSize: String(dto.connMaxPoolSizeNum ?? dto.conn_max_pool_size_num ?? ''),
+    jdbcDriverClass: String(dto.jdbcDriverClass ?? dto.conn_jdbc_driver_class ?? ''),
+    jdbcDriverMavenCoords: String(dto.jdbcDriverMavenCoords ?? dto.conn_jdbc_driver_maven_coords ?? ''),
+    jdbcDriverPaths: String(dto.jdbcDriverPaths ?? dto.conn_jdbc_driver_paths ?? ''),
     status: String(dto.healthStatusCode ?? dto.health_status_code ?? 'UNKNOWN'),
     createdBy: String(dto.createdByFullName ?? dto.created_by_name ?? '—'),
     createdOn: String(dto.createdDtm ?? dto.created_dtm ?? '—'),
@@ -133,8 +137,8 @@ function buildConnectionUpdatePayload(form: FD) {
   } else if (category === 'File') {
     if (form.filePath) config['storage_base_path'] = form.filePath;
     if (form.delimiter) config['field_separator_char'] = form.delimiter;
-    if (form.encoding) config['encoding'] = form.encoding;
-    if (form.compression) config['compression'] = form.compression;
+    if (form.encoding) config['encoding_standard_code'] = form.encoding;
+    if (form.compression) config['compression_code'] = form.compression;
   } else if (category === 'Cloud Storage') {
     if (form.bucket) config['bucket'] = form.bucket;
     if (form.region) config['region'] = form.region;
@@ -155,6 +159,13 @@ function buildConnectionUpdatePayload(form: FD) {
     secrets[isJdbc ? 'jdbc_password' : 'password'] = form.password;
   }
   if (Object.keys(secrets).length > 0) payload.secrets = secrets;
+  // JDBC driver path must round-trip and be clearable, so send it even when blank.
+  const driverClass = String(form.jdbcDriverClass ?? '').trim();
+  const mavenCoords = String(form.jdbcDriverMavenCoords ?? '').trim();
+  const driverPaths = String(form.jdbcDriverPaths ?? '').trim();
+  if (driverClass) payload.jdbcDriverClass = driverClass;
+  if (mavenCoords) payload.jdbcDriverMavenCoords = mavenCoords;
+  payload.jdbcDriverPaths = driverPaths;
   return payload;
 }
 
@@ -165,26 +176,26 @@ function Field({ label, field, value, onChange, ro, secret, placeholder }: {
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="field-label">{label}</label>
       <div className="relative">
         {ro ? (
-          <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-500 font-mono">{value || '—'}</div>
+          <div className="field-input-ro">{value || '—'}</div>
         ) : (
           <input
             type={secret && !show ? 'password' : 'text'}
             value={value}
             onChange={e => onChange?.(field, e.target.value)}
             placeholder={placeholder}
-            className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 pr-8"
+            className="field-input pr-8"
           />
         )}
         {secret && !ro && (
           <button
             type="button"
             onClick={() => setShow(v => !v)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-          >
-            {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            className="absolute right-2 top-1/2 -translate-y-1/2 transition-colors"
+              style={{ color: 'var(--tx3)' }}>
+              {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
@@ -268,8 +279,8 @@ function PropertiesTab({ data, onChange }: { data: FD; onChange: (f: string, v: 
         </div>
 
         {/* Technology-specific connection fields */}
-        <div className="border-t border-slate-800 pt-4">
-          <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">{category} Connection</p>
+        <div className="border-t pt-4" style={{ borderColor: 'var(--bd)' }}>
+          <p className="panel-section-title mb-3">{category} Connection</p>
           <div className="grid grid-cols-2 gap-4">
             {dynamicFields.map(fd => (
               <F key={fd.field} label={fd.label} field={fd.field} placeholder={fd.placeholder} />
@@ -282,10 +293,27 @@ function PropertiesTab({ data, onChange }: { data: FD; onChange: (f: string, v: 
           <F label="Max Pool Size" field="maxPoolSize" placeholder="10" />
         )}
 
+        {/* JDBC Driver — only for database/data-lake connections */}
+        {(category === 'Database' || category === 'Data Lake') && (
+	        <div className="border-t pt-4" style={{ borderColor: 'var(--bd)' }}>
+            <p className="panel-section-title mb-3">JDBC Driver</p>
+		            <div className="grid grid-cols-2 gap-4">
+		              <F label="Driver Class" field="jdbcDriverClass" placeholder="e.g. org.postgresql.Driver" />
+		              <F label="Maven Coordinates" field="jdbcDriverMavenCoords" placeholder="e.g. org.postgresql:postgresql:42.7.3" />
+		            </div>
+                <div className="mt-4">
+                  <F label="JDBC Driver Paths" field="jdbcDriverPaths" placeholder="e.g. /opt/jdbc/postgresql,/mnt/shared/drivers/postgresql-42.7.9.jar" />
+                </div>
+	            <p className="text-[12px] text-slate-300 mt-2">
+	              This connection can now carry both the driver artifact/version and the path hints used to resolve the matching jar at runtime. Enter comma-separated directories or explicit jar paths if this connection needs a specific driver location.
+	            </p>
+	          </div>
+	        )}
+
         {/* Credentials — inline, no separate tab needed */}
         {category !== 'File' && (
-          <div className="border-t border-slate-800 pt-4">
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Credentials</p>
+          <div className="border-t pt-4" style={{ borderColor: 'var(--bd)' }}>
+            <p className="panel-section-title mb-3">Credentials</p>
             <div className="grid grid-cols-2 gap-4">
               <F label="Username / Account" field="username" placeholder="DB user (e.g. postgres)" />
               <Field label="Password" field="password" value={String(data.password ?? '')} onChange={onChange}
@@ -294,24 +322,24 @@ function PropertiesTab({ data, onChange }: { data: FD; onChange: (f: string, v: 
             <div className="flex items-center gap-3 mt-3">
               <input type="checkbox" id="ssl-prop" checked={Boolean(data.sslEnabled)}
                 onChange={e => onChange('sslEnabled', String(e.target.checked))} className="w-3.5 h-3.5 accent-blue-500" />
-              <label htmlFor="ssl-prop" className="text-[12px] text-slate-300">SSL / TLS Enabled</label>
+              <label htmlFor="ssl-prop" className="field-label mb-0">SSL / TLS Enabled</label>
             </div>
-            <p className="text-[11px] text-amber-300/70 mt-2">
+            <p className="mt-2" style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)' }}>
               Password is stored encrypted and cannot be read back. Leave blank to keep the existing secret unchanged.
             </p>
           </div>
         )}
 
         {/* Description + Tags */}
-        <div className="border-t border-slate-800 pt-4">
-          <label className="block text-[11px] text-slate-500 mb-1">Description</label>
+        <div className="border-t pt-4" style={{ borderColor: 'var(--bd)' }}>
+          <label className="field-label">Description</label>
           <textarea rows={2} value={String(data.description ?? '')} onChange={e => onChange('description', e.target.value)}
-            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 resize-none" />
+            className="field-textarea" />
         </div>
         <F label="Tags (comma separated)" field="tags" />
 
         {/* Audit */}
-        <div className="border-t border-slate-800 pt-4 grid grid-cols-2 gap-4">
+        <div className="border-t pt-4 grid grid-cols-2 gap-4" style={{ borderColor: 'var(--bd)' }}>
           <F label="Owner" field="owner" />
           <F label="Status" field="status" ro />
           <F label="Created By" field="createdBy" ro />
@@ -334,7 +362,7 @@ function AuthenticationTab({ data, onChange }: { data: FD; onChange: (f: string,
   if (isFileOnly) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <div className="text-center text-slate-500 p-8 max-w-sm">
+        <div className="text-center text-slate-300 p-8 max-w-sm">
           <p className="text-[13px] font-medium text-slate-400 mb-2">No authentication required</p>
           <p className="text-[12px]">File-based connections read directly from the local filesystem or a mounted path. Authentication is managed at the infrastructure level.</p>
         </div>
@@ -346,11 +374,11 @@ function AuthenticationTab({ data, onChange }: { data: FD; onChange: (f: string,
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-2xl space-y-4">
         <div>
-          <label className="block text-[11px] text-slate-500 mb-1">Authentication Mode</label>
+          <label className="field-label">Authentication Mode</label>
           <select
             value={authMode}
             onChange={e => onChange('authMode', e.target.value)}
-            className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full"
+            className="field-select"
           >
             <option value="username_password">Username / Password</option>
             <option value="key_file">Key File</option>
@@ -379,7 +407,7 @@ function AuthenticationTab({ data, onChange }: { data: FD; onChange: (f: string,
             <Field label="Client Secret" field="oauthClientSecret" value={String(data.oauthClientSecret ?? '')} onChange={onChange} secret />
             <Field label="Token Endpoint" field="oauthTokenEndpoint" value={String(data.oauthTokenEndpoint ?? '')} onChange={onChange} />
             <div className="bg-slate-800/40 border border-slate-700 rounded p-3 text-[12px]">
-              <span className="text-slate-500">Token Expiry: </span>
+              <span className="text-slate-300">Token Expiry: </span>
               <span className="text-slate-300">{String(data.tokenExpiry ?? 'Unknown')}</span>
             </div>
           </>
@@ -389,17 +417,17 @@ function AuthenticationTab({ data, onChange }: { data: FD; onChange: (f: string,
           <Field label="Service Account JSON Path" field="serviceAccountPath" value={String(data.serviceAccountPath ?? '')} onChange={onChange} />
         )}
 
-        <div className="border-t border-slate-800 pt-4 space-y-3">
+        <div className="border-t pt-4 space-y-3" style={{ borderColor: 'var(--bd)' }}>
           <div className="flex items-center gap-3">
             <input type="checkbox" id="ssl" checked={Boolean(data.sslEnabled)} onChange={e => onChange('sslEnabled', String(e.target.checked))} className="w-3.5 h-3.5 accent-blue-500" />
-            <label htmlFor="ssl" className="text-[12px] text-slate-300">SSL / TLS Enabled</label>
+            <label htmlFor="ssl" className="field-label mb-0">SSL / TLS Enabled</label>
           </div>
           {data.sslEnabled && (
             <Field label="Certificate Alias" field="certAlias" value={String(data.certAlias ?? '')} onChange={onChange} placeholder="Optional — leave blank for default" />
           )}
         </div>
 
-        <div className="bg-amber-900/20 border border-amber-700/40 rounded p-3 text-[11px] text-amber-300/80">
+        <div className="rounded-lg p-3" style={{ background: 'rgba(120,80,10,0.15)', border: '1px solid rgba(251,191,36,0.25)', fontSize: 'var(--fs-sm)', color: 'var(--warn)' }}>
           Sensitive values are stored encrypted. Existing secrets cannot be viewed after save — only replaced.
         </div>
       </div>
@@ -437,11 +465,11 @@ function ConnectivityTab({
             <Clock className="w-5 h-5 shrink-0" />
             <div>
               <div className="text-[13px] font-semibold">No network health check for file connections</div>
-              <div className="text-[11px] opacity-70 mt-0.5">File accessibility is validated at pipeline execution time when the Spark job reads the path.</div>
+              <div className="text-[12px] opacity-70 mt-0.5">File accessibility is validated at pipeline execution time when the Spark job reads the path.</div>
             </div>
           </div>
-          <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4 space-y-2">
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-2">File Connection Summary</p>
+        <div className="rounded-lg p-4 space-y-2" style={{ background: 'var(--bg-3)', border: '1px solid var(--bd)' }}>
+          <p className="panel-section-title mb-2">File Connection Summary</p>
             {[
               { label: 'Technology', value: String(formData.technologyType ?? '—') },
               { label: 'File Path',  value: String(formData.filePath || '—') },
@@ -450,7 +478,7 @@ function ConnectivityTab({
               { label: 'Compression', value: String(formData.compression || 'none') },
             ].map(r => (
               <div key={r.label} className="flex items-center text-[12px]">
-                <span className="text-slate-500 w-28 shrink-0">{r.label}</span>
+                <span className="text-slate-300 w-28 shrink-0">{r.label}</span>
                 <span className="text-slate-300 font-mono">{r.value}</span>
               </div>
             ))}
@@ -475,7 +503,7 @@ function ConnectivityTab({
           <div>
             <div className="text-[13px] font-semibold">{overallHealth === 'HEALTHY' ? 'Connection is healthy' : overallHealth === 'UNHEALTHY' ? 'Connection unreachable' : 'Health unknown — run a test'}</div>
             {lastResult && (
-              <div className="text-[11px] opacity-70 mt-0.5">
+              <div className="text-[12px] opacity-70 mt-0.5">
                 Last tested by {lastResult.testedBy} · {lastResult.testedOn}
                 {lastResult.responseMs !== undefined ? ` · ${lastResult.responseMs}ms` : ''}
               </div>
@@ -491,8 +519,8 @@ function ConnectivityTab({
         )}
 
         {/* Connection summary */}
-        <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4 space-y-2">
-          <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-2">Connection Summary</p>
+        <div className="rounded-lg p-4 space-y-2" style={{ background: 'var(--bg-3)', border: '1px solid var(--bd)' }}>
+          <p className="panel-section-title mb-2">Connection Summary</p>
           {[
             { label: 'Technology', value: String(formData.technologyType ?? '—') },
             { label: 'Category',   value: String(formData.category ?? '—') },
@@ -500,9 +528,9 @@ function ConnectivityTab({
             { label: 'Database',   value: String(formData.database || formData.topic || '—') },
             { label: 'SSL / TLS',  value: formData.sslEnabled ? 'Enabled' : 'Disabled' },
           ].map(r => (
-            <div key={r.label} className="flex items-center text-[12px]">
-              <span className="text-slate-500 w-28 shrink-0">{r.label}</span>
-              <span className="text-slate-300 font-mono">{r.value}</span>
+            <div key={r.label} className="flex items-center" style={{ fontSize: 'var(--fs-sm)' }}>
+              <span className="w-28 shrink-0" style={{ color: 'var(--tx2)' }}>{r.label}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--tx1)' }}>{r.value}</span>
             </div>
           ))}
         </div>
@@ -536,13 +564,13 @@ function UsageTab({
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-2xl">
-        <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Used By</div>
+        <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Used By</div>
         {loading ? (
-          <div className="text-[12px] text-slate-500 border border-slate-800 rounded-lg p-4">Loading usage…</div>
+          <div className="text-[12px] text-slate-300 border border-slate-800 rounded-lg p-4">Loading usage…</div>
         ) : error ? (
           <div className="text-[12px] text-red-400 border border-red-800/50 rounded-lg p-4">{error}</div>
         ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-slate-600 border border-slate-800 rounded-lg">
+          <div className="flex flex-col items-center justify-center h-32 text-slate-400 border border-slate-800 rounded-lg">
             <RefreshCw className="w-6 h-6 mb-2 opacity-40" />
             <p className="text-sm">No dependent datasets, pipelines, or orchestrators found.</p>
           </div>
@@ -550,7 +578,7 @@ function UsageTab({
           <div className="border border-slate-800 rounded-lg overflow-hidden">
             <table className="w-full text-[12px]">
               <thead>
-                <tr className="text-left text-[11px] text-slate-500 border-b border-slate-800">
+                <tr className="text-left text-[12px] text-slate-300 border-b border-slate-800">
                   <th className="px-3 py-2 font-medium">Type</th>
                   <th className="px-3 py-2 font-medium">Object</th>
                   <th className="px-3 py-2 font-medium">Context</th>
@@ -561,7 +589,7 @@ function UsageTab({
                   <tr key={`${row.usageType}-${row.objectName}-${index}`} className="border-b border-slate-800/50">
                     <td className="px-3 py-2 text-slate-400">{row.usageType}</td>
                     <td className="px-3 py-2 text-slate-200">{row.objectName}</td>
-                    <td className="px-3 py-2 text-slate-500">{row.context}</td>
+                    <td className="px-3 py-2 text-slate-300">{row.context}</td>
                   </tr>
                 ))}
               </tbody>
@@ -664,7 +692,7 @@ function ImportMetadataTab({ connectionId, category }: { connectionId: string; c
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="text-[14px] font-semibold text-slate-200">Import Metadata</h3>
-            <p className="text-[12px] text-slate-500 mt-1">
+            <p className="text-[12px] text-slate-300 mt-1">
               {isFile
                 ? 'Introspect the file schema and register it in the Metadata Catalog. Click Import to infer column types from the file.'
                 : 'Browse schemas and tables from the connected database. Select what to import into the Metadata Catalog.'}
@@ -688,7 +716,7 @@ function ImportMetadataTab({ connectionId, category }: { connectionId: string; c
               {result.skipped > 0 ? ` · ${result.skipped} skipped` : ''}
             </p>
             {result.errors.map((e, i) => (
-              <p key={i} className="text-[11px] text-red-400 mt-1 font-mono">{e}</p>
+              <p key={i} className="text-[12px] text-red-400 mt-1 font-mono">{e}</p>
             ))}
           </div>
         )}
@@ -700,7 +728,7 @@ function ImportMetadataTab({ connectionId, category }: { connectionId: string; c
         {/* File connection — simple summary */}
         {isFile && !isLoading && schemas.length > 0 && (
           <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4 space-y-2">
-            <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-2">File to Import</p>
+            <p className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-2">File to Import</p>
             <div className="flex items-center gap-2 text-[12px]">
               <Table2 className="w-4 h-4 text-amber-400 flex-shrink-0" />
               <span className="text-slate-200 font-mono">{schemas[0].schemaName}</span>
@@ -711,17 +739,17 @@ function ImportMetadataTab({ connectionId, category }: { connectionId: string; c
         {/* DB connection — schema/table tree */}
         {isDb && (
           <div className="border border-slate-800 rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 bg-slate-800/40 border-b border-slate-800">
-              <span className="text-[11px] text-slate-400 font-semibold uppercase tracking-wide">Schema Browser</span>
-              {schemas.length > 0 && <span className="text-[11px] text-slate-600">{schemas.length} schemas</span>}
+          <div className="rounded-lg p-4 space-y-2" style={{ background: 'var(--bg-3)', border: '1px solid var(--bd)' }}>
+            <p className="panel-section-title mb-2">Schema Browser</p>
+              {schemas.length > 0 && <span className="text-[12px] text-slate-400">{schemas.length} schemas</span>}
             </div>
             {isLoading && (
-              <div className="flex items-center gap-2 p-4 text-[12px] text-slate-500">
+              <div className="flex items-center gap-2 p-4 text-[12px] text-slate-300">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading schemas…
               </div>
             )}
             {!isLoading && schemas.length === 0 && (
-              <div className="p-4 text-[12px] text-slate-500">No schemas found. Check connection credentials.</div>
+              <div className="p-4 text-[12px] text-slate-300">No schemas found. Check connection credentials.</div>
             )}
             {schemas.map(s => {
               const tables = tablesBySchema[s.schemaName] ?? [];
@@ -734,25 +762,25 @@ function ImportMetadataTab({ connectionId, category }: { connectionId: string; c
                   <div className="flex items-center gap-2 px-3 py-2 hover:bg-slate-800/30 cursor-pointer group"
                     onClick={() => expandSchema(s.schemaName)}>
                     {isExpanded
-                      ? <ChevronDown className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                      : <ChevronRight className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />}
+                      ? <ChevronDown className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
+                      : <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />}
                     <FolderOpen className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                     <span className="flex-1 text-[12px] text-slate-300">{s.schemaName}</span>
-                    {s.tableCount !== undefined && <span className="text-[11px] text-slate-600">{s.tableCount} tables</span>}
+                    {s.tableCount !== undefined && <span className="text-[12px] text-slate-400">{s.tableCount} tables</span>}
                     {tables.length > 0 && (
                       <button
                         onClick={e => { e.stopPropagation(); toggleSchema(s.schemaName); }}
-                        className="opacity-0 group-hover:opacity-100 text-[11px] text-blue-400 hover:text-blue-300 px-1"
+                        className="opacity-0 group-hover:opacity-100 text-[12px] text-blue-400 hover:text-blue-300 px-1"
                       >
                         {allSel ? 'Deselect all' : 'Select all'}
                       </button>
                     )}
-                    {loading && <Loader2 className="w-3 h-3 animate-spin text-slate-500" />}
+                    {loading && <Loader2 className="w-3 h-3 animate-spin text-slate-300" />}
                   </div>
                   {isExpanded && (
                     <div className="pb-1">
-                      {loading && <div className="px-10 py-1 text-[11px] text-slate-600">Loading tables…</div>}
-                      {!loading && tables.length === 0 && <div className="px-10 py-1 text-[11px] text-slate-600 italic">No tables</div>}
+                      {loading && <div className="px-10 py-1 text-[12px] text-slate-400">Loading tables…</div>}
+                      {!loading && tables.length === 0 && <div className="px-10 py-1 text-[12px] text-slate-400 italic">No tables</div>}
                       {tables.map(t => {
                         const key = schemaKey(s.schemaName, t.tableName);
                         const isSel = selected.has(key);
@@ -764,10 +792,10 @@ function ImportMetadataTab({ connectionId, category }: { connectionId: string; c
                           >
                             {isSel
                               ? <CheckSquare className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
-                              : <Square className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" />}
-                            <Table2 className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                              : <Square className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
+                            <Table2 className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
                             <span className="flex-1 text-[12px] text-slate-300">{t.tableName}</span>
-                            <span className="text-[10px] text-slate-600 uppercase">{t.tableType}</span>
+                            <span className="text-[12px] text-slate-400 uppercase">{t.tableType}</span>
                           </div>
                         );
                       })}
@@ -780,7 +808,7 @@ function ImportMetadataTab({ connectionId, category }: { connectionId: string; c
         )}
 
         {!isFile && !isDb && (
-          <div className="p-6 text-center text-slate-500 text-[12px]">
+          <div className="p-6 text-center text-slate-300 text-[12px]">
             Metadata import is available for file and database connections.
           </div>
         )}
@@ -801,19 +829,19 @@ function SecurityTab({ data }: { data: FD }) {
   ];
   return (
     <div className="flex-1 overflow-auto p-5">
-      <div className="max-w-lg bg-slate-800/30 border border-slate-800 rounded-lg p-4 space-y-3">
-        <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-2">Security Configuration</div>
+      <div className="max-w-lg rounded-lg p-4 space-y-3" style={{ background: 'var(--bg-3)', border: '1px solid var(--bd)' }}>
+            <p className="panel-section-title mb-2">Security Configuration</p>
         {rows.map(r => (
-          <div key={r.label} className="flex items-center text-[12px]">
-            <span className="text-slate-500 w-40 flex-shrink-0">{r.label}</span>
-            <span className="text-slate-300">{r.value}</span>
+          <div key={r.label} className="flex items-center" style={{ fontSize: 'var(--fs-sm)' }}>
+            <span className="w-40 flex-shrink-0" style={{ color: 'var(--tx2)' }}>{r.label}</span>
+            <span style={{ color: 'var(--tx1)' }}>{r.value}</span>
           </div>
         ))}
-        <div className="pt-2 border-t border-slate-700">
-          <div className="text-[11px] text-slate-500 mb-1">Restricted Fields</div>
+        <div className="pt-2" style={{ borderTop: '1px solid var(--bd)' }}>
+          <div className="panel-section-title mb-1">Restricted Fields</div>
           <div className="flex flex-wrap gap-1">
             {['password', 'secret', 'token', 'key'].map(f => (
-              <span key={f} className="px-2 py-0.5 bg-red-900/30 border border-red-700/40 text-red-300 text-[11px] rounded">{f}</span>
+              <span key={f} className="px-2 py-0.5 bg-red-900/30 border border-red-700/40 text-red-300 text-[12px] rounded">{f}</span>
             ))}
           </div>
         </div>
@@ -853,6 +881,7 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
   });
   const [isDirty, setIsDirty]   = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingConnection, setIsLoadingConnection] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
@@ -869,9 +898,11 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
   const [permissionRows, setPermissionRows] = useState<PermissionRow[]>([]);
   const [permissionsLoading, setPermissionsLoading] = useState(false);
   const [permissionsError, setPermissionsError] = useState<string | null>(null);
+  const canSave = Boolean(connectionId) && isDirty && !isSaving;
 
   const loadConnection = useCallback(async () => {
     if (!connectionId) return;
+    setIsLoadingConnection(true);
     setLoadError(null);
     try {
       const res = await api.getConnection(connectionId);
@@ -879,6 +910,8 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
       setFormData(mapConnectionDtoToForm(data ?? {}, connectionName, connectionId));
     } catch (err: unknown) {
       setLoadError((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Failed to load connection');
+    } finally {
+      setIsLoadingConnection(false);
     }
   }, [connectionId, connectionName]);
 
@@ -899,7 +932,13 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
     setSaveError(null);
     try {
       const payload = buildConnectionUpdatePayload(formData);
-      await api.updateConnection(connectionId, payload);
+      const res = await api.updateConnection(connectionId, payload);
+      const data = (res.data?.data ?? res.data) as Record<string, unknown> | undefined;
+      if (data) {
+        setFormData(mapConnectionDtoToForm(data, connectionName, connectionId));
+      }
+      // Always re-read from the backend after save so the form reflects the
+      // persisted connector payload, not just optimistic local state.
       await loadConnection();
       setIsDirty(false);
       dispatch(markTabSaved(tabId));
@@ -1000,7 +1039,7 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
   }, [connectionId, subTab]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#0d0f1a]">
+    <div className="flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       <ObjectHeader
         type="connection"
         name={String(formData.name ?? connectionName)}
@@ -1010,20 +1049,22 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
         actions={
           <div className="flex items-center gap-1.5">
             <button
+              type="button"
               onClick={runConnectionTest}
               disabled={testStatus === 'testing'}
               className="flex items-center gap-1.5 h-7 px-3 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-[12px] font-medium transition-colors"
             >
               {testStatus === 'testing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <TestTube2 className="w-3.5 h-3.5" />} Test
             </button>
-            {isDirty && (
-              <button
-                onClick={handleSave} disabled={isSaving}
-                className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50"
-              >
-                <Save className="w-3.5 h-3.5" />{isSaving ? 'Saving…' : 'Save'}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {isSaving ? 'Saving…' : isDirty ? 'Save' : 'Saved'}
+            </button>
           </div>
         }
       />
@@ -1031,6 +1072,31 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
 
       {loadError && <div className="px-5 pt-3 text-[12px] text-red-400">{loadError}</div>}
       {saveError && <div className="px-5 pt-2 text-[12px] text-red-400">{saveError}</div>}
+
+      {loadError && !String(formData.technologyType ?? '').trim() && (
+        <div className="flex-1 flex items-center justify-center p-5">
+          <div
+            className="w-full max-w-lg rounded-lg p-5"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--bd)' }}
+          >
+            <p className="text-[14px] font-semibold text-slate-200">Connection failed to load</p>
+            <p className="mt-2 text-[12px] text-slate-300">
+              The saved connection payload could not be loaded, so the editor is hidden instead of showing the wrong generic fields.
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadConnection()}
+                disabled={isLoadingConnection}
+                className="flex items-center gap-1.5 h-8 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingConnection ? 'animate-spin' : ''}`} />
+                {isLoadingConnection ? 'Loading…' : 'Retry'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Inline test result banner — visible on any sub-tab */}
       {testStatus !== 'idle' && (
@@ -1053,27 +1119,56 @@ export function ConnectionWorkspace({ tabId }: { tabId: string }) {
         </div>
       )}
 
-      {subTab === 'properties'     && <PropertiesTab data={formData} onChange={handleChange} />}
-      {subTab === 'import'         && <ImportMetadataTab connectionId={connectionId} category={String(formData.category ?? 'Other')} />}
-      {subTab === 'usage'          && <UsageTab rows={usageRows} loading={usageLoading} error={usageError} />}
-      {subTab === 'history'        && (
-        <div className="flex-1 overflow-hidden">
-          {historyError ? (
-            <div className="p-4 text-[12px] text-red-400">{historyError}</div>
-          ) : (
-            <ObjectHistoryGrid rows={historyRows} loading={historyLoading} />
+      {!loadError || String(formData.technologyType ?? '').trim() ? (
+        <div className="flex-1 min-h-0 flex flex-col">
+          {subTab === 'properties'     && <PropertiesTab data={formData} onChange={handleChange} />}
+          {subTab === 'import'         && <ImportMetadataTab connectionId={connectionId} category={String(formData.category ?? 'Other')} />}
+          {subTab === 'usage'          && <UsageTab rows={usageRows} loading={usageLoading} error={usageError} />}
+          {subTab === 'history'        && (
+            <div className="flex-1 overflow-hidden">
+              {historyError ? (
+                <div className="p-4 text-[12px] text-red-400">{historyError}</div>
+              ) : (
+                <ObjectHistoryGrid rows={historyRows} loading={historyLoading} />
+              )}
+            </div>
+          )}
+          {subTab === 'permissions'    && (
+            <div className="flex-1 overflow-hidden">
+              {permissionsError ? (
+                <div className="p-4 text-[12px] text-red-400">{permissionsError}</div>
+              ) : (
+                <ObjectPermissionsGrid rows={permissionRows} loading={permissionsLoading} readOnly />
+              )}
+            </div>
+          )}
+          {subTab === 'properties' && (
+            <div
+              className="flex items-center justify-end gap-2 px-5 py-3 border-t"
+              style={{ borderColor: 'var(--bd)', background: 'var(--bg-2)' }}
+            >
+              <button
+                type="button"
+                onClick={() => void loadConnection()}
+                disabled={isLoadingConnection || isSaving}
+                className="flex items-center gap-1.5 h-8 px-3 bg-slate-700 hover:bg-slate-600 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoadingConnection ? 'animate-spin' : ''}`} />
+                Reload
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={!canSave}
+                className="flex items-center gap-1.5 h-8 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" />
+                {isSaving ? 'Saving…' : isDirty ? 'Save Changes' : 'Saved'}
+              </button>
+            </div>
           )}
         </div>
-      )}
-      {subTab === 'permissions'    && (
-        <div className="flex-1 overflow-hidden">
-          {permissionsError ? (
-            <div className="p-4 text-[12px] text-red-400">{permissionsError}</div>
-          ) : (
-            <ObjectPermissionsGrid rows={permissionRows} loading={permissionsLoading} readOnly />
-          )}
-        </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -14,8 +14,8 @@ import type { Tab, TabType } from '@/types';
 // ─── Tab icon by type ──────────────────────────────────────────────────────
 
 function TabIcon({ type, size = 13 }: { type: TabType; size?: number }) {
-  const cls = `flex-shrink-0`;
   const s = { width: size, height: size };
+  const cls = 'flex-shrink-0';
   switch (type) {
     case 'pipeline':     return <Workflow   style={s} className={`${cls} text-sky-400`} />;
     case 'orchestrator': return <GitMerge   style={s} className={`${cls} text-purple-400`} />;
@@ -46,30 +46,29 @@ interface ContextMenuProps {
 }
 
 function ContextMenu({ tab, x, y, onClose }: ContextMenuProps) {
-  const dispatch = useAppDispatch();
+  const dispatch     = useAppDispatch();
   const hasLastClosed = useAppSelector(s => !!s.tabs.lastClosedTab);
 
-  const act = useCallback((fn: () => void) => {
-    fn();
-    onClose();
-  }, [onClose]);
+  const act = useCallback((fn: () => void) => { fn(); onClose(); }, [onClose]);
 
   const menuStyle: React.CSSProperties = {
     position: 'fixed',
     left: Math.min(x, window.innerWidth - 180),
-    top: Math.min(y, window.innerHeight - 250),
+    top:  Math.min(y, window.innerHeight - 250),
     zIndex: 9999,
   };
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-[9998]" onClick={onClose} />
-      <div style={menuStyle} className="bg-[#1a1d2e] border border-slate-700 rounded-md shadow-xl py-1 min-w-[175px] text-xs">
-        <MenuItem label="Close" onClick={() => act(() => dispatch(closeTab(tab.id)))} disabled={!!tab.isPinned} />
+      <div
+        style={{ ...menuStyle, background: 'var(--bg-4)', border: '1px solid var(--bd-2)', borderRadius: 6 }}
+        className="shadow-xl py-1 min-w-[175px]"
+      >
+        <MenuItem label="Close"        onClick={() => act(() => dispatch(closeTab(tab.id)))}    disabled={!!tab.isPinned} />
         <MenuItem label="Close Others" onClick={() => act(() => dispatch(closeOthers(tab.id)))} />
-        <MenuItem label="Close All" onClick={() => act(() => dispatch(closeAll()))} />
-        <div className="mx-2 border-t border-slate-700 my-1" />
+        <MenuItem label="Close All"    onClick={() => act(() => dispatch(closeAll()))} />
+        <div className="mx-2 my-1" style={{ borderTop: '1px solid var(--bd)' }} />
         <MenuItem
           label={tab.isPinned ? 'Unpin Tab' : 'Pin Tab'}
           onClick={() => act(() => dispatch(tab.isPinned ? unpinTab(tab.id) : pinTab(tab.id)))}
@@ -84,8 +83,12 @@ function ContextMenu({ tab, x, y, onClose }: ContextMenuProps) {
         )}
         {tab.hierarchyPath && (
           <>
-            <div className="mx-2 border-t border-slate-700 my-1" />
-            <div className="px-3 py-1 text-[10px] text-slate-500 truncate max-w-[175px]" title={tab.hierarchyPath}>
+            <div className="mx-2 my-1" style={{ borderTop: '1px solid var(--bd)' }} />
+            <div
+              className="px-3 py-1 truncate max-w-[175px]"
+              style={{ fontSize: 'var(--fs-sm)', color: 'var(--tx2)' }}
+              title={tab.hierarchyPath}
+            >
               {tab.hierarchyPath}
             </div>
           </>
@@ -102,13 +105,11 @@ function MenuItem({ label, onClick, disabled, icon }: {
     <button
       onClick={disabled ? undefined : onClick}
       disabled={disabled}
-      className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors ${
-        disabled
-          ? 'text-slate-600 cursor-not-allowed'
-          : 'text-slate-300 hover:bg-slate-700 hover:text-slate-100 cursor-pointer'
-      }`}
+      style={{ fontSize: 'var(--fs-sm)', color: disabled ? 'var(--tx3)' : 'var(--tx2)' }}
+      className={`w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors
+        ${disabled ? 'cursor-not-allowed' : 'hover:bg-[--bg-5] hover:text-[--tx1] cursor-pointer'}`}
     >
-      {icon && <span className="text-slate-500">{icon}</span>}
+      {icon && <span style={{ color: 'var(--tx3)' }}>{icon}</span>}
       {label}
     </button>
   );
@@ -130,13 +131,10 @@ function TabChip({ tab, isActive }: { tab: Tab; isActive: boolean }) {
     if (!tab.isPinned) dispatch(closeTab(tab.id));
   };
 
-  // Display name: italic + * when dirty
   const isDirty = tab.unsaved || tab.isDirty;
-  const displayName = tab.objectName;
 
   const tooltip = [
     tab.hierarchyPath ?? tab.objectName,
-    tab.type !== 'pipeline' && tab.type !== 'orchestrator' ? undefined : `Type: ${tab.type}`,
     isDirty ? 'Unsaved changes' : undefined,
     tab.isPinned ? 'Pinned' : undefined,
   ].filter(Boolean).join('\n');
@@ -147,28 +145,23 @@ function TabChip({ tab, isActive }: { tab: Tab; isActive: boolean }) {
         title={tooltip}
         onClick={() => dispatch(setActiveTab(tab.id))}
         onContextMenu={handleContextMenu}
-        className={`
-          group flex items-center gap-1.5 px-2.5 h-full cursor-pointer select-none
-          border-b-2 transition-all flex-shrink-0 max-w-[200px] min-w-[80px]
-          ${isActive
-            ? 'border-blue-500 bg-[#0d0f1a] text-slate-100'
-            : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'}
-        `}
+        className={`group thm-tab-chip ${isActive ? 'thm-tab-chip--active' : ''}`}
       >
         {tab.isPinned && (
-          <Pin className="w-2.5 h-2.5 text-slate-500 flex-shrink-0 rotate-45" />
+          <Pin className="w-2.5 h-2.5 flex-shrink-0 rotate-45" style={{ color: 'var(--tx3)' }} />
         )}
-        <TabIcon type={tab.type} size={13} />
-        <span
-          className={`text-[12px] truncate leading-none ${isDirty ? 'italic' : ''} ${isActive ? 'font-medium' : ''}`}
-        >
-          {isDirty ? `*${displayName}` : displayName}
+        <TabIcon type={tab.type} size={12} />
+        <span className={`truncate leading-none ${isDirty ? 'italic' : ''}`}>
+          {isDirty ? `*${tab.objectName}` : tab.objectName}
         </span>
         {!tab.isPinned && (
           <button
             onClick={handleClose}
-            className="w-4 h-4 flex items-center justify-center rounded text-slate-600 hover:text-slate-200 hover:bg-slate-600 opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity ml-0.5"
             title="Close (Ctrl+W)"
+            className="w-4 h-4 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 flex-shrink-0 ml-0.5 transition-opacity"
+            style={{ color: 'var(--tx2)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-6)', e.currentTarget.style.color = 'var(--tx1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = '', e.currentTarget.style.color = 'var(--tx2)')}
           >
             <X className="w-2.5 h-2.5" />
           </button>
@@ -184,11 +177,10 @@ function TabChip({ tab, isActive }: { tab: Tab; isActive: boolean }) {
 // ─── Main TabBar ───────────────────────────────────────────────────────────
 
 export function TabBar() {
-  const dispatch     = useAppDispatch();
+  const dispatch  = useAppDispatch();
   const { allTabs, activeTabId, lastClosedTab } = useAppSelector(s => s.tabs);
-  const scrollRef    = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Horizontal scroll on wheel
   const handleWheel = (e: React.WheelEvent) => {
     if (scrollRef.current) {
       e.preventDefault();
@@ -199,8 +191,7 @@ export function TabBar() {
   if (allTabs.length === 0) return null;
 
   return (
-    <div className="flex items-stretch h-9 bg-[#0a0c15] border-b border-slate-800 flex-shrink-0">
-      {/* Tab strip */}
+    <div className="thm-tabbar">
       <div
         ref={scrollRef}
         onWheel={handleWheel}
@@ -213,12 +204,18 @@ export function TabBar() {
       </div>
 
       {/* Overflow actions */}
-      <div className="flex items-center gap-0.5 px-1 border-l border-slate-800 flex-shrink-0">
+      <div
+        className="flex items-center gap-0.5 px-1 flex-shrink-0"
+        style={{ borderLeft: '1px solid var(--bd)' }}
+      >
         {lastClosedTab && (
           <button
             title={`Restore "${lastClosedTab.objectName}"`}
             onClick={() => dispatch(restoreLastClosed())}
-            className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors"
+            className="w-6 h-6 flex items-center justify-center rounded transition-colors"
+            style={{ color: 'var(--tx2)' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-5)', e.currentTarget.style.color = 'var(--tx1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = '', e.currentTarget.style.color = 'var(--tx2)')}
           >
             <RotateCcw className="w-3 h-3" />
           </button>

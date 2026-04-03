@@ -75,12 +75,12 @@ export function LineageVisualizer({
       <h3 className="text-sm font-semibold text-neutral-900">Data Lineage</h3>
 
       {/* Lineage graph */}
-      <div className="bg-neutral-50 rounded-lg p-4 h-64 border border-neutral-200 overflow-auto">
+      <div className="bg-neutral-50 rounded-lg p-4 h-64 border border-slate-800 overflow-auto">
         <div className="space-y-3">
           {nodes.map(node => (
             <div
               key={node.id}
-              className="bg-white rounded-md p-3 border border-neutral-200 hover:border-primary-500"
+              className="bg-[#161b25] rounded-md p-3 border border-slate-800 hover:border-primary-500"
             >
               <p className="text-sm font-medium text-neutral-900">{node.name}</p>
 

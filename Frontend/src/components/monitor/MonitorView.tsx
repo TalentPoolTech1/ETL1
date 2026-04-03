@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   setScope, setProjectFilter, setStatusFilter, setTriggerTypeFilter,
   setDateRange, setSearch, setObjectType, setMyJobsOnly, resetFilters,
   setAutoRefresh, setAutoRefreshInterval, setLoading, setKpis,
   setPipelineRuns, setOrchestratorRuns, setPage, setPageSize,
-  toggleOrchRunExpanded, toggleRunSelected, clearSelection, selectAll,
+  toggleOrchRunExpanded, toggleRunSelected, clearSelection, setSelectedRuns,
 } from '@/store/slices/monitorSlice';
 import { openTab } from '@/store/slices/tabsSlice';
 import {
@@ -13,26 +13,26 @@ import {
   PipelineRunSummary, OrchestratorRunSummary, MonitorKpis,
 } from '@/types';
 import api from '@/services/api';
-import { clearSelection as _clearSel } from '@/store/slices/monitorSlice';
+import { formatExecutionTabName } from '@/utils/executionLabels';
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<RunStatus, string> = {
-  PENDING:              'bg-neutral-100 text-neutral-600',
-  QUEUED:               'bg-blue-100 text-blue-700',
-  RUNNING:              'bg-blue-200 text-blue-800 animate-pulse',
-  SUCCESS:              'bg-green-100 text-green-700',
-  FAILED:               'bg-red-100 text-red-700',
-  CANCELLED:            'bg-orange-100 text-orange-700',
-  SKIPPED:              'bg-neutral-100 text-neutral-500',
-  RETRYING:             'bg-yellow-100 text-yellow-700 animate-pulse',
-  TIMED_OUT:            'bg-red-200 text-red-900',
-  PARTIALLY_COMPLETED:  'bg-amber-100 text-amber-700',
+  PENDING:              'bg-slate-800 text-slate-300',
+  QUEUED:               'bg-blue-900/30 text-blue-400',
+  RUNNING:              'bg-blue-900/50 text-blue-300 animate-pulse',
+  SUCCESS:              'bg-green-900/30 text-green-400',
+  FAILED:               'bg-red-900/30 text-red-400',
+  CANCELLED:            'bg-orange-900/30 text-orange-400',
+  SKIPPED:              'bg-slate-800 text-slate-400',
+  RETRYING:             'bg-yellow-900/30 text-yellow-400 animate-pulse',
+  TIMED_OUT:            'bg-red-900/50 text-red-300',
+  PARTIALLY_COMPLETED:  'bg-amber-900/30 text-amber-400',
 };
 
 function StatusBadge({ status }: { status: RunStatus }) {
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] ?? 'bg-neutral-100 text-neutral-600'}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[status] ?? 'bg-slate-800 text-slate-300'}`}>
       {status.replace(/_/g, ' ')}
     </span>
   );
@@ -52,15 +52,15 @@ function KpiCard({ label, value, sub, color = 'default', onClick }: KpiCardProps
   const border = color === 'green' ? 'border-l-4 border-green-500'
     : color === 'amber' ? 'border-l-4 border-amber-500'
     : color === 'red' ? 'border-l-4 border-red-500'
-    : 'border-l-4 border-neutral-200';
+    : 'border-l-4 border-slate-600';
   return (
     <div
-      className={`bg-white rounded-lg shadow-sm p-4 ${border} ${onClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+      className={`bg-slate-800/60 rounded-lg p-4 border border-slate-700/50 ${border} ${onClick ? 'cursor-pointer hover:bg-slate-800 transition-colors' : ''}`}
       onClick={onClick}
     >
-      <div className="text-xs font-medium text-neutral-500 uppercase tracking-wide">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-neutral-900">{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-neutral-500">{sub}</div>}
+      <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">{label}</div>
+      <div className="mt-1 text-2xl font-bold text-white">{value}</div>
+      {sub && <div className="mt-0.5 text-xs text-slate-400">{sub}</div>}
     </div>
   );
 }
@@ -100,6 +100,74 @@ function fmtDatetime(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
+type MonitorSortKey =
+  | 'start_desc'
+  | 'start_asc'
+  | 'job_asc'
+  | 'job_desc'
+  | 'user_asc'
+  | 'user_desc'
+  | 'run_desc'
+  | 'run_asc';
+
+function compareText(a: string | null | undefined, b: string | null | undefined): number {
+  return String(a ?? '').localeCompare(String(b ?? ''), undefined, { sensitivity: 'base' });
+}
+
+function sortableTime(iso: string | null | undefined): number {
+  if (!iso) return 0;
+  const time = new Date(iso).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function sortPipelineRunList(runs: PipelineRunSummary[], sortBy: MonitorSortKey): PipelineRunSummary[] {
+  return [...runs].sort((left, right) => {
+    switch (sortBy) {
+      case 'start_asc':
+        return sortableTime(left.startDtm) - sortableTime(right.startDtm);
+      case 'job_asc':
+        return compareText(left.pipelineName, right.pipelineName);
+      case 'job_desc':
+        return compareText(right.pipelineName, left.pipelineName);
+      case 'user_asc':
+        return compareText(left.submittedBy, right.submittedBy);
+      case 'user_desc':
+        return compareText(right.submittedBy, left.submittedBy);
+      case 'run_asc':
+        return compareText(left.pipelineRunId, right.pipelineRunId);
+      case 'run_desc':
+        return compareText(right.pipelineRunId, left.pipelineRunId);
+      case 'start_desc':
+      default:
+        return sortableTime(right.startDtm) - sortableTime(left.startDtm);
+    }
+  });
+}
+
+function sortOrchestratorRunList(runs: OrchestratorRunSummary[], sortBy: MonitorSortKey): OrchestratorRunSummary[] {
+  return [...runs].sort((left, right) => {
+    switch (sortBy) {
+      case 'start_asc':
+        return sortableTime(left.startDtm) - sortableTime(right.startDtm);
+      case 'job_asc':
+        return compareText(left.orchestratorName, right.orchestratorName);
+      case 'job_desc':
+        return compareText(right.orchestratorName, left.orchestratorName);
+      case 'user_asc':
+        return compareText(left.submittedBy, right.submittedBy);
+      case 'user_desc':
+        return compareText(right.submittedBy, left.submittedBy);
+      case 'run_asc':
+        return compareText(left.orchRunId, right.orchRunId);
+      case 'run_desc':
+        return compareText(right.orchRunId, left.orchRunId);
+      case 'start_desc':
+      default:
+        return sortableTime(right.startDtm) - sortableTime(left.startDtm);
+    }
+  });
+}
+
 // ─── Pipeline run row ─────────────────────────────────────────────────────────
 
 interface PipelineRunRowProps {
@@ -113,37 +181,37 @@ interface PipelineRunRowProps {
 function PipelineRunRow({ run, indent, selected, onSelect, onOpen }: PipelineRunRowProps) {
   return (
     <tr
-      className={`hover:bg-neutral-50 cursor-pointer ${selected ? 'bg-blue-50' : ''}`}
+      className={`hover:bg-slate-800/60 cursor-pointer border-b border-slate-700/40 ${selected ? 'bg-blue-900/20' : ''}`}
       onDoubleClick={onOpen}
     >
       <td className="px-3 py-2">
         <input type="checkbox" checked={selected} onChange={onSelect} onClick={e => e.stopPropagation()} />
       </td>
-      <td className={`px-3 py-2 font-mono text-xs text-neutral-500 ${indent ? 'pl-10' : ''}`}>
+      <td className={`px-3 py-2 font-mono text-xs text-slate-400 ${indent ? 'pl-10' : ''}`}>
         <span title={run.pipelineRunId}>{run.pipelineRunId.slice(0, 8)}…</span>
       </td>
-      <td className="px-3 py-2 text-sm font-medium text-blue-700">
+      <td className="px-3 py-2 text-sm font-medium text-blue-400">
         <button className="hover:underline text-left" onDoubleClick={onOpen} onClick={onOpen}>
           {run.pipelineName}
         </button>
         {run.projectName && (
-          <span className="ml-2 text-xs text-neutral-400">({run.projectName})</span>
+          <span className="ml-2 text-xs text-slate-400">({run.projectName})</span>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-neutral-500">{run.versionLabel}</td>
+      <td className="px-3 py-2 text-xs text-slate-400">{run.versionLabel}</td>
       <td className="px-3 py-2"><StatusBadge status={run.runStatus} /></td>
-      <td className="px-3 py-2 text-xs text-neutral-600">{run.triggerType}</td>
-      <td className="px-3 py-2 text-xs text-neutral-600">{run.submittedBy ?? '—'}</td>
-      <td className="px-3 py-2 text-xs text-neutral-600">{fmtDatetime(run.startDtm)}</td>
-      <td className="px-3 py-2 text-xs text-neutral-600">{fmtDuration(run.durationMs)}</td>
-      <td className="px-3 py-2 text-xs text-neutral-600">{fmtNumber(run.rowsProcessed)}</td>
-      <td className="px-3 py-2 text-xs text-neutral-600">{fmtBytes(run.bytesRead)}</td>
-      <td className="px-3 py-2 text-xs text-neutral-500">{run.retryCount > 0 ? run.retryCount : '—'}</td>
+      <td className="px-3 py-2 text-xs text-slate-300">{run.triggerType}</td>
+      <td className="px-3 py-2 text-xs text-slate-300">{run.submittedBy ?? '—'}</td>
+      <td className="px-3 py-2 text-xs text-slate-300">{fmtDatetime(run.startDtm)}</td>
+      <td className="px-3 py-2 text-xs text-slate-300">{fmtDuration(run.durationMs)}</td>
+      <td className="px-3 py-2 text-xs text-slate-300">{fmtNumber(run.rowsProcessed)}</td>
+      <td className="px-3 py-2 text-xs text-slate-300">{fmtBytes(run.bytesRead)}</td>
+      <td className="px-3 py-2 text-xs text-slate-400">{run.retryCount > 0 ? run.retryCount : '—'}</td>
       <td className="px-3 py-2 text-xs">
         {run.slaStatus !== 'N_A' && (
           <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-            run.slaStatus === 'BREACHED' ? 'bg-red-100 text-red-700' :
-            run.slaStatus === 'AT_RISK' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+            run.slaStatus === 'BREACHED' ? 'bg-red-900/30 text-red-400' :
+            run.slaStatus === 'AT_RISK' ? 'bg-amber-900/30 text-amber-400' : 'bg-green-900/30 text-green-400'
           }`}>{run.slaStatus.replace('_', ' ')}</span>
         )}
       </td>
@@ -168,31 +236,31 @@ function OrchestratorRunRow({ run, expanded, selected, onToggle, onSelect, onOpe
   return (
     <>
       <tr
-        className={`hover:bg-neutral-50 bg-neutral-50 border-t border-neutral-200 cursor-pointer ${selected ? 'bg-blue-50' : ''}`}
+        className={`hover:bg-slate-800/60 bg-slate-800/30 border-t border-slate-700/40 cursor-pointer ${selected ? 'bg-blue-900/20' : ''}`}
         onDoubleClick={onOpen}
       >
         <td className="px-3 py-2">
           <input type="checkbox" checked={selected} onChange={onSelect} onClick={e => e.stopPropagation()} />
         </td>
-        <td className="px-3 py-2 font-mono text-xs text-neutral-500">
-          <button className="mr-1 text-neutral-400" onClick={onToggle}>{expanded ? '▼' : '▶'}</button>
+        <td className="px-3 py-2 font-mono text-xs text-slate-400">
+          <button className="mr-1 text-slate-300" onClick={onToggle}>{expanded ? '▼' : '▶'}</button>
           <span title={run.orchRunId}>{run.orchRunId.slice(0, 8)}…</span>
         </td>
-        <td className="px-3 py-2 text-sm font-semibold text-indigo-700">
+        <td className="px-3 py-2 text-sm font-semibold text-indigo-400">
           <button className="hover:underline text-left" onDoubleClick={onOpen} onClick={onOpen}>
             ⚙ {run.orchestratorName}
           </button>
           {run.projectName && (
-            <span className="ml-2 text-xs text-neutral-400">({run.projectName})</span>
+            <span className="ml-2 text-xs text-slate-400">({run.projectName})</span>
           )}
         </td>
-        <td className="px-3 py-2 text-xs text-neutral-500">—</td>
+        <td className="px-3 py-2 text-xs text-slate-400">—</td>
         <td className="px-3 py-2"><StatusBadge status={run.runStatus} /></td>
-        <td className="px-3 py-2 text-xs text-neutral-600">{run.triggerType}</td>
-        <td className="px-3 py-2 text-xs text-neutral-500">—</td>
-        <td className="px-3 py-2 text-xs text-neutral-600">{fmtDatetime(run.startDtm)}</td>
-        <td className="px-3 py-2 text-xs text-neutral-600">{fmtDuration(run.durationMs)}</td>
-        <td className="px-3 py-2 text-xs text-neutral-500" colSpan={4}>
+        <td className="px-3 py-2 text-xs text-slate-300">{run.triggerType}</td>
+        <td className="px-3 py-2 text-xs text-slate-300">{run.submittedBy ?? '—'}</td>
+        <td className="px-3 py-2 text-xs text-slate-300">{fmtDatetime(run.startDtm)}</td>
+        <td className="px-3 py-2 text-xs text-slate-300">{fmtDuration(run.durationMs)}</td>
+        <td className="px-3 py-2 text-xs text-slate-400" colSpan={4}>
           {run.pipelineRuns.length} pipeline{run.pipelineRuns.length !== 1 ? 's' : ''}
         </td>
       </tr>
@@ -208,7 +276,7 @@ function OrchestratorRunRow({ run, expanded, selected, onToggle, onSelect, onOpe
             id: `execution-${pr.pipelineRunId}`,
             type: 'execution',
             objectId: pr.pipelineRunId,
-            objectName: `Run: ${pr.pipelineName}`,
+            objectName: formatExecutionTabName(pr.pipelineName, pr.pipelineRunId),
             unsaved: false,
             isDirty: false,
             executionKind: 'pipeline',
@@ -223,6 +291,7 @@ function OrchestratorRunRow({ run, expanded, selected, onToggle, onSelect, onOpe
 
 export function MonitorView() {
   const dispatch = useAppDispatch();
+  const projects = useAppSelector(s => s.projects.projects);
   const filters = useAppSelector(s => s.monitor.filters);
   const autoRefreshEnabled = useAppSelector(s => s.monitor.autoRefreshEnabled);
   const autoRefreshIntervalMs = useAppSelector(s => s.monitor.autoRefreshIntervalMs);
@@ -235,9 +304,12 @@ export function MonitorView() {
   const lastRefreshedAt = useAppSelector(s => s.monitor.lastRefreshedAt);
   const page = useAppSelector(s => s.monitor.page);
   const pageSize = useAppSelector(s => s.monitor.pageSize);
-  const totalCount = useAppSelector(s => s.monitor.totalCount);
 
   const [searchInput, setSearchInput] = useState(filters.search);
+  const [submittedByInput, setSubmittedByInput] = useState('');
+  const [sortBy, setSortBy] = useState<MonitorSortKey>('start_desc');
+  const [pipelineTotal, setPipelineTotal] = useState(0);
+  const [orchestratorTotal, setOrchestratorTotal] = useState(0);
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ─── Data loading ──────────────────────────────────────────────────────────
@@ -259,36 +331,39 @@ export function MonitorView() {
     };
 
     try {
-      const [kpiRes, runsRes] = await Promise.allSettled([
+      const [kpiRes, pipelineRes, orchRes] = await Promise.allSettled([
         api.getMonitorKpis(params),
         filters.objectType === 'orchestrator'
-          ? api.getOrchestratorRuns(params)
-          : filters.objectType === 'pipeline'
-          ? api.getPipelineRuns(params)
+          ? Promise.resolve(null)
           : api.getPipelineRuns(params),
+        filters.objectType === 'pipeline'
+          ? Promise.resolve(null)
+          : api.getOrchestratorRuns(params),
       ]);
 
       if (kpiRes.status === 'fulfilled') {
         dispatch(setKpis(kpiRes.value.data.data as MonitorKpis));
       }
 
-      if (runsRes.status === 'fulfilled') {
-        const data = runsRes.value.data.data;
-        if (filters.objectType === 'orchestrator') {
-          dispatch(setOrchestratorRuns({ runs: data.items ?? [], total: data.total ?? 0 }));
-        } else {
-          dispatch(setPipelineRuns({ runs: data.items ?? [], total: data.total ?? 0 }));
-        }
+      if (pipelineRes.status === 'fulfilled' && pipelineRes.value) {
+        const data = pipelineRes.value.data.data;
+        dispatch(setPipelineRuns({ runs: data.items ?? [], total: data.total ?? 0 }));
+        setPipelineTotal(data.total ?? 0);
+      } else {
+        dispatch(setPipelineRuns({ runs: [], total: 0 }));
+        setPipelineTotal(0);
       }
 
-      if (filters.objectType === 'all' || filters.objectType === 'orchestrator') {
-        try {
-          const orchRes = await api.getOrchestratorRuns(params);
-          dispatch(setOrchestratorRuns({
-            runs: orchRes.data.data.items ?? [],
-            total: orchRes.data.data.total ?? 0,
-          }));
-        } catch { /* orchestrator endpoint may not exist yet */ }
+      if (orchRes.status === 'fulfilled' && orchRes.value) {
+        const data = orchRes.value.data.data;
+        dispatch(setOrchestratorRuns({
+          runs: data.items ?? [],
+          total: data.total ?? 0,
+        }));
+        setOrchestratorTotal(data.total ?? 0);
+      } else {
+        dispatch(setOrchestratorRuns({ runs: [], total: 0 }));
+        setOrchestratorTotal(0);
       }
     } finally {
       dispatch(setLoading(false));
@@ -325,7 +400,7 @@ export function MonitorView() {
       id: `execution-${run.pipelineRunId}`,
       type: 'execution',
       objectId: run.pipelineRunId,
-      objectName: `Run: ${run.pipelineName}`,
+      objectName: formatExecutionTabName(run.pipelineName, run.pipelineRunId),
       unsaved: false,
       isDirty: false,
       executionKind: 'pipeline',
@@ -344,25 +419,51 @@ export function MonitorView() {
     }));
   };
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const normalizedSubmittedBy = submittedByInput.trim().toLowerCase();
+
+  const visiblePipelineRuns = useMemo(() => {
+    const filtered = pipelineRuns.filter(run =>
+      !normalizedSubmittedBy || String(run.submittedBy ?? '').toLowerCase().includes(normalizedSubmittedBy),
+    );
+    return sortPipelineRunList(filtered, sortBy);
+  }, [normalizedSubmittedBy, pipelineRuns, sortBy]);
+
+  const visibleOrchestratorRuns = useMemo(() => {
+    const filtered = orchestratorRuns.filter(run =>
+      !normalizedSubmittedBy || String(run.submittedBy ?? '').toLowerCase().includes(normalizedSubmittedBy),
+    );
+    return sortOrchestratorRunList(filtered, sortBy);
+  }, [normalizedSubmittedBy, orchestratorRuns, sortBy]);
+  const visiblePipelineRunIdSet = useMemo(() => new Set(visiblePipelineRuns.map(run => run.pipelineRunId)), [visiblePipelineRuns]);
+  const visibleOrchestratorRunIdSet = useMemo(() => new Set(visibleOrchestratorRuns.map(run => run.orchRunId)), [visibleOrchestratorRuns]);
+
+  const effectiveTotalCount = filters.objectType === 'pipeline'
+    ? pipelineTotal
+    : filters.objectType === 'orchestrator'
+      ? orchestratorTotal
+      : pipelineTotal + orchestratorTotal;
+  const visibleTotalCount = visiblePipelineRuns.length + visibleOrchestratorRuns.length;
+  const totalCountForPagination = normalizedSubmittedBy ? visibleTotalCount : effectiveTotalCount;
+  const totalPages = Math.max(1, Math.ceil(totalCountForPagination / pageSize));
   const lastRefreshed = lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleTimeString() : 'never';
+  const activeObjectLabel = filters.objectType === 'orchestrator' ? 'Active Orchestrators' : 'Active Pipelines';
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#0f1117]">
 
       {/* ── Toolbar ──────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-neutral-200 px-4 py-3 flex flex-wrap items-center gap-3">
+      <div className="bg-[#161b25] border-b border-slate-700/60 px-4 py-3 flex flex-wrap items-center gap-3">
 
         {/* Scope filter */}
-        <div className="flex items-center gap-1 bg-neutral-100 rounded-md p-0.5">
+        <div className="flex items-center gap-1 bg-slate-800 rounded-md p-0.5">
           {(['global', 'project'] as MonitorScope[]).map(s => (
             <button
               key={s}
               onClick={() => dispatch(setScope(s))}
               className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                filters.scope === s ? 'bg-white shadow text-neutral-900' : 'text-neutral-500 hover:text-neutral-700'
+                filters.scope === s ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
               }`}
             >
               {s === 'global' ? 'Global' : 'Project'}
@@ -370,11 +471,25 @@ export function MonitorView() {
           ))}
         </div>
 
+        <select
+          value={filters.projectId ?? ''}
+          onChange={e => dispatch(setProjectFilter(e.target.value || null))}
+          disabled={filters.scope !== 'project'}
+          className="text-xs border border-slate-600 rounded px-2 py-1.5 bg-slate-800 text-white disabled:opacity-50"
+        >
+          <option value="">Select project…</option>
+          {projects.map(project => (
+            <option key={project.projectId} value={project.projectId}>
+              {project.projectDisplayName}
+            </option>
+          ))}
+        </select>
+
         {/* Object type filter */}
         <select
           value={filters.objectType}
           onChange={e => dispatch(setObjectType(e.target.value as 'all' | 'pipeline' | 'orchestrator'))}
-          className="text-xs border border-neutral-200 rounded px-2 py-1.5 bg-white"
+          className="text-xs border border-slate-600 rounded px-2 py-1.5 bg-slate-800 text-white"
         >
           <option value="all">All types</option>
           <option value="pipeline">Pipelines only</option>
@@ -385,7 +500,7 @@ export function MonitorView() {
         <select
           value={filters.status ?? ''}
           onChange={e => dispatch(setStatusFilter((e.target.value || null) as RunStatus | null))}
-          className="text-xs border border-neutral-200 rounded px-2 py-1.5 bg-white"
+          className="text-xs border border-slate-600 rounded px-2 py-1.5 bg-slate-800 text-white"
         >
           <option value="">All statuses</option>
           {(['RUNNING', 'SUCCESS', 'FAILED', 'PENDING', 'QUEUED', 'CANCELLED', 'RETRYING', 'TIMED_OUT', 'PARTIALLY_COMPLETED'] as RunStatus[]).map(s => (
@@ -397,7 +512,7 @@ export function MonitorView() {
         <select
           value={filters.triggerType ?? ''}
           onChange={e => dispatch(setTriggerTypeFilter((e.target.value || null) as TriggerType | null))}
-          className="text-xs border border-neutral-200 rounded px-2 py-1.5 bg-white"
+          className="text-xs border border-slate-600 rounded px-2 py-1.5 bg-slate-800 text-white"
         >
           <option value="">All triggers</option>
           {(['MANUAL', 'SCHEDULED', 'API', 'ORCHESTRATOR'] as TriggerType[]).map(t => (
@@ -410,20 +525,20 @@ export function MonitorView() {
           type="date"
           value={filters.dateFrom ?? ''}
           onChange={e => dispatch(setDateRange({ from: e.target.value || null, to: filters.dateTo }))}
-          className="text-xs border border-neutral-200 rounded px-2 py-1.5 bg-white"
+          className="text-xs border border-slate-600 rounded px-2 py-1.5 bg-slate-800 text-white"
           title="From date"
         />
-        <span className="text-xs text-neutral-400">to</span>
+        <span className="text-xs text-slate-400">to</span>
         <input
           type="date"
           value={filters.dateTo ?? ''}
           onChange={e => dispatch(setDateRange({ from: filters.dateFrom, to: e.target.value || null }))}
-          className="text-xs border border-neutral-200 rounded px-2 py-1.5 bg-white"
+          className="text-xs border border-slate-600 rounded px-2 py-1.5 bg-slate-800 text-white"
           title="To date"
         />
 
         {/* My jobs toggle */}
-        <label className="flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
           <input
             type="checkbox"
             checked={filters.myJobsOnly}
@@ -435,16 +550,40 @@ export function MonitorView() {
         {/* Search */}
         <input
           type="search"
-          placeholder="Search runs…"
+          placeholder="Search run / job…"
           value={searchInput}
           onChange={e => setSearchInput(e.target.value)}
-          className="text-xs border border-neutral-200 rounded px-3 py-1.5 bg-white w-48"
+          className="text-xs border border-slate-600 rounded px-3 py-1.5 bg-slate-800 text-white placeholder-slate-500 w-48"
         />
+
+        <input
+          type="search"
+          placeholder="Filter by user…"
+          value={submittedByInput}
+          onChange={e => setSubmittedByInput(e.target.value)}
+          className="text-xs border border-slate-600 rounded px-3 py-1.5 bg-slate-800 text-white placeholder-slate-500 w-40"
+          title="Filters visible runs by submitted user"
+        />
+
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value as MonitorSortKey)}
+          className="text-xs border border-slate-600 rounded px-2 py-1.5 bg-slate-800 text-white"
+        >
+          <option value="start_desc">Start Date ↓</option>
+          <option value="start_asc">Start Date ↑</option>
+          <option value="job_asc">Job Name A-Z</option>
+          <option value="job_desc">Job Name Z-A</option>
+          <option value="user_asc">User A-Z</option>
+          <option value="user_desc">User Z-A</option>
+          <option value="run_desc">Run ID ↓</option>
+          <option value="run_asc">Run ID ↑</option>
+        </select>
 
         {/* Reset */}
         <button
-          onClick={() => { dispatch(resetFilters()); setSearchInput(''); }}
-          className="text-xs text-neutral-500 hover:text-neutral-700 underline"
+          onClick={() => { dispatch(resetFilters()); setSearchInput(''); setSubmittedByInput(''); setSortBy('start_desc'); }}
+          className="text-xs text-slate-400 hover:text-white underline"
         >
           Reset
         </button>
@@ -452,7 +591,7 @@ export function MonitorView() {
         <div className="flex-1" />
 
         {/* Auto-refresh */}
-        <label className="flex items-center gap-1.5 text-xs text-neutral-600 cursor-pointer">
+        <label className="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
           <input
             type="checkbox"
             checked={autoRefreshEnabled}
@@ -465,7 +604,7 @@ export function MonitorView() {
           <select
             value={autoRefreshIntervalMs}
             onChange={e => dispatch(setAutoRefreshInterval(Number(e.target.value)))}
-            className="text-xs border border-neutral-200 rounded px-2 py-1 bg-white"
+            className="text-xs border border-slate-600 rounded px-2 py-1 bg-slate-800 text-white"
           >
             <option value={10000}>10s</option>
             <option value={30000}>30s</option>
@@ -483,7 +622,7 @@ export function MonitorView() {
         </button>
 
         {lastRefreshedAt && (
-          <span className="text-xs text-neutral-400">Last: {lastRefreshed}</span>
+          <span className="text-xs text-slate-400">Last: {lastRefreshed}</span>
         )}
       </div>
 
@@ -497,27 +636,41 @@ export function MonitorView() {
           <KpiCard label="Avg Duration"      value={fmtDuration(kpis.avgDurationMsToday)} color="default" />
           <KpiCard label="SLA Breaches"      value={kpis.slaBreachesToday} color={kpis.slaBreachesToday > 0 ? 'red' : 'default'} />
           <KpiCard label="Data Volume"       value={`${kpis.dataVolumeGbToday.toFixed(1)} GB`} color="default" />
+          <KpiCard label={activeObjectLabel} value={kpis.activePipelines} color="default" />
         </div>
       )}
 
       {/* ── Bulk action bar ───────────────────────────────────────────────────── */}
       {selectedRunIds.length > 0 && (
-        <div className="mx-4 mb-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-md flex items-center gap-3 text-xs">
-          <span className="font-medium text-blue-700">{selectedRunIds.length} selected</span>
-          <button className="text-blue-600 hover:underline" onClick={async () => {
-            await Promise.allSettled(selectedRunIds.map(id => api.retryPipelineRun(id)));
+        <div className="mx-4 mb-2 px-3 py-2 bg-blue-900/20 border border-blue-700/40 rounded-md flex items-center gap-3 text-xs">
+          <span className="font-medium text-blue-400">{selectedRunIds.length} selected</span>
+          <button className="text-blue-400 hover:underline" onClick={async () => {
+            const pipelineIds = selectedRunIds.filter(id => visiblePipelineRunIdSet.has(id));
+            const orchestratorIds = selectedRunIds.filter(id => visibleOrchestratorRunIdSet.has(id));
+            await Promise.allSettled([
+              ...pipelineIds.map(id => api.retryPipelineRun(id)),
+              ...orchestratorIds.map(id => api.retryOrchestratorRun(id)),
+            ]);
             dispatch(clearSelection());
             loadData();
           }}>Retry</button>
-          <button className="text-blue-600 hover:underline" onClick={async () => {
-            await Promise.allSettled(selectedRunIds.map(id => api.cancelPipelineRun(id)));
+          <button className="text-blue-400 hover:underline" onClick={async () => {
+            const pipelineIds = selectedRunIds.filter(id => visiblePipelineRunIdSet.has(id));
+            const orchestratorIds = selectedRunIds.filter(id => visibleOrchestratorRunIdSet.has(id));
+            await Promise.allSettled([
+              ...pipelineIds.map(id => api.cancelPipelineRun(id)),
+              ...orchestratorIds.map(id => api.cancelOrchestratorRun(id)),
+            ]);
             dispatch(clearSelection());
             loadData();
           }}>Cancel</button>
-          <button className="text-blue-600 hover:underline" onClick={() => {
-            const csv = ['Run ID,Name,Status,Trigger,Started,Duration',
-              ...pipelineRuns.filter(r => selectedRunIds.includes(r.pipelineRunId)).map(r =>
-                [r.pipelineRunId, r.pipelineName, r.runStatus, r.triggerType, r.startDtm ?? '', r.durationMs ?? ''].join(',')
+          <button className="text-blue-400 hover:underline" onClick={() => {
+            const csv = ['Type,Run ID,Name,Status,Trigger,Submitted By,Started,Duration',
+              ...visibleOrchestratorRuns.filter(r => selectedRunIds.includes(r.orchRunId)).map(r =>
+                ['orchestrator', r.orchRunId, r.orchestratorName, r.runStatus, r.triggerType, r.submittedBy ?? '', r.startDtm ?? '', r.durationMs ?? ''].join(',')
+              ),
+              ...visiblePipelineRuns.filter(r => selectedRunIds.includes(r.pipelineRunId)).map(r =>
+                ['pipeline', r.pipelineRunId, r.pipelineName, r.runStatus, r.triggerType, r.submittedBy ?? '', r.startDtm ?? '', r.durationMs ?? ''].join(',')
               )
             ].join('\n');
             const blob = new Blob([csv], { type: 'text/csv' });
@@ -525,45 +678,50 @@ export function MonitorView() {
             const a = document.createElement('a'); a.href = url; a.download = 'runs.csv'; a.click();
             URL.revokeObjectURL(url);
           }}>Export CSV</button>
-          <button className="text-neutral-500 hover:underline ml-auto" onClick={() => dispatch(clearSelection())}>Clear</button>
+          <button className="text-slate-400 hover:text-white ml-auto" onClick={() => dispatch(clearSelection())}>Clear</button>
         </div>
       )}
 
       {/* ── Execution grid ────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto px-4 pb-4">
-        {isLoading && (orchestratorRuns.length + pipelineRuns.length) === 0 ? (
-          <div className="flex items-center justify-center h-40 text-neutral-400 text-sm">Loading executions…</div>
-        ) : (orchestratorRuns.length + pipelineRuns.length) === 0 ? (
-          <div className="flex items-center justify-center h-40 text-neutral-400 text-sm">No executions match the current filters.</div>
+        {isLoading && (visibleOrchestratorRuns.length + visiblePipelineRuns.length) === 0 ? (
+          <div className="flex items-center justify-center h-40 text-slate-400 text-sm">Loading executions…</div>
+        ) : (visibleOrchestratorRuns.length + visiblePipelineRuns.length) === 0 ? (
+          <div className="flex items-center justify-center h-40 text-slate-400 text-sm">No executions match the current filters.</div>
         ) : (
-          <table className="w-full text-left bg-white rounded-lg shadow-sm overflow-hidden">
-            <thead className="bg-neutral-50 border-b border-neutral-200">
+          <table className="w-full text-left bg-[#161b25] rounded-lg overflow-hidden border border-slate-700/50">
+            <thead className="bg-slate-800/60 border-b border-slate-700/60">
               <tr>
                 <th className="px-3 py-2 w-8">
                   <input
                     type="checkbox"
-                    onChange={e => e.target.checked ? dispatch(selectAll()) : dispatch(clearSelection())}
-                    checked={selectedRunIds.length > 0 && selectedRunIds.length === (pipelineRuns.length + orchestratorRuns.length)}
+                    onChange={e => e.target.checked
+                      ? dispatch(setSelectedRuns([
+                          ...visibleOrchestratorRuns.map(run => run.orchRunId),
+                          ...visiblePipelineRuns.map(run => run.pipelineRunId),
+                        ]))
+                      : dispatch(clearSelection())}
+                    checked={selectedRunIds.length > 0 && selectedRunIds.length === (visiblePipelineRuns.length + visibleOrchestratorRuns.length)}
                   />
                 </th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Run ID</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Name</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Version</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Status</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Trigger</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Submitted By</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Started At</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Duration</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Rows</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Bytes In</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">Retries</th>
-                <th className="px-3 py-2 text-xs font-medium text-neutral-600">SLA</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Run ID</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Name</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Version</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Status</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Trigger</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Submitted By</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Started At</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Duration</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Rows</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Bytes In</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">Retries</th>
+                <th className="px-3 py-2 text-xs font-semibold text-slate-300 uppercase tracking-wide">SLA</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-100">
+            <tbody>
 
               {/* Orchestrator runs */}
-              {orchestratorRuns.map(orch => (
+              {visibleOrchestratorRuns.map(orch => (
                 <OrchestratorRunRow
                   key={orch.orchRunId}
                   run={orch}
@@ -578,7 +736,7 @@ export function MonitorView() {
               ))}
 
               {/* Standalone pipeline runs */}
-              {pipelineRuns.map(run => (
+              {visiblePipelineRuns.map(run => (
                 <PipelineRunRow
                   key={run.pipelineRunId}
                   run={run}
@@ -593,20 +751,20 @@ export function MonitorView() {
       </div>
 
       {/* ── Pagination ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-t border-neutral-200 px-4 py-2 flex items-center gap-3 text-xs text-neutral-600">
-        <span>{totalCount.toLocaleString()} total</span>
+      <div className="bg-[#161b25] border-t border-slate-700/60 px-4 py-2 flex items-center gap-3 text-xs text-slate-300">
+        <span>{totalCountForPagination.toLocaleString()} total</span>
         <div className="flex-1" />
         <select
           value={pageSize}
           onChange={e => dispatch(setPageSize(Number(e.target.value)))}
-          className="border border-neutral-200 rounded px-2 py-1 bg-white"
+          className="border border-slate-600 rounded px-2 py-1 bg-slate-800 text-white"
         >
           {[25, 50, 100, 250].map(n => <option key={n} value={n}>{n} / page</option>)}
         </select>
         <button
           onClick={() => dispatch(setPage(Math.max(1, page - 1)))}
           disabled={page <= 1}
-          className="px-2 py-1 rounded border border-neutral-200 disabled:opacity-40 hover:bg-neutral-50"
+          className="px-2 py-1 rounded border border-slate-600 text-slate-300 disabled:opacity-40 hover:bg-slate-800"
         >
           ‹ Prev
         </button>
@@ -614,7 +772,7 @@ export function MonitorView() {
         <button
           onClick={() => dispatch(setPage(Math.min(totalPages, page + 1)))}
           disabled={page >= totalPages}
-          className="px-2 py-1 rounded border border-neutral-200 disabled:opacity-40 hover:bg-neutral-50"
+          className="px-2 py-1 rounded border border-slate-600 text-slate-300 disabled:opacity-40 hover:bg-slate-800"
         >
           Next ›
         </button>

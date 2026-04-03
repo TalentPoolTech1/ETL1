@@ -12,10 +12,12 @@
  *               ▸ Orchestrators  [+]
  *               ▾ SubFolder …
  *
- * This means pipelines and orchestrators are ALWAYS created and displayed
- * relative to a specific scope (project root OR a folder).
- * The "new pipeline" button on a folder creates a pipeline with that folder_id.
- * The "new pipeline" SubLabel at project root creates with folder_id = NULL.
+ * STYLING RULES — no raw palette Tailwind classes, no hardcoded px/hex:
+ *   • Icon accent colors  → text-ic-{type}  (e.g. text-ic-pipeline, text-ic-orch)
+ *   • Status dot colors   → bg-ok / bg-warn / bg-err
+ *   • Text colors         → text-tx1 / text-tx2 / text-tx3
+ *   • Font sizes          → text-sm / text-base / text-micro  (wired to CSS vars)
+ *   • Data type badges    → .dt-badge .dt-badge--{number|string|date|other}
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
@@ -66,27 +68,26 @@ function InlineRename({ defaultValue, onCommit, onCancel, indent }: {
           if (e.key === 'Enter') onCommit(val.trim() || defaultValue);
           if (e.key === 'Escape') onCancel();
         }}
-        className="flex-1 bg-slate-700 border border-blue-500 rounded px-1.5 py-0.5 text-[12px] text-slate-100 outline-none min-w-0"
+        style={{ background: 'var(--bg-5)', border: '1px solid var(--ac)', borderRadius: 3, color: 'var(--tx1)', fontSize: 'var(--fs-sm)' }}
+        className="flex-1 px-1.5 py-0.5 outline-none min-w-0"
       />
     </div>
   );
 }
 
-// ─── Icon button ──────────────────────────────────────────────────────────────
+// ─── Icon action button ───────────────────────────────────────────────────────
 
-function Btn({ title, onClick, danger, success, children, icon: Icon }: {
-  title: string; onClick: (e: React.MouseEvent) => void; danger?: boolean; success?: boolean; children?: React.ReactNode; icon?: React.ElementType;
+function Btn({ title, onClick, danger, success, icon: Icon }: {
+  title: string; onClick: (e: React.MouseEvent) => void;
+  danger?: boolean; success?: boolean; icon: React.ElementType;
 }) {
   return (
     <button
       title={title}
       onClick={e => { e.stopPropagation(); onClick(e); }}
-      className={`w-3.5 h-3.5 flex items-center justify-center rounded flex-shrink-0 transition-all duration-200 text-slate-400
-        ${danger ? 'hover:bg-red-950/40 hover:text-red-400' :
-          success ? 'hover:bg-emerald-950/40 hover:text-emerald-400' :
-          'hover:bg-slate-700/60 hover:text-slate-200'}`}
+      className={`thm-icon-btn ${danger ? 'thm-icon-btn--danger' : success ? 'thm-icon-btn--success' : ''}`}
     >
-      {Icon ? <Icon className="w-2.5 h-2.5" strokeWidth={1.5} /> : children}
+      <Icon className="w-2.5 h-2.5" strokeWidth={1.5} />
     </button>
   );
 }
@@ -113,32 +114,29 @@ function TreeItem({
     <div
       style={{ paddingLeft: pl }}
       onClick={onPrimaryClick}
-      className={`
-        group/item relative flex items-center h-[22px] rounded-[2px] cursor-pointer select-none
-        transition-colors duration-75 pr-1 overflow-hidden
-        ${isActive
-          ? 'bg-blue-600/20 text-blue-300'
-          : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'}
-      `}
+      className={`group/item thm-tree-row ${isActive ? 'thm-tree-row--active' : ''}`}
     >
       <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
         {isLoading
-          ? <Loader2 className="w-2.5 h-2.5 animate-spin text-slate-600" />
+          ? <Loader2 className="w-2.5 h-2.5 animate-spin text-tx3" />
           : hasChildren
             ? (isExpanded
-              ? <ChevronDown className="w-2.5 h-2.5 text-slate-500" strokeWidth={1.5} />
-              : <ChevronRight className="w-2.5 h-2.5 text-slate-500" strokeWidth={1.5} />)
+              ? <ChevronDown  className="w-2.5 h-2.5 text-tx3" strokeWidth={1.5} />
+              : <ChevronRight className="w-2.5 h-2.5 text-tx3" strokeWidth={1.5} />)
             : <span className="w-2.5 h-2.5" />
         }
       </span>
+
       <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0 mr-0.5">
         {React.isValidElement(icon)
-          ? React.cloneElement(icon as React.ReactElement, { strokeWidth: 1.2 } as any)
+          ? React.cloneElement(icon as React.ReactElement, { strokeWidth: 1.3 } as object)
           : icon}
       </span>
-      <span className={`flex-1 min-w-0 text-[12px] truncate leading-none ${isActive ? 'font-medium' : ''}`}>
+
+      <span className="flex-1 min-w-0 truncate leading-none">
         {label}
       </span>
+
       {actions && (
         <span
           className={`
@@ -146,8 +144,8 @@ function TreeItem({
             flex items-center gap-0.5 px-0.5
             opacity-0 group-hover/item:opacity-100
             transition-opacity duration-100
-            ${isActive ? 'bg-blue-600/20' : 'bg-slate-800'}
           `}
+          style={{ background: isActive ? 'var(--ac-bg)' : 'var(--bg-2)' }}
           onClick={e => e.stopPropagation()}
         >
           {actions}
@@ -162,7 +160,7 @@ function TreeItem({
 interface SectionProps {
   label: string;
   icon: React.ElementType;
-  iconColor: string;
+  iconClass: string;
   isExpanded: boolean;
   onToggle: () => void;
   onRefresh?: () => void;
@@ -170,33 +168,27 @@ interface SectionProps {
   addTitle?: string;
 }
 
-function Section({ label, icon: Icon, iconColor, isExpanded, onToggle, onRefresh, onAdd, addTitle }: SectionProps) {
+function Section({ label, icon: Icon, iconClass, isExpanded, onToggle, onRefresh, onAdd, addTitle }: SectionProps) {
   return (
-    <div
-      onClick={onToggle}
-      className="group/sec relative flex items-center h-[22px] px-1.5 rounded-[2px] cursor-pointer select-none
-        text-slate-400 font-medium hover:bg-slate-800/80 transition-colors overflow-hidden"
-    >
+    <div onClick={onToggle} className="group/sec thm-section-row">
       <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
         {isExpanded
-          ? <ChevronDown className="w-2.5 h-2.5 text-slate-600" strokeWidth={1.5} />
-          : <ChevronRight className="w-2.5 h-2.5 text-slate-600" strokeWidth={1.5} />}
+          ? <ChevronDown  className="w-2.5 h-2.5 text-tx3" strokeWidth={1.5} />
+          : <ChevronRight className="w-2.5 h-2.5 text-tx3" strokeWidth={1.5} />}
       </span>
       <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0 mr-0.5">
-        <Icon className={`w-3 h-3 ${iconColor}`} strokeWidth={1.5} />
+        <Icon className={`w-3 h-3 ${iconClass}`} strokeWidth={1.5} />
       </span>
-      <span className="flex-1 min-w-0 text-[12px] font-semibold truncate">{label}</span>
+      <span className="flex-1 min-w-0 truncate">{label}</span>
+
       {(onRefresh || onAdd) && (
         <span
           className="absolute right-0 top-0 bottom-0 flex items-center gap-0.5 px-0.5
-            opacity-0 group-hover/sec:opacity-100 transition-opacity duration-100 bg-slate-800"
+            opacity-0 group-hover/sec:opacity-100 transition-opacity duration-100"
+          style={{ background: 'var(--bg-2)' }}
           onClick={e => e.stopPropagation()}>
-          {onRefresh && (
-            <Btn title="Refresh" onClick={() => onRefresh()} icon={RefreshCw} />
-          )}
-          {onAdd && (
-            <Btn title={addTitle ?? 'Add'} onClick={() => onAdd()} icon={Plus} />
-          )}
+          {onRefresh && <Btn title="Refresh"           onClick={() => onRefresh()} icon={RefreshCw} />}
+          {onAdd     && <Btn title={addTitle ?? 'Add'} onClick={() => onAdd()}     icon={Plus} />}
         </span>
       )}
     </div>
@@ -205,41 +197,33 @@ function Section({ label, icon: Icon, iconColor, isExpanded, onToggle, onRefresh
 
 // ─── Flat nav row ─────────────────────────────────────────────────────────────
 
-function NavRow({ icon: Icon, iconColor, label, isActive, onClick }: {
-  icon: React.ElementType; iconColor: string; label: string; isActive?: boolean; onClick: () => void;
+function NavRow({ icon: Icon, iconClass, label, isActive, onClick }: {
+  icon: React.ElementType; iconClass: string; label: string; isActive?: boolean; onClick: () => void;
 }) {
   return (
-    <div
-      onClick={onClick}
-      className={`flex items-center h-[22px] px-1.5 rounded-[2px] cursor-pointer select-none transition-all
-        ${isActive ? 'bg-blue-600/20 text-blue-300' : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'}`}
-    >
+    <div onClick={onClick} className={`thm-nav-row ${isActive ? 'thm-nav-row--active' : ''}`}>
       <span className="w-3.5 h-3.5 flex-shrink-0" />
       <span className="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0 mr-0.5">
-        <Icon className={`w-3 h-3 ${iconColor}`} strokeWidth={1.5} />
+        <Icon className={`w-3 h-3 ${iconClass}`} strokeWidth={1.5} />
       </span>
-      <span className="flex-1 text-[12px] truncate">{label}</span>
+      <span className="flex-1 truncate">{label}</span>
     </div>
   );
 }
 
-// ─── Sub-group label with (+) ─────────────────────────────────────────────────
+// ─── Sub-group label ──────────────────────────────────────────────────────────
 
 function SubLabel({ label, depth, onAdd, addTitle }: {
   label: string; depth: number; onAdd?: () => void; addTitle?: string;
 }) {
   return (
-    <div
-      className="group/sub flex items-center h-[18px] text-[8px] uppercase tracking-[0.08em] text-slate-600 font-bold"
-      style={{ paddingLeft: 4 + depth * 12 + 18 }}
-    >
+    <div className="group/sub thm-sublabel" style={{ paddingLeft: 4 + depth * 12 + 18 }}>
       <span className="flex-1">{label}</span>
       {onAdd && (
         <button
           title={addTitle}
           onClick={e => { e.stopPropagation(); onAdd(); }}
-          className="opacity-20 group-hover/sub:opacity-100 mr-1 w-3 h-3 flex items-center justify-center
-            rounded text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all"
+          className="thm-icon-btn opacity-40 group-hover/sub:opacity-100 mr-1"
         >
           <Plus className="w-2.5 h-2.5" strokeWidth={1.5} />
         </button>
@@ -249,13 +233,12 @@ function SubLabel({ label, depth, onAdd, addTitle }: {
 }
 
 function Divider() {
-  return <div className="mx-2 border-t border-slate-800 my-1" />;
+  return <div className="thm-divider" />;
 }
 
 function EmptyHint({ depth, text }: { depth: number; text: string }) {
   return (
-    <div className="h-[18px] flex items-center text-[11px] text-slate-700/60 italic"
-      style={{ paddingLeft: 4 + depth * 12 + 18 }}>
+    <div className="thm-empty-hint" style={{ paddingLeft: 4 + depth * 12 + 18 }}>
       {text}
     </div>
   );
@@ -296,21 +279,30 @@ function PipelineRow({ pipeline, projectId, projectName, depth }: {
   );
 
   return (
-    <TreeItem
-      depth={depth}
-      icon={<Workflow className="w-3 h-3 text-sky-400" strokeWidth={1.5} />}
-      label={pipeline.pipelineDisplayName}
-      isActive={isActive}
-      onPrimaryClick={open}
-      actions={<>
-        <Btn title="Run pipeline" onClick={open} success icon={Play} />
-        <Btn title="Rename" onClick={() => setRenaming(true)} icon={Pencil} />
-        <Btn title="Delete" danger onClick={() => {
-          if (window.confirm(`Delete pipeline "${pipeline.pipelineDisplayName}"?`))
-            dispatch(deletePipeline({ projectId, pipelineId: pipeline.pipelineId }));
-        }} icon={Trash2} />
-      </>}
-    />
+    <div
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('pipelineId', pipeline.pipelineId);
+        e.dataTransfer.setData('pipelineName', pipeline.pipelineDisplayName);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+    >
+      <TreeItem
+        depth={depth}
+        icon={<Workflow className="w-3 h-3 text-ic-pipeline" strokeWidth={1.3} />}
+        label={pipeline.pipelineDisplayName}
+        isActive={isActive}
+        onPrimaryClick={open}
+        actions={<>
+          <Btn title="Run pipeline"  onClick={open}              icon={Play}   success />
+          <Btn title="Rename"        onClick={() => setRenaming(true)} icon={Pencil} />
+          <Btn title="Delete" danger onClick={() => {
+            if (window.confirm(`Delete pipeline "${pipeline.pipelineDisplayName}"?`))
+              dispatch(deletePipeline({ projectId, pipelineId: pipeline.pipelineId }));
+          }} icon={Trash2} />
+        </>}
+      />
+    </div>
   );
 }
 
@@ -349,26 +341,34 @@ function OrchestratorRow({ orch, projectId, projectName, depth }: {
   );
 
   return (
-    <TreeItem
-      depth={depth}
-      icon={<GitMerge className="w-3 h-3 text-purple-400" strokeWidth={1.5} />}
-      label={orch.orchDisplayName}
-      isActive={isActive}
-      onPrimaryClick={open}
-      actions={<>
-        <Btn title="Rename" onClick={() => setRenaming(true)} icon={Pencil} />
-        <Btn title="Delete" danger onClick={() => {
-          if (window.confirm(`Delete orchestrator "${orch.orchDisplayName}"?`))
-            dispatch(deleteOrchestrator({ projectId, orchId: orch.orchId }));
-        }} icon={Trash2} />
-      </>}
-    />
+    <div
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('orchestratorId', orch.orchId);
+        e.dataTransfer.setData('orchestratorName', orch.orchDisplayName);
+        e.dataTransfer.effectAllowed = 'copy';
+      }}
+    >
+      <TreeItem
+        depth={depth}
+        icon={<GitMerge className="w-3 h-3 text-ic-orch" strokeWidth={1.3} />}
+        label={orch.orchDisplayName}
+        isActive={isActive}
+        onPrimaryClick={open}
+        actions={<>
+          <Btn title="Rename" onClick={() => setRenaming(true)} icon={Pencil} />
+          <Btn title="Delete" danger onClick={() => {
+            if (window.confirm(`Delete orchestrator "${orch.orchDisplayName}"?`))
+              dispatch(deleteOrchestrator({ projectId, orchId: orch.orchId }));
+          }} icon={Trash2} />
+        </>}
+      />
+    </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PIPELINES + ORCHESTRATORS BLOCK
-// Reused at both project-root level (from Redux) and folder level (local state)
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface ContentBlockProps {
@@ -389,29 +389,23 @@ function ContentBlock({
 }: ContentBlockProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center gap-1 h-[22px] text-[11px] text-slate-600"
-        style={{ paddingLeft: 4 + depth * 12 + 18 }}>
-        <Loader2 className="w-2.5 h-2.5 animate-spin" strokeWidth={1.5} /> Loading…
+      <div className="thm-empty-hint" style={{ paddingLeft: 4 + depth * 12 + 18 }}>
+        <Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" strokeWidth={1.5} />
+        Loading…
       </div>
     );
   }
 
   return (
     <>
-      {/* Pipelines sub-group */}
       <SubLabel label="Pipelines" depth={depth - 1} onAdd={onNewPipeline} addTitle="New pipeline here" />
-      {pipelines && pipelines.length === 0 && (
-        <EmptyHint depth={depth} text="No pipelines yet" />
-      )}
+      {pipelines && pipelines.length === 0 && <EmptyHint depth={depth} text="No pipelines yet" />}
       {pipelines && pipelines.map(p => (
         <PipelineRow key={p.pipelineId} pipeline={p} projectId={projectId} projectName={projectName} depth={depth} />
       ))}
 
-      {/* Orchestrators sub-group */}
       <SubLabel label="Orchestrators" depth={depth - 1} onAdd={onNewOrchestrator} addTitle="New orchestrator here" />
-      {orchestrators && orchestrators.length === 0 && (
-        <EmptyHint depth={depth} text="No orchestrators yet" />
-      )}
+      {orchestrators && orchestrators.length === 0 && <EmptyHint depth={depth} text="No orchestrators yet" />}
       {orchestrators && orchestrators.map(o => (
         <OrchestratorRow key={o.orchId} orch={o} projectId={projectId} projectName={projectName} depth={depth} />
       ))}
@@ -420,17 +414,11 @@ function ContentBlock({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FOLDER NODE — recursive, self-contained
-// Owns its sub-folder children, pipelines, and orchestrators as local state
-// (loaded lazily on first expand).
+// FOLDER NODE — recursive
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FolderNode({
-  folder, projectName, depth,
-}: {
-  folder: FolderSummary;
-  projectName: string;
-  depth: number;
+function FolderNode({ folder, projectName, depth }: {
+  folder: FolderSummary; projectName: string; depth: number;
 }) {
   const dispatch = useAppDispatch();
 
@@ -438,10 +426,9 @@ function FolderNode({
   const [contentLoaded, setContentLoaded]   = useState(false);
   const [contentLoading, setContentLoading] = useState(false);
 
-  const subFolders = useAppSelector(s => (s.projects.foldersByProject[folder.projectId] ?? []).filter(f => f.parentFolderId === folder.folderId));
-  const pipelines = useAppSelector(s => s.projects.pipelinesByFolder[folder.folderId] ?? []);
+  const subFolders    = useAppSelector(s => (s.projects.foldersByProject[folder.projectId] ?? []).filter(f => f.parentFolderId === folder.folderId));
+  const pipelines     = useAppSelector(s => s.projects.pipelinesByFolder[folder.folderId] ?? []);
   const orchestrators = useAppSelector(s => s.projects.orchestratorsByFolder[folder.folderId] ?? []);
-
   const [renaming, setRenaming] = useState(false);
 
   const load = useCallback(async () => {
@@ -471,15 +458,9 @@ function FolderNode({
       dispatch(renameFolder({ projectId: folder.projectId, folderId: folder.folderId, name: val }));
   };
 
-  // When a new pipeline/orch is created inside this folder, add it to local state
-  const handleNewPipeline = () =>
-    dispatch(openCreatePipeline({ projectId: folder.projectId, folderId: folder.folderId }));
-
-  const handleNewOrchestrator = () =>
-    dispatch(openCreateOrchestrator({ projectId: folder.projectId, folderId: folder.folderId }));
-
-  const handleNewSubFolder = () =>
-    dispatch(openCreateFolder({ projectId: folder.projectId, parentFolderId: folder.folderId }));
+  const handleNewPipeline      = () => dispatch(openCreatePipeline({ projectId: folder.projectId, folderId: folder.folderId }));
+  const handleNewOrchestrator  = () => dispatch(openCreateOrchestrator({ projectId: folder.projectId, folderId: folder.folderId }));
+  const handleNewSubFolder     = () => dispatch(openCreateFolder({ projectId: folder.projectId, parentFolderId: folder.folderId }));
 
   if (renaming) return (
     <InlineRename
@@ -495,19 +476,19 @@ function FolderNode({
       <TreeItem
         depth={depth}
         icon={expanded
-          ? <FolderOpen className="w-3 h-3 text-sky-300" strokeWidth={1.5} />
-          : <Folder    className="w-3 h-3 text-sky-400" strokeWidth={1.5} />}
+          ? <FolderOpen className="w-3 h-3 text-ic-folder" strokeWidth={1.3} />
+          : <Folder     className="w-3 h-3 text-ic-folder" strokeWidth={1.3} />}
         label={folder.folderDisplayName}
         hasChildren
         isExpanded={expanded}
         isLoading={contentLoading}
         onPrimaryClick={toggle}
         actions={<>
-          <Btn title="New pipeline in folder" onClick={handleNewPipeline} icon={Workflow} />
-          <Btn title="New orchestrator in folder" onClick={handleNewOrchestrator} icon={GitMerge} />
-          <Btn title="New sub-folder" onClick={handleNewSubFolder} icon={FolderPlus} />
-          <Btn title="Rename" onClick={() => setRenaming(true)} icon={Pencil} />
-          <Btn title="Delete folder" danger onClick={() => {
+          <Btn title="New pipeline in folder"     onClick={handleNewPipeline}     icon={Workflow}   />
+          <Btn title="New orchestrator in folder" onClick={handleNewOrchestrator} icon={GitMerge}   />
+          <Btn title="New sub-folder"             onClick={handleNewSubFolder}    icon={FolderPlus} />
+          <Btn title="Rename"                     onClick={() => setRenaming(true)} icon={Pencil}   />
+          <Btn title="Delete folder" danger       onClick={() => {
             if (window.confirm(`Delete folder "${folder.folderDisplayName}" and all its contents?`))
               dispatch(deleteFolder({ projectId: folder.projectId, folderId: folder.folderId }));
           }} icon={Trash2} />
@@ -516,7 +497,6 @@ function FolderNode({
 
       {expanded && contentLoaded && (
         <>
-          {/* Pipelines + Orchestrators scoped to this folder */}
           <ContentBlock
             projectId={folder.projectId}
             projectName={projectName}
@@ -527,8 +507,6 @@ function FolderNode({
             onNewPipeline={handleNewPipeline}
             onNewOrchestrator={handleNewOrchestrator}
           />
-
-          {/* Sub-folders (recursive) */}
           {subFolders.length > 0 && (
             <>
               <SubLabel label="Sub-folders" depth={depth} onAdd={handleNewSubFolder} addTitle="New sub-folder" />
@@ -541,9 +519,8 @@ function FolderNode({
       )}
 
       {expanded && contentLoading && (
-        <div className="flex items-center gap-1 h-[22px] text-[11px] text-slate-600"
-          style={{ paddingLeft: 4 + (depth + 1) * 12 + 18 }}>
-          <Loader2 className="w-2.5 h-2.5 animate-spin" strokeWidth={1.5} /> Loading…
+        <div className="thm-empty-hint" style={{ paddingLeft: 4 + (depth + 1) * 12 + 18 }}>
+          <Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" strokeWidth={1.5} /> Loading…
         </div>
       )}
     </>
@@ -552,8 +529,6 @@ function FolderNode({
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PROJECT NODE
-// Row quick-actions: Rename | New Folder | Delete
-// Children: Pipelines (root) | Orchestrators (root) | Folders
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProjectNode({ project }: { project: { projectId: string; projectDisplayName: string } }) {
@@ -594,12 +569,11 @@ function ProjectNode({ project }: { project: { projectId: string; projectDisplay
 
   return (
     <>
-      {/* Project row — actions: Rename | New Folder | Delete only */}
       <TreeItem
         depth={1}
         icon={expanded
-          ? <FolderOpen className="w-3 h-3 text-amber-400" strokeWidth={1.5} />
-          : <Folder     className="w-3 h-3 text-amber-400" strokeWidth={1.5} />}
+          ? <FolderOpen className="w-3 h-3 text-ic-project" strokeWidth={1.3} />
+          : <Folder     className="w-3 h-3 text-ic-project" strokeWidth={1.3} />}
         label={project.projectDisplayName}
         isActive={isActive}
         hasChildren
@@ -607,21 +581,17 @@ function ProjectNode({ project }: { project: { projectId: string; projectDisplay
         isLoading={isLoadingChildren}
         onPrimaryClick={toggle}
         actions={<>
-          <Btn title="Rename project" onClick={() => setRenaming(true)} icon={Pencil} />
-          <Btn title="New folder in project"
-            onClick={() => dispatch(openCreateFolder({ projectId: project.projectId }))} icon={FolderPlus} />
-          <Btn title="Delete project" danger
-            onClick={() => {
-              if (window.confirm(`Delete project "${project.projectDisplayName}" and all its contents?`))
-                dispatch(deleteProject(project.projectId));
-            }} icon={Trash2} />
+          <Btn title="Rename project"        onClick={() => setRenaming(true)} icon={Pencil}    />
+          <Btn title="New folder in project" onClick={() => dispatch(openCreateFolder({ projectId: project.projectId }))} icon={FolderPlus} />
+          <Btn title="Delete project" danger onClick={() => {
+            if (window.confirm(`Delete project "${project.projectDisplayName}" and all its contents?`))
+              dispatch(deleteProject(project.projectId));
+          }} icon={Trash2} />
         </>}
       />
 
-      {/* Children */}
       {expanded && (
         <>
-          {/* Root-level pipelines + orchestrators (folder_id IS NULL) */}
           <ContentBlock
             projectId={project.projectId}
             projectName={project.projectDisplayName}
@@ -637,7 +607,6 @@ function ProjectNode({ project }: { project: { projectId: string; projectDisplay
             }
           />
 
-          {/* Folders section */}
           {!isLoadingChildren && folders !== null && (
             <>
               <SubLabel
@@ -645,9 +614,7 @@ function ProjectNode({ project }: { project: { projectId: string; projectDisplay
                 onAdd={() => dispatch(openCreateFolder({ projectId: project.projectId }))}
                 addTitle="New folder"
               />
-              {folders.length === 0 && (
-                <EmptyHint depth={2} text="No folders yet" />
-              )}
+              {folders.length === 0 && <EmptyHint depth={2} text="No folders yet" />}
               {folders.map(f => (
                 <FolderNode key={f.folderId} folder={f} projectName={project.projectDisplayName} depth={2} />
               ))}
@@ -675,15 +642,13 @@ function ConnectionsSection() {
   return (
     <>
       <Section
-        label="Connections" icon={Plug2} iconColor="text-emerald-400"
+        label="Connections" icon={Plug2} iconClass="text-ic-connection"
         isExpanded={expanded} onToggle={toggle}
         onRefresh={() => dispatch(fetchTechnologies())}
         onAdd={() => dispatch(openCreateConnection({}))}
         addTitle="New connection"
       />
-      {expanded && (
-        <TechnologiesSection nested />
-      )}
+      {expanded && <TechnologiesSection nested />}
     </>
   );
 }
@@ -704,7 +669,10 @@ function UsersSection() {
     try {
       const res = await api.getUsers();
       const data = res.data?.data ?? [];
-      setUsers(data.map((u: any) => ({ id: u.userId ?? u.user_id, name: u.displayName ?? u.user_full_name ?? u.email_address })));
+      setUsers(data.map((u: { userId?: string; user_id?: string; displayName?: string; user_full_name?: string; email_address?: string }) => ({
+        id: u.userId ?? u.user_id,
+        name: u.displayName ?? u.user_full_name ?? u.email_address,
+      })));
     } catch { /* governance may not be set up yet */ }
     finally { setLoading(false); }
   };
@@ -714,7 +682,7 @@ function UsersSection() {
   return (
     <>
       <Section
-        label="Users" icon={Users} iconColor="text-rose-400"
+        label="Users" icon={Users} iconClass="text-ic-user"
         isExpanded={expanded} onToggle={toggle}
         onRefresh={expanded ? load : undefined}
         onAdd={() => dispatch(openTab({ id: 'governance-users', type: 'governance', objectId: 'users', objectName: 'Users', unsaved: false, isDirty: false }))}
@@ -722,10 +690,10 @@ function UsersSection() {
       />
       {expanded && (
         <>
-          {loading && <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600" style={{ paddingLeft: 8 + 1 * 16 + 20 }}><Loader2 className="w-3 h-3 animate-spin" /> Loading…</div>}
-          {!loading && users.length === 0 && <div className="h-6 flex items-center text-[11px] text-slate-700 italic" style={{ paddingLeft: 8 + 1 * 16 + 20 }}>No users found</div>}
+          {loading && <div className="thm-empty-hint" style={{ paddingLeft: 8 + 1 * 16 + 20 }}><Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" /> Loading…</div>}
+          {!loading && users.length === 0 && <div className="thm-empty-hint" style={{ paddingLeft: 8 + 1 * 16 + 20 }}>No users found</div>}
           {!loading && users.map(u => (
-            <TreeItem key={u.id} depth={1} icon={<Users className="w-3 h-3 text-rose-400" />} label={u.name}
+            <TreeItem key={u.id} depth={1} icon={<Users className="w-3 h-3 text-ic-user" />} label={u.name}
               isActive={activeTab?.objectId === u.id && activeTab?.type === 'user'}
               onPrimaryClick={() => dispatch(openTab({ id: `user-${u.id}`, type: 'user', objectId: u.id, objectName: u.name, hierarchyPath: `Users → ${u.name}`, unsaved: false, isDirty: false }))}
             />
@@ -752,7 +720,10 @@ function RolesSection() {
     try {
       const res = await api.getRoles();
       const data = res.data?.data ?? [];
-      setRoles(data.map((r: any) => ({ id: r.roleId ?? r.role_id, name: r.roleName ?? r.role_display_name })));
+      setRoles(data.map((r: { roleId?: string; role_id?: string; roleName?: string; role_display_name?: string }) => ({
+        id: r.roleId ?? r.role_id,
+        name: r.roleName ?? r.role_display_name,
+      })));
     } catch { /* governance may not be set up yet */ }
     finally { setLoading(false); }
   };
@@ -762,7 +733,7 @@ function RolesSection() {
   return (
     <>
       <Section
-        label="Roles" icon={Shield} iconColor="text-orange-400"
+        label="Roles" icon={Shield} iconClass="text-ic-role"
         isExpanded={expanded} onToggle={toggle}
         onRefresh={expanded ? load : undefined}
         onAdd={() => dispatch(openTab({ id: 'governance-roles', type: 'governance', objectId: 'roles', objectName: 'Roles', unsaved: false, isDirty: false }))}
@@ -770,10 +741,10 @@ function RolesSection() {
       />
       {expanded && (
         <>
-          {loading && <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600" style={{ paddingLeft: 8 + 1 * 16 + 20 }}><Loader2 className="w-3 h-3 animate-spin" /> Loading…</div>}
-          {!loading && roles.length === 0 && <div className="h-6 flex items-center text-[11px] text-slate-700 italic" style={{ paddingLeft: 8 + 1 * 16 + 20 }}>No roles found</div>}
+          {loading && <div className="thm-empty-hint" style={{ paddingLeft: 8 + 1 * 16 + 20 }}><Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" /> Loading…</div>}
+          {!loading && roles.length === 0 && <div className="thm-empty-hint" style={{ paddingLeft: 8 + 1 * 16 + 20 }}>No roles found</div>}
           {!loading && roles.map(r => (
-            <TreeItem key={r.id} depth={1} icon={<Shield className="w-3 h-3 text-orange-400" />} label={r.name}
+            <TreeItem key={r.id} depth={1} icon={<Shield className="w-3 h-3 text-ic-role" />} label={r.name}
               isActive={activeTab?.objectId === r.id && activeTab?.type === 'role'}
               onPrimaryClick={() => dispatch(openTab({ id: `role-${r.id}`, type: 'role', objectId: r.id, objectName: r.name, hierarchyPath: `Roles → ${r.name}`, unsaved: false, isDirty: false }))}
             />
@@ -794,12 +765,10 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
   const activeTab = useAppSelector(s => s.tabs.allTabs.find(t => t.id === s.tabs.activeTabId));
   const [expanded, setExpanded] = useState(false);
 
-  // items are stored in Arrow cache (outside Redux); slot.count triggers re-render
-  const items     = slot ? connectorCache.get(tech.techCode) : [];
-  const loading   = slot?.isLoading ?? false;
-  const cursor    = slot?.nextCursor ?? null;
+  const items   = slot ? connectorCache.get(tech.techCode) : [];
+  const loading = slot?.isLoading ?? false;
+  const cursor  = slot?.nextCursor ?? null;
 
-  // Re-fetch when slot is evicted (e.g. after create/delete) while node is expanded
   useEffect(() => {
     if (expanded && !slot && !loading) {
       dispatch(fetchConnectorsByTech({ techCode: tech.techCode }));
@@ -811,10 +780,7 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
     if (next && items.length === 0) {
       dispatch(fetchConnectorsByTech({ techCode: tech.techCode }));
     }
-    if (!next) {
-      // Evict buffer on collapse to free memory
-      dispatch(evictTechSlot(tech.techCode));
-    }
+    if (!next) dispatch(evictTechSlot(tech.techCode));
     setExpanded(next);
   };
 
@@ -822,8 +788,9 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
     if (cursor) dispatch(fetchConnectorsByTech({ techCode: tech.techCode, after: cursor }));
   };
 
-  const healthDot = (code: string) =>
-    code === 'HEALTHY' ? 'bg-emerald-400' : code === 'DEGRADED' ? 'bg-amber-400' : 'bg-slate-600';
+  // Health status dot — uses design system status colors
+  const healthDotClass = (code: string) =>
+    code === 'HEALTHY' ? 'bg-ok' : code === 'DEGRADED' ? 'bg-warn' : 'bg-bd-2';
 
   const openConn = (c: { connectorId: string; connectorDisplayName: string }) =>
     dispatch(openTab({
@@ -835,24 +802,23 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
 
   return (
     <>
-      {/* Technology row */}
       <div
-        className="flex items-center group cursor-pointer select-none"
+        className="group thm-tree-row"
         style={{ paddingLeft: 8 + 1 * 16, height: 22 }}
         onClick={toggle}
       >
-        <span className="w-4 h-4 flex items-center justify-center text-slate-600 flex-shrink-0 mr-1">
+        <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 mr-1">
           {expanded
-            ? <ChevronDown className="w-3 h-3" strokeWidth={1.5} />
-            : <ChevronRight className="w-3 h-3" strokeWidth={1.5} />}
+            ? <ChevronDown  className="w-3 h-3 text-tx3" strokeWidth={1.5} />
+            : <ChevronRight className="w-3 h-3 text-tx3" strokeWidth={1.5} />}
         </span>
-        <span className="flex-1 truncate text-[12px] text-slate-300 group-hover:text-slate-100">
+        <span className="flex-1 truncate">
           {tech.displayName}
         </span>
         {items.length > 0 && (
-          <span className="text-[10px] text-slate-600 mr-1">{items.length}{cursor ? '+' : ''}</span>
+          <span className="text-micro text-tx3 mr-1">{items.length}{cursor ? '+' : ''}</span>
         )}
-        <span className="opacity-0 group-hover:opacity-100 flex-shrink-0 mr-1">
+        <span className="opacity-0 group-hover:opacity-100 flex-shrink-0 mr-1" onClick={e => e.stopPropagation()}>
           <Btn
             title={`Create ${tech.displayName} connection`}
             onClick={e => { e.stopPropagation(); dispatch(openCreateConnection({ preselectedTechCode: tech.techCode })); }}
@@ -861,20 +827,15 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
         </span>
       </div>
 
-      {/* Connection rows */}
       {expanded && (
         <>
           {loading && (
-            <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600"
-              style={{ paddingLeft: 8 + 3 * 16 }}>
-              <Loader2 className="w-2.5 h-2.5 animate-spin" /> Loading…
+            <div className="thm-empty-hint" style={{ paddingLeft: 8 + 3 * 16 }}>
+              <Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" /> Loading…
             </div>
           )}
           {!loading && items.length === 0 && (
-            <div className="h-6 flex items-center text-[11px] text-slate-700 italic"
-              style={{ paddingLeft: 8 + 3 * 16 }}>
-              No connections yet
-            </div>
+            <div className="thm-empty-hint" style={{ paddingLeft: 8 + 3 * 16 }}>No connections yet</div>
           )}
           {items.map(c => {
             const isConn = activeTab?.objectId === c.connectorId && activeTab?.type === 'connection';
@@ -883,8 +844,9 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
                 key={c.connectorId} depth={2}
                 icon={
                   <span className="relative">
-                    <Network className="w-3.5 h-3.5 text-emerald-500" strokeWidth={1.5} />
-                    <span className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border border-[#0f1117] ${healthDot(c.healthStatusCode)}`} />
+                    <Network className="w-3.5 h-3.5 text-ic-connection" strokeWidth={1.3} />
+                    <span className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border ${healthDotClass(c.healthStatusCode)}`}
+                      style={{ borderColor: 'var(--bg-2)' }} />
                   </span>
                 }
                 label={c.connectorDisplayName}
@@ -903,8 +865,8 @@ function TechRow({ tech }: { tech: { techCode: string; displayName: string; icon
           {cursor && !loading && (
             <button
               onClick={loadMore}
-              className="flex items-center gap-1.5 text-[11px] text-blue-400 hover:text-blue-300 h-6"
               style={{ paddingLeft: 8 + 3 * 16 }}
+              className="flex items-center gap-1.5 h-6 text-sm text-ac-lt hover:opacity-80 transition-opacity"
             >
               <RefreshCw className="w-2.5 h-2.5" /> Load more
             </button>
@@ -936,7 +898,7 @@ function TechnologiesSection({ nested = false }: { nested?: boolean }) {
   return (
     <>
       <Section
-        label="Technologies" icon={Layers} iconColor="text-blue-400"
+        label="Technologies" icon={Layers} iconClass="text-ic-tech"
         isExpanded={expanded} onToggle={toggle}
         onRefresh={() => dispatch(fetchTechnologies())}
         addTitle="Static Repository"
@@ -944,17 +906,14 @@ function TechnologiesSection({ nested = false }: { nested?: boolean }) {
       {expanded && (
         <>
           {isLoading && (
-            <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600"
-              style={{ paddingLeft: 8 + (baseDepth + 1) * 16 + 20 }}>
-              <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+            <div className="thm-empty-hint" style={{ paddingLeft: 8 + (baseDepth + 1) * 16 + 20 }}>
+              <Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" /> Loading…
             </div>
           )}
           {!isLoading && Object.keys(grouped).map(cat => (
             <React.Fragment key={cat}>
               <SubLabel label={cat.replace('_', ' ')} depth={baseDepth} />
-              {grouped[cat].map(t => (
-                <TechRow key={t.techCode} tech={t} />
-              ))}
+              {grouped[cat].map(t => <TechRow key={t.techCode} tech={t} />)}
             </React.Fragment>
           ))}
         </>
@@ -964,9 +923,7 @@ function TechnologiesSection({ nested = false }: { nested?: boolean }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// METADATA SECTION — catalog-only tree: Connection → Schema → Table → Columns
-// Shows ONLY datasets that have been imported into catalog.datasets.
-// No introspect here — introspect is on the Import tab of the connection workspace.
+// METADATA SECTION
 // ─────────────────────────────────────────────────────────────────────────────
 
 type CatalogDataset = {
@@ -981,19 +938,13 @@ type CatalogDataset = {
 
 type CatalogColumn = { columnId: string; name: string; dataType: string; nullable: boolean; ordinal: number };
 
-function MetaTableRow({
-  dataset,
-  connectorDisplayName,
-  schemaName,
-}: {
-  dataset: CatalogDataset;
-  connectorDisplayName: string;
-  schemaName: string;
+function MetaTableRow({ dataset, connectorDisplayName, schemaName }: {
+  dataset: CatalogDataset; connectorDisplayName: string; schemaName: string;
 }) {
   const dispatch = useAppDispatch();
   const [expanded, setExpanded] = useState(false);
-  const [columns, setColumns] = useState<CatalogColumn[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [columns, setColumns]   = useState<CatalogColumn[]>([]);
+  const [loading, setLoading]   = useState(false);
 
   const toggle = async () => {
     const next = !expanded;
@@ -1017,67 +968,52 @@ function MetaTableRow({
   }));
 
   const isFile = dataset.connector_type_code?.startsWith('FILE_') || dataset.connector_type_code === 'CSV';
-  const tableIcon = isFile ? '📄' : null;
+
+  // Determine data-type badge class from dataType string
+  const dtBadgeClass = (dt: string) => {
+    if (/^(bigint|int|numeric|double|float)/i.test(dt)) return 'dt-badge--number';
+    if (/^(varchar|text|string|char)/i.test(dt))         return 'dt-badge--string';
+    if (/^(date|time|timestamp)/i.test(dt))              return 'dt-badge--date';
+    return 'dt-badge--other';
+  };
 
   return (
     <>
-      {/* Table row */}
       <div
-        className="flex items-center group cursor-pointer select-none"
+        className="group thm-tree-row"
         style={{ paddingLeft: 8 + 4 * 16, height: 22 }}
         onClick={toggle}
       >
-        <span className="w-4 h-4 flex items-center justify-center text-slate-600 flex-shrink-0 mr-1">
-          {expanded ? <ChevronDown className="w-3 h-3" strokeWidth={1.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={1.5} />}
+        <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 mr-1">
+          {expanded
+            ? <ChevronDown  className="w-3 h-3 text-tx3" strokeWidth={1.5} />
+            : <ChevronRight className="w-3 h-3 text-tx3" strokeWidth={1.5} />}
         </span>
-        {tableIcon
-          ? <span className="text-[11px] mr-1.5 flex-shrink-0">{tableIcon}</span>
-          : <Database className="w-3 h-3 text-violet-400 flex-shrink-0 mr-1.5" strokeWidth={1.5} />}
-        <span className="flex-1 truncate text-[12px] text-slate-300 group-hover:text-slate-100">{dataset.table_name_text}</span>
-        {loading && <Loader2 className="w-2.5 h-2.5 animate-spin text-slate-500 mr-1 flex-shrink-0" />}
-        <span className="flex items-center gap-1 mr-1 flex-shrink-0">
-          <button
-            title="Preview top rows"
-            onClick={e => { e.stopPropagation(); dispatch(openMetadataPreview({ datasetId: dataset.dataset_id, datasetName: dataset.table_name_text })); }}
-            className="w-5 h-5 flex items-center justify-center rounded hover:bg-violet-800/50 text-slate-500 hover:text-violet-300 transition-colors"
-          >
+        {isFile
+          ? <span className="text-sm mr-1.5 flex-shrink-0">📄</span>
+          : <Database className="w-3 h-3 text-ic-metadata flex-shrink-0 mr-1.5" strokeWidth={1.3} />}
+        <span className="flex-1 truncate">{dataset.table_name_text}</span>
+        {loading && <Loader2 className="w-2.5 h-2.5 animate-spin mr-1 flex-shrink-0 text-tx3" />}
+        <span className="flex items-center gap-1 mr-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          <button title="Preview top rows" onClick={e => { e.stopPropagation(); dispatch(openMetadataPreview({ datasetId: dataset.dataset_id, datasetName: dataset.table_name_text })); }} className="thm-icon-btn">
             <Eye className="w-3 h-3" strokeWidth={1.5} />
           </button>
-          <button
-            title="Open table details"
-            onClick={e => { e.stopPropagation(); openDetail(); }}
-            className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-700/60 text-slate-500 hover:text-slate-200 transition-colors"
-          >
+          <button title="Open table details" onClick={e => { e.stopPropagation(); openDetail(); }} className="thm-icon-btn">
             <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
           </button>
         </span>
       </div>
 
-      {/* Column rows */}
       {expanded && !loading && columns.map(col => (
-        <div
-          key={col.columnId}
-          className="flex items-center select-none"
-          style={{ paddingLeft: 8 + 5 * 16 + 4, height: 20 }}
-        >
-          <span className="w-2 h-full border-l border-slate-800 mr-2 flex-shrink-0" />
-          <span className="text-[11px] font-mono text-slate-400 flex-1 truncate">{col.name}</span>
-          <span className={`text-[9px] px-1 py-0.5 rounded border mr-1 flex-shrink-0 ${
-            /^(bigint|int|numeric|double|float)/i.test(col.dataType)
-              ? 'text-blue-400 border-blue-800 bg-blue-900/20'
-              : /^(varchar|text|string|char)/i.test(col.dataType)
-              ? 'text-emerald-400 border-emerald-800 bg-emerald-900/20'
-              : /^(date|time|timestamp)/i.test(col.dataType)
-              ? 'text-amber-400 border-amber-800 bg-amber-900/20'
-              : 'text-slate-500 border-slate-700'
-          }`}>{col.dataType}</span>
-          {!col.nullable && <span className="text-[8px] text-red-400 mr-1 flex-shrink-0">NN</span>}
+        <div key={col.columnId} className="flex items-center select-none" style={{ paddingLeft: 8 + 5 * 16 + 4, height: 20 }}>
+          <span className="w-2 h-full border-l mr-2 flex-shrink-0" style={{ borderColor: 'var(--bd)' }} />
+          <span className="flex-1 truncate font-mono text-sm text-tx1">{col.name}</span>
+          <span className={`dt-badge ${dtBadgeClass(col.dataType)} mr-1`}>{col.dataType}</span>
+          {!col.nullable && <span className="text-micro text-err mr-1 font-bold">NN</span>}
         </div>
       ))}
       {expanded && !loading && columns.length === 0 && (
-        <div className="h-5 flex items-center text-[10px] text-slate-700 italic" style={{ paddingLeft: 8 + 5 * 16 + 4 }}>
-          No columns
-        </div>
+        <div className="thm-empty-hint" style={{ paddingLeft: 8 + 5 * 16 + 4 }}>No columns</div>
       )}
     </>
   );
@@ -1085,11 +1021,10 @@ function MetaTableRow({
 
 function MetadataSection() {
   const dispatch = useAppDispatch();
-  const [expanded, setExpanded] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [datasets, setDatasets] = useState<CatalogDataset[]>([]);
-  // Per-connection expansion
-  const [expandedConns, setExpandedConns] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded]           = useState(false);
+  const [loading, setLoading]             = useState(false);
+  const [datasets, setDatasets]           = useState<CatalogDataset[]>([]);
+  const [expandedConns, setExpandedConns]     = useState<Set<string>>(new Set());
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
 
   const load = async () => {
@@ -1102,21 +1037,11 @@ function MetadataSection() {
     finally { setLoading(false); }
   };
 
-  const toggle = () => {
-    const next = !expanded;
-    setExpanded(next);
-    if (next && datasets.length === 0) void load();
-  };
+  const toggle = () => { const next = !expanded; setExpanded(next); if (next && datasets.length === 0) void load(); };
 
-  const toggleConn = (connId: string) => {
-    setExpandedConns(prev => { const s = new Set(prev); s.has(connId) ? s.delete(connId) : s.add(connId); return s; });
-  };
+  const toggleConn   = (id: string)  => setExpandedConns(prev   => { const s = new Set(prev); s.has(id)  ? s.delete(id)  : s.add(id);  return s; });
+  const toggleSchema = (key: string) => setExpandedSchemas(prev  => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
 
-  const toggleSchema = (key: string) => {
-    setExpandedSchemas(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s; });
-  };
-
-  // Group: connector → schema → tables
   const byConn = datasets.reduce((acc, d) => {
     const key = d.connector_id;
     if (!acc[key]) acc[key] = { name: d.connector_display_name, typeCode: d.connector_type_code, tables: [] };
@@ -1127,7 +1052,7 @@ function MetadataSection() {
   return (
     <>
       <Section
-        label="Metadata Catalog" icon={Database} iconColor="text-violet-400"
+        label="Metadata Catalog" icon={Database} iconClass="text-ic-metadata"
         isExpanded={expanded} onToggle={toggle}
         onRefresh={load}
         addTitle={undefined}
@@ -1135,18 +1060,17 @@ function MetadataSection() {
       {expanded && (
         <>
           {loading && (
-            <div className="flex items-center gap-1.5 h-6 text-[11px] text-slate-600" style={{ paddingLeft: 8 + 16 + 20 }}>
-              <Loader2 className="w-3 h-3 animate-spin" /> Loading…
+            <div className="thm-empty-hint" style={{ paddingLeft: 8 + 16 + 20 }}>
+              <Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" /> Loading…
             </div>
           )}
           {!loading && Object.keys(byConn).length === 0 && (
-            <div className="h-6 flex items-center text-[11px] text-slate-700 italic" style={{ paddingLeft: 8 + 16 + 20 }}>
+            <div className="thm-empty-hint" style={{ paddingLeft: 8 + 16 + 20 }}>
               No imported metadata — use Import tab on a connection
             </div>
           )}
           {!loading && Object.entries(byConn).map(([connId, conn]) => {
             const isConnExpanded = expandedConns.has(connId);
-            // Group tables by schema
             const bySchema = conn.tables.reduce((acc, t) => {
               const s = t.schema_name_text || '(root)';
               if (!acc[s]) acc[s] = [];
@@ -1156,59 +1080,48 @@ function MetadataSection() {
 
             return (
               <React.Fragment key={connId}>
-                {/* Connection row */}
                 <div
-                  className="flex items-center group cursor-pointer select-none"
+                  className="group thm-tree-row"
                   style={{ paddingLeft: 8 + 1 * 16, height: 22 }}
                   onClick={() => toggleConn(connId)}
                 >
-                  <span className="w-4 h-4 flex items-center justify-center text-slate-600 flex-shrink-0 mr-1">
-                    {isConnExpanded ? <ChevronDown className="w-3 h-3" strokeWidth={1.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={1.5} />}
+                  <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 mr-1">
+                    {isConnExpanded
+                      ? <ChevronDown  className="w-3 h-3 text-tx3" strokeWidth={1.5} />
+                      : <ChevronRight className="w-3 h-3 text-tx3" strokeWidth={1.5} />}
                   </span>
-                  <Network className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0 mr-1.5" strokeWidth={1.5} />
-                  <span className="flex-1 truncate text-[12px] text-slate-300 group-hover:text-slate-100">{conn.name}</span>
-                  <span className="text-[10px] text-slate-600 mr-1">{conn.tables.length}</span>
+                  <Network className="w-3.5 h-3.5 text-ic-connection flex-shrink-0 mr-1.5" strokeWidth={1.3} />
+                  <span className="flex-1 truncate">{conn.name}</span>
+                  <span className="text-micro text-tx3 mr-1">{conn.tables.length}</span>
                 </div>
 
-                {/* Schema rows */}
                 {isConnExpanded && Object.entries(bySchema).map(([schema, tables]) => {
                   const schemaKey = `${connId}::${schema}`;
                   const isSchemaExpanded = expandedSchemas.has(schemaKey);
-                  // For file connections, skip the schema level (it's just a directory path)
                   const isFile = conn.typeCode?.startsWith('FILE_') || conn.typeCode === 'CSV';
                   if (isFile) {
                     return tables.map(t => (
-                      <MetaTableRow
-                        key={t.dataset_id}
-                        dataset={t}
-                        connectorDisplayName={conn.name}
-                        schemaName={schema}
-                      />
+                      <MetaTableRow key={t.dataset_id} dataset={t} connectorDisplayName={conn.name} schemaName={schema} />
                     ));
                   }
                   return (
                     <React.Fragment key={schemaKey}>
-                      {/* Schema row */}
                       <div
-                        className="flex items-center group cursor-pointer select-none"
+                        className="group thm-tree-row"
                         style={{ paddingLeft: 8 + 2 * 16, height: 22 }}
                         onClick={() => toggleSchema(schemaKey)}
                       >
-                        <span className="w-4 h-4 flex items-center justify-center text-slate-600 flex-shrink-0 mr-1">
-                          {isSchemaExpanded ? <ChevronDown className="w-3 h-3" strokeWidth={1.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={1.5} />}
+                        <span className="w-4 h-4 flex items-center justify-center flex-shrink-0 mr-1">
+                          {isSchemaExpanded
+                            ? <ChevronDown  className="w-3 h-3 text-tx3" strokeWidth={1.5} />
+                            : <ChevronRight className="w-3 h-3 text-tx3" strokeWidth={1.5} />}
                         </span>
-                        <FolderOpen className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mr-1.5" strokeWidth={1.5} />
-                        <span className="flex-1 truncate text-[12px] text-slate-300 group-hover:text-slate-100">{schema}</span>
-                        <span className="text-[10px] text-slate-600 mr-1">{tables.length}</span>
+                        <FolderOpen className="w-3.5 h-3.5 text-ic-folder flex-shrink-0 mr-1.5" strokeWidth={1.3} />
+                        <span className="flex-1 truncate">{schema}</span>
+                        <span className="text-micro text-tx3 mr-1">{tables.length}</span>
                       </div>
-                      {/* Table rows */}
                       {isSchemaExpanded && tables.map(t => (
-                        <MetaTableRow
-                          key={t.dataset_id}
-                          dataset={t}
-                          connectorDisplayName={conn.name}
-                          schemaName={schema}
-                        />
+                        <MetaTableRow key={t.dataset_id} dataset={t} connectorDisplayName={conn.name} schemaName={schema} />
                       ))}
                     </React.Fragment>
                   );
@@ -1216,7 +1129,6 @@ function MetadataSection() {
               </React.Fragment>
             );
           })}
-
         </>
       )}
     </>
@@ -1231,18 +1143,18 @@ export function LeftSidebar() {
   const dispatch = useAppDispatch();
   const activeTab = useAppSelector(s => s.tabs.allTabs.find(t => t.id === s.tabs.activeTabId));
   const { projects, globalPipelines, globalOrchestrators, isLoading, error } = useAppSelector(s => s.projects);
-  const globalPipelinesLoaded    = useAppSelector(s => s.projects.globalPipelinesLoaded);
-  const globalPipelinesCursor    = useAppSelector(s => s.projects.globalPipelinesCursor);
-  const globalPipelinesLoading   = useAppSelector(s => s.projects.globalPipelinesLoading);
+  const globalPipelinesLoaded      = useAppSelector(s => s.projects.globalPipelinesLoaded);
+  const globalPipelinesCursor      = useAppSelector(s => s.projects.globalPipelinesCursor);
+  const globalPipelinesLoading     = useAppSelector(s => s.projects.globalPipelinesLoading);
   const globalOrchestratorsLoaded  = useAppSelector(s => s.projects.globalOrchestratorsLoaded);
   const globalOrchestratorsCursor  = useAppSelector(s => s.projects.globalOrchestratorsCursor);
   const globalOrchestratorsLoading = useAppSelector(s => s.projects.globalOrchestratorsLoading);
 
-  const createProjectOpen           = useAppSelector(s => s.projects.createProjectOpen);
-  const createPipelineOpen          = useAppSelector(s => s.projects.createPipelineOpen);
-  const createOrchestratorOpen      = useAppSelector(s => s.projects.createOrchestratorOpen);
-  const createFolderOpen            = useAppSelector(s => s.projects.createFolderOpen);
-  const createConnectionOpen        = useAppSelector(s => s.connections.createConnectionOpen);
+  const createProjectOpen      = useAppSelector(s => s.projects.createProjectOpen);
+  const createPipelineOpen     = useAppSelector(s => s.projects.createPipelineOpen);
+  const createOrchestratorOpen = useAppSelector(s => s.projects.createOrchestratorOpen);
+  const createFolderOpen       = useAppSelector(s => s.projects.createFolderOpen);
+  const createConnectionOpen   = useAppSelector(s => s.connections.createConnectionOpen);
 
   const [projectsExpanded, setProjectsExpanded]               = useState(true);
   const [globalPipelinesExpanded, setGlobalPipelinesExpanded] = useState(false);
@@ -1251,18 +1163,12 @@ export function LeftSidebar() {
 
   useEffect(() => { dispatch(fetchProjects()); }, [dispatch]);
 
-  // Load global pipelines when section expanded
   useEffect(() => {
-    if (globalPipelinesExpanded && !globalPipelinesLoaded) {
-      dispatch(fetchGlobalPipelines(undefined));
-    }
+    if (globalPipelinesExpanded && !globalPipelinesLoaded) dispatch(fetchGlobalPipelines(undefined));
   }, [globalPipelinesExpanded, globalPipelinesLoaded, dispatch]);
 
-  // Load global orchestrators when section expanded
   useEffect(() => {
-    if (globalOrchsExpanded && !globalOrchestratorsLoaded) {
-      dispatch(fetchGlobalOrchestrators(undefined));
-    }
+    if (globalOrchsExpanded && !globalOrchestratorsLoaded) dispatch(fetchGlobalOrchestrators(undefined));
   }, [globalOrchsExpanded, globalOrchestratorsLoaded, dispatch]);
 
   const isType  = (t: string) => activeTab?.type === t;
@@ -1275,29 +1181,33 @@ export function LeftSidebar() {
 
   return (
     <>
-      <aside className="flex flex-col h-full bg-[#0f1117] border-r border-slate-800/60 overflow-hidden" style={{ minWidth: 0 }}>
-
-        {/* ── Search ──────────────────────────────────────────────────────── */}
+      <aside
+        className="flex flex-col h-full overflow-hidden"
+        style={{ background: 'var(--bg-2)', borderRight: '1px solid var(--bd)', minWidth: 0 }}
+      >
+        {/* ── Search ── */}
         <div className="px-2 pt-2 pb-1.5 flex-shrink-0">
-          <div className="flex items-center gap-1.5 h-7 bg-slate-800/50 border border-slate-700/50 rounded px-2">
-            <Search className="w-3 h-3 text-slate-600 flex-shrink-0" strokeWidth={1.5} />
+          <div className="flex items-center gap-1.5 h-7 rounded px-2"
+            style={{ background: 'var(--bg-5)', border: '1px solid var(--bd-2)' }}>
+            <Search className="w-3 h-3 flex-shrink-0 text-tx3" strokeWidth={1.5} />
             <input
               type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Filter tree…"
-              className="flex-1 bg-transparent text-[12px] text-slate-300 placeholder-slate-600 outline-none min-w-0"
+              className="flex-1 outline-none min-w-0 text-sm text-tx1 placeholder:text-tx3"
+              style={{ background: 'transparent' }}
             />
             {search && (
-              <button onClick={() => setSearch('')} className="text-slate-600 hover:text-slate-300 text-[11px]">✕</button>
+              <button onClick={() => setSearch('')} className="text-micro text-tx3 hover:text-tx2 transition-colors">✕</button>
             )}
           </div>
         </div>
 
-        {/* ── Tree ────────────────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 pb-2 min-h-0 space-y-0.5">
+        {/* ── Tree ── */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-1 pb-2 min-h-0">
 
-          {/* ── PROJECTS ── */}
+          {/* PROJECTS */}
           <Section
-            label="Projects" icon={FolderOpen} iconColor="text-amber-400"
+            label="Projects" icon={FolderOpen} iconClass="text-ic-project"
             isExpanded={projectsExpanded}
             onToggle={() => setProjectsExpanded(v => !v)}
             onRefresh={() => dispatch(fetchProjects())}
@@ -1306,37 +1216,37 @@ export function LeftSidebar() {
           />
 
           {projectsExpanded && (
-            <div className="space-y-0.5">
+            <div>
               {isLoading && (
-                <div className="flex items-center gap-1 h-[22px] text-[11px] text-slate-600 px-7">
-                  <Loader2 className="w-2.5 h-2.5 animate-spin" strokeWidth={1.5} /> Loading projects…
+                <div className="thm-empty-hint" style={{ paddingLeft: 28 }}>
+                  <Loader2 className="w-2.5 h-2.5 animate-spin mr-1 text-tx3" strokeWidth={1.5} /> Loading projects…
                 </div>
               )}
               {!isLoading && error && (
-                <div className="mx-2 px-2 py-1.5 bg-red-950/40 border border-red-900/30 rounded flex items-start gap-1.5 text-[11px] text-red-400">
+                <div className="mx-2 px-2 py-1.5 rounded flex items-start gap-1.5"
+                  style={{ background: 'var(--err-bg)', border: '1px solid rgba(248,113,113,0.20)', fontSize: 'var(--fs-sm)', color: 'var(--err)' }}>
                   <AlertCircle className="w-3 h-3 mt-0.5 flex-shrink-0" /> {error}
                 </div>
               )}
               {!isLoading && !error && projects.length === 0 && (
                 <button
                   onClick={() => dispatch(openCreateProject())}
-                  className="flex items-center gap-1.5 h-7 text-[11px] text-blue-400 hover:text-blue-300 px-9"
+                  className="flex items-center gap-1.5 h-7 text-sm text-ac-lt"
+                  style={{ paddingLeft: 36 }}
                 >
                   <Plus className="w-3 h-3" strokeWidth={1.5} /> Create first project
                 </button>
               )}
-              {!isLoading && filtered.map(p => (
-                <ProjectNode key={p.projectId} project={p} />
-              ))}
+              {!isLoading && filtered.map(p => <ProjectNode key={p.projectId} project={p} />)}
               {!isLoading && search && filtered.length === 0 && projects.length > 0 && (
-                <div className="px-9 py-1 text-[11px] text-slate-600 italic">No match for "{search}"</div>
+                <div className="thm-empty-hint" style={{ paddingLeft: 36 }}>No match for "{search}"</div>
               )}
             </div>
           )}
 
-          {/* ── GLOBAL PIPELINES ── */}
+          {/* GLOBAL PIPELINES */}
           <Section
-            label="Global Pipelines" icon={Workflow} iconColor="text-sky-400"
+            label="Global Pipelines" icon={Workflow} iconClass="text-ic-pipeline"
             isExpanded={globalPipelinesExpanded}
             onToggle={() => setGlobalPipelinesExpanded(v => !v)}
             onAdd={() => dispatch(openCreatePipeline({ projectId: null, folderId: null }))}
@@ -1344,23 +1254,28 @@ export function LeftSidebar() {
           />
           {globalPipelinesExpanded && (
             globalPipelinesLoading && !globalPipelinesLoaded ? (
-              <div className="px-9 py-1 text-[11px] text-slate-600 italic">Loading…</div>
+              <div className="thm-empty-hint" style={{ paddingLeft: 36 }}>Loading…</div>
             ) : globalPipelines.length === 0 ? (
               <EmptyHint depth={1} text="No global pipelines yet" />
             ) : (
               <div>
                 {globalPipelines.map(pl => (
                   <button key={pl.pipelineId}
+                    draggable
+                    onDragStart={e => {
+                      e.dataTransfer.setData('pipelineId', pl.pipelineId);
+                      e.dataTransfer.setData('pipelineName', pl.pipelineDisplayName);
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
                     onClick={() => dispatch(openTab({
-                      id: `pipeline-${pl.pipelineId}`,
-                      type: 'pipeline',
-                      objectId: pl.pipelineId,
-                      objectName: pl.pipelineDisplayName,
-                      unsaved: false,
-                      isDirty: false
+                      id: `pipeline-${pl.pipelineId}`, type: 'pipeline',
+                      objectId: pl.pipelineId, objectName: pl.pipelineDisplayName,
+                      unsaved: false, isDirty: false,
                     }))}
-                    className="w-full flex items-center gap-2 px-9 py-1 text-[12px] text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors">
-                    <Workflow className="w-3 h-3 text-sky-500 flex-shrink-0" strokeWidth={1.5} />
+                    className="w-full flex items-center gap-2 thm-tree-row"
+                    style={{ paddingLeft: 36 }}
+                  >
+                    <Workflow className="w-3 h-3 text-ic-pipeline flex-shrink-0" strokeWidth={1.3} />
                     <span className="truncate">{pl.pipelineDisplayName}</span>
                   </button>
                 ))}
@@ -1368,7 +1283,8 @@ export function LeftSidebar() {
                   <button
                     onClick={() => dispatch(fetchGlobalPipelines(globalPipelinesCursor))}
                     disabled={globalPipelinesLoading}
-                    className="flex items-center gap-1.5 text-[11px] text-blue-400 hover:text-blue-300 h-6 px-9 disabled:opacity-50"
+                    className="flex items-center gap-1.5 h-6 disabled:opacity-50 text-sm text-ac-lt"
+                    style={{ paddingLeft: 36 }}
                   >
                     <RefreshCw className="w-2.5 h-2.5" /> Load more
                   </button>
@@ -1377,9 +1293,9 @@ export function LeftSidebar() {
             )
           )}
 
-          {/* ── GLOBAL ORCHESTRATORS ── */}
+          {/* GLOBAL ORCHESTRATORS */}
           <Section
-            label="Global Orchestrators" icon={GitMerge} iconColor="text-purple-400"
+            label="Global Orchestrators" icon={GitMerge} iconClass="text-ic-orch"
             isExpanded={globalOrchsExpanded}
             onToggle={() => setGlobalOrchsExpanded(v => !v)}
             onAdd={() => dispatch(openCreateOrchestrator({ projectId: null, folderId: null }))}
@@ -1387,23 +1303,28 @@ export function LeftSidebar() {
           />
           {globalOrchsExpanded && (
             globalOrchestratorsLoading && !globalOrchestratorsLoaded ? (
-              <div className="px-9 py-1 text-[11px] text-slate-600 italic">Loading…</div>
+              <div className="thm-empty-hint" style={{ paddingLeft: 36 }}>Loading…</div>
             ) : globalOrchestrators.length === 0 ? (
               <EmptyHint depth={1} text="No global orchestrators yet" />
             ) : (
               <div>
                 {globalOrchestrators.map(o => (
                   <button key={o.orchId}
+                    draggable
+                    onDragStart={e => {
+                      e.dataTransfer.setData('orchestratorId', o.orchId);
+                      e.dataTransfer.setData('orchestratorName', o.orchDisplayName);
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }}
                     onClick={() => dispatch(openTab({
-                      id: `orchestrator-${o.orchId}`,
-                      type: 'orchestrator',
-                      objectId: o.orchId,
-                      objectName: o.orchDisplayName,
-                      unsaved: false,
-                      isDirty: false
+                      id: `orchestrator-${o.orchId}`, type: 'orchestrator',
+                      objectId: o.orchId, objectName: o.orchDisplayName,
+                      unsaved: false, isDirty: false,
                     }))}
-                    className="w-full flex items-center gap-2 px-9 py-1 text-[12px] text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors">
-                    <GitMerge className="w-3 h-3 text-purple-500 flex-shrink-0" strokeWidth={1.5} />
+                    className="w-full flex items-center gap-2 thm-tree-row"
+                    style={{ paddingLeft: 36 }}
+                  >
+                    <GitMerge className="w-3 h-3 text-ic-orch flex-shrink-0" strokeWidth={1.3} />
                     <span className="truncate">{o.orchDisplayName}</span>
                   </button>
                 ))}
@@ -1411,7 +1332,8 @@ export function LeftSidebar() {
                   <button
                     onClick={() => dispatch(fetchGlobalOrchestrators(globalOrchestratorsCursor))}
                     disabled={globalOrchestratorsLoading}
-                    className="flex items-center gap-1.5 text-[11px] text-blue-400 hover:text-blue-300 h-6 px-9 disabled:opacity-50"
+                    className="flex items-center gap-1.5 h-6 disabled:opacity-50 text-sm text-ac-lt"
+                    style={{ paddingLeft: 36 }}
                   >
                     <RefreshCw className="w-2.5 h-2.5" /> Load more
                   </button>
@@ -1422,51 +1344,51 @@ export function LeftSidebar() {
 
           <Divider />
 
-          {/* ── CONNECTIONS (Technologies nested inside) ── */}
+          {/* CONNECTIONS */}
           <ConnectionsSection />
 
-          {/* ── METADATA (Technologies also accessible here) ── */}
+          {/* METADATA */}
           <MetadataSection />
 
-          {/* ── LINEAGE ── */}
-          <NavRow icon={GitBranch} iconColor="text-teal-400" label="Lineage"
+          {/* LINEAGE */}
+          <NavRow icon={GitBranch} iconClass="text-ic-lineage" label="Lineage"
             isActive={isType('lineage')}
             onClick={() => openNav('lineage', 'lineage', 'Lineage')}
           />
 
           <Divider />
 
-          {/* ── USERS ── */}
+          {/* USERS */}
           <UsersSection />
 
-          {/* ── ROLES ── */}
+          {/* ROLES */}
           <RolesSection />
 
           <Divider />
 
-          {/* ── MONITOR ── */}
-          <NavRow icon={Activity} iconColor={isType('monitor') ? 'text-blue-400' : 'text-sky-500'}
-            label="Monitor" isActive={isType('monitor')}
+          {/* MONITOR */}
+          <NavRow icon={Activity} iconClass="text-ic-monitor" label="Monitor"
+            isActive={isType('monitor')}
             onClick={() => openNav('monitor', 'monitor', 'Monitor')}
           />
 
-          {/* ── DASHBOARD ── */}
-          <NavRow icon={LayoutDashboard} iconColor="text-slate-500"
-            label="Dashboard" isActive={isType('dashboard')}
+          {/* DASHBOARD */}
+          <NavRow icon={LayoutDashboard} iconClass="text-ic-tech" label="Dashboard"
+            isActive={isType('dashboard')}
             onClick={() => openNav('dashboard', 'dashboard', 'Dashboard')}
           />
         </div>
 
-        {/* ── Bottom: Settings ─────────────────────────────────────────────── */}
-        <div className="border-t border-slate-800/60 px-1 py-1 flex-shrink-0">
-          <NavRow icon={Settings} iconColor={isType('settings') ? 'text-blue-400' : 'text-slate-500'}
-            label="Settings" isActive={isType('settings')}
+        {/* Settings */}
+        <div className="px-1 py-1 flex-shrink-0" style={{ borderTop: '1px solid var(--bd)' }}>
+          <NavRow icon={Settings} iconClass="text-tx3" label="Settings"
+            isActive={isType('settings')}
             onClick={() => openNav('settings', 'settings', 'Settings')}
           />
         </div>
       </aside>
 
-      {/* ── Dialogs ─────────────────────────────────────────────────────────── */}
+      {/* Dialogs */}
       {createProjectOpen      && <CreateProjectDialog />}
       {createPipelineOpen     && <CreatePipelineDialog />}
       {createOrchestratorOpen && <CreateOrchestratorDialog />}

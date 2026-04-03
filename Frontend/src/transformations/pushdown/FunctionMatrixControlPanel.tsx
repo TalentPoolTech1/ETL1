@@ -88,18 +88,18 @@ export const FunctionMatrixControlPanel: React.FC = () => {
   };
 
   return (
-    <div className="p-6 bg-white rounded-lg shadow-lg max-w-6xl mx-auto">
+    <div className="p-6 bg-[#161b25] rounded-lg shadow-lg max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">
+        <h1 className="text-3xl font-bold text-white mb-2">
           Function Matrix Developer Tools
         </h1>
-        <p className="text-gray-600">
+        <p className="text-slate-300">
           Configure and manage function matrix behavior during development
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200">
+      <div className="mb-6 border-b border-slate-800">
         <div className="flex space-x-1">
           {TABS.map(tab => (
             <button
@@ -108,7 +108,7 @@ export const FunctionMatrixControlPanel: React.FC = () => {
               className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-600 hover:text-gray-900'
+                  : 'border-transparent text-slate-300 hover:text-white'
               }`}
             >
               {tab.label}
@@ -164,11 +164,11 @@ export const FunctionMatrixControlPanel: React.FC = () => {
       {/* Categories Tab */}
       {activeTab === 'categories' && (
         <div className="space-y-3">
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-slate-300 mb-4">
             Toggle function categories on/off to control which functions are available
           </p>
           {categories.length === 0 ? (
-            <p className="text-gray-500 italic">No categories loaded</p>
+            <p className="text-slate-300 italic">No categories loaded</p>
           ) : (
             <div className="space-y-2">
               {categories.map(category => {
@@ -231,7 +231,7 @@ const StatCard: React.FC<{ label: string; value: string | number }> = ({
   value,
 }) => (
   <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
-    <p className="text-sm text-gray-600 mb-1">{label}</p>
+    <p className="text-sm text-slate-300 mb-1">{label}</p>
     <p className="text-3xl font-bold text-blue-600">{value}</p>
   </div>
 );
@@ -245,19 +245,19 @@ const CategoryToggle: React.FC<{
   functionCount: number;
   onToggle: () => void;
 }> = ({ category, isEnabled, functionCount, onToggle }) => (
-  <div className="flex items-center justify-between p-3 bg-gray-50 rounded border border-gray-200 hover:bg-gray-100 transition-colors">
+  <div className="flex items-center justify-between p-3 bg-[#0d0f1a] rounded border border-slate-800 hover:bg-[#111827] transition-colors">
     <div className="flex-1">
-      <div className="font-medium text-gray-900">
+      <div className="font-medium text-white">
         {category.replace(/_/g, ' ')}
       </div>
-      <div className="text-sm text-gray-600">{functionCount} functions</div>
+      <div className="text-sm text-slate-300">{functionCount} functions</div>
     </div>
     <button
       onClick={onToggle}
       className={`px-4 py-2 rounded font-medium transition-colors ${
         isEnabled
           ? 'bg-green-600 text-white hover:bg-green-700'
-          : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+          : 'bg-gray-300 text-slate-200 hover:bg-gray-400'
       }`}
     >
       {isEnabled ? 'Enabled' : 'Disabled'}
@@ -273,14 +273,14 @@ const TechnologyCard: React.FC<{
   functionCount: number;
   devTools: FunctionMatrixDevTools;
 }> = ({ technology, functionCount, devTools }) => (
-  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-    <h3 className="font-semibold text-gray-900 mb-3">
+  <div className="bg-[#0d0f1a] rounded-lg p-4 border border-slate-800">
+    <h3 className="font-semibold text-white mb-3">
       {technology.charAt(0).toUpperCase() + technology.slice(1)}
     </h3>
     <div className="grid grid-cols-3 gap-4 text-center">
       <div>
-        <p className="text-2xl font-bold text-gray-900">{functionCount}</p>
-        <p className="text-xs text-gray-600 mt-1">Functions</p>
+        <p className="text-2xl font-bold text-white">{functionCount}</p>
+        <p className="text-xs text-slate-300 mt-1">Functions</p>
       </div>
     </div>
   </div>
@@ -299,14 +299,14 @@ const CoverageMatrix: React.FC<{
   return (
     <table className="w-full border-collapse">
       <thead>
-        <tr className="bg-gray-100 border-b border-gray-300">
-          <th className="px-4 py-2 text-left font-semibold text-gray-900">
+        <tr className="bg-[#111827] border-b border-slate-700">
+          <th className="px-4 py-2 text-left font-semibold text-white">
             Category
           </th>
           {technologies.map(tech => (
             <th
               key={tech}
-              className="px-4 py-2 text-center font-semibold text-gray-900 text-sm"
+              className="px-4 py-2 text-center font-semibold text-white text-sm"
             >
               {tech}
             </th>
@@ -317,17 +317,17 @@ const CoverageMatrix: React.FC<{
         {categories.map((cat, idx) => (
           <tr
             key={cat}
-            className={`border-b border-gray-200 ${
-              idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'
+            className={`border-b border-slate-800 ${
+              idx % 2 === 0 ? 'bg-[#161b25]' : 'bg-[#0d0f1a]'
             }`}
           >
-            <td className="px-4 py-2 font-medium text-gray-900">
+            <td className="px-4 py-2 font-medium text-white">
               {cat.replace(/_/g, ' ')}
             </td>
             {technologies.map(tech => {
               const functions = service.getFunctionsByCategoryAndTech(cat, tech);
               return (
-                <td key={tech} className="px-4 py-2 text-center text-gray-600">
+                <td key={tech} className="px-4 py-2 text-center text-slate-300">
                   {functions.length}
                 </td>
               );
@@ -389,25 +389,25 @@ const ValidatorResult: React.FC<{ report: MatrixValidationReport }> = ({
         <p className="text-2xl font-bold text-blue-600">
           {report.stats.totalFunctions}
         </p>
-        <p className="text-xs text-gray-600 mt-1">Total Functions</p>
+        <p className="text-xs text-slate-300 mt-1">Total Functions</p>
       </div>
       <div className="bg-green-50 rounded p-3 text-center">
         <p className="text-2xl font-bold text-green-600">
           {report.stats.enabledFunctions}
         </p>
-        <p className="text-xs text-gray-600 mt-1">Enabled</p>
+        <p className="text-xs text-slate-300 mt-1">Enabled</p>
       </div>
       <div className="bg-purple-50 rounded p-3 text-center">
         <p className="text-2xl font-bold text-purple-600">
           {report.stats.totalCategories}
         </p>
-        <p className="text-xs text-gray-600 mt-1">Categories</p>
+        <p className="text-xs text-slate-300 mt-1">Categories</p>
       </div>
       <div className="bg-indigo-50 rounded p-3 text-center">
         <p className="text-2xl font-bold text-indigo-600">
           {Object.keys(report.stats.technologyCoverage).length}
         </p>
-        <p className="text-xs text-gray-600 mt-1">Technologies</p>
+        <p className="text-xs text-slate-300 mt-1">Technologies</p>
       </div>
     </div>
   </div>

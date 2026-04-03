@@ -129,7 +129,7 @@ export function TransformationBuilder({
   return (
     <div className="space-y-4">
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-neutral-200">
+      <div className="flex gap-2 border-b border-slate-800">
         {['sql', 'mapping', 'preview'].map(tab => (
           <button
             key={tab}
@@ -156,7 +156,7 @@ export function TransformationBuilder({
             Define WHERE clause to filter rows. Columns referenced as {'{column_name}'}
           </p>
 
-          <div className="border border-neutral-300 rounded-md overflow-hidden">
+          <div className="border border-slate-700 rounded-md overflow-hidden">
             <Editor
               height="300px"
               language="sql"
@@ -194,11 +194,11 @@ export function TransformationBuilder({
             {/* Available Input Columns */}
             <div>
               <p className="text-sm font-medium text-neutral-900 mb-2">Input Columns</p>
-              <div className="space-y-2 max-h-96 overflow-y-auto border border-neutral-200 rounded-md p-2 bg-neutral-50">
+              <div className="space-y-2 max-h-96 overflow-y-auto border border-slate-800 rounded-md p-2 bg-neutral-50">
                 {inputColumns.map(col => (
                   <div
                     key={col.name}
-                    className="flex justify-between items-center p-2 bg-white border border-neutral-200 rounded-md hover:border-primary-300"
+                    className="flex justify-between items-center p-2 bg-[#161b25] border border-slate-800 rounded-md hover:border-primary-300"
                   >
                     <div>
                       <p className="text-xs font-mono text-neutral-900">{col.name}</p>
@@ -222,7 +222,7 @@ export function TransformationBuilder({
               <p className="text-sm font-medium text-neutral-900 mb-2">
                 Output Mapping ({currentMappings.length})
               </p>
-              <div className="space-y-2 max-h-96 overflow-y-auto border border-neutral-200 rounded-md p-2 bg-neutral-50">
+              <div className="space-y-2 max-h-96 overflow-y-auto border border-slate-800 rounded-md p-2 bg-neutral-50">
                 {currentMappings.length === 0 ? (
                   <p className="text-xs text-neutral-500 italic">No mappings. Click + to add.</p>
                 ) : (
@@ -233,7 +233,7 @@ export function TransformationBuilder({
                       className={`p-2 rounded-md border cursor-pointer transition-colors ${
                         selectedColumn?.source.name === mapping.source.name
                           ? 'bg-primary-50 border-primary-300'
-                          : 'bg-white border-neutral-200 hover:border-primary-300'
+                          : 'bg-[#161b25] border-slate-800 hover:border-primary-300'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
@@ -257,12 +257,12 @@ export function TransformationBuilder({
                           onChange={e =>
                             handleUpdateMapping(mapping.source.name, 'target', e.target.value)
                           }
-                          className="flex-1 px-2 py-1 text-xs border border-neutral-200 rounded-md"
+                          className="flex-1 px-2 py-1 text-xs border border-slate-800 rounded-md"
                           onClick={e => e.stopPropagation()}
                         />
                       </div>
                       {selectedColumn?.source.name === mapping.source.name && (
-                        <div className="mt-2 pt-2 border-t border-neutral-200">
+                        <div className="mt-2 pt-2 border-t border-slate-800">
                           <label className="text-xs font-medium text-neutral-700 block mb-1">
                             Aggregation
                           </label>
@@ -275,7 +275,7 @@ export function TransformationBuilder({
                                 e.target.value
                               )
                             }
-                            className="w-full px-2 py-1 text-xs border border-neutral-200 rounded-md"
+                            className="w-full px-2 py-1 text-xs border border-slate-800 rounded-md"
                           >
                             <option value="none">None</option>
                             <option value="sum">Sum</option>
@@ -301,7 +301,7 @@ export function TransformationBuilder({
         <div className="space-y-3">
           <div>
             <p className="text-sm font-medium text-neutral-900 mb-2">Generated SQL</p>
-            <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-md">
+            <div className="p-3 bg-neutral-50 border border-slate-800 rounded-md">
               <pre className="text-xs font-mono text-neutral-800 whitespace-pre-wrap">
                 {generateSQLPreview() || '(No SQL generated yet)'}
               </pre>
@@ -318,7 +318,7 @@ export function TransformationBuilder({
               </div>
 
               {testResults?.results && (
-                <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-md">
+                <div className="p-3 bg-neutral-50 border border-slate-800 rounded-md">
                   <p className="text-xs text-neutral-600 mb-2">
                     <span className="font-medium">{testResults.results.length}</span> rows
                     processed

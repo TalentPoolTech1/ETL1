@@ -4,13 +4,16 @@
  * Dark theme, log search + download, real-time auto-refresh
  */
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useDispatch } from 'react-redux';
 import {
   RefreshCw, Download, Search, Copy, CheckCircle2,
   XCircle, Clock, AlertTriangle, Activity, BarChart3,
   Code2, FileText, Play, RotateCcw, ExternalLink,
 } from 'lucide-react';
 import api from '@/services/api';
+import { openTab } from '@/store/slices/tabsSlice';
 import type { RunStatus, NodeRunDetail } from '@/types';
+import { formatExecutionTabName } from '@/utils/executionLabels';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -65,7 +68,7 @@ function fmtBytes(b: number | null): string {
 function Metric({ label, value }: { label: string; value: string | number | null }) {
   return (
     <div className="flex items-center justify-between py-2 border-b border-slate-800/60">
-      <span className="text-[12px] text-slate-500">{label}</span>
+      <span className="text-[12px] text-slate-300">{label}</span>
       <span className="text-[12px] font-medium text-slate-200">{value ?? '—'}</span>
     </div>
   );
@@ -74,7 +77,7 @@ function Metric({ label, value }: { label: string; value: string | number | null
 // ─── Node timeline ────────────────────────────────────────────────────────────
 
 function NodeTimeline({ nodes }: { nodes: NodeRunDetail[] }) {
-  if (!nodes.length) return <div className="text-sm text-slate-500 py-4">No node-level data available.</div>;
+  if (!nodes.length) return <div className="text-sm text-slate-300 py-4">No node-level data available.</div>;
   const maxDur = Math.max(...nodes.map(n => n.durationMs ?? 0), 1);
   const barCls = (s: RunStatus) =>
     s === 'SUCCESS' ? 'bg-emerald-600' : s === 'FAILED' ? 'bg-red-600' : s === 'RUNNING' ? 'bg-blue-500' : 'bg-slate-600';
@@ -85,17 +88,17 @@ function NodeTimeline({ nodes }: { nodes: NodeRunDetail[] }) {
         const pct = Math.max(2, ((node.durationMs ?? 0) / maxDur) * 100);
         return (
           <div key={node.nodeRunId} className="flex items-center gap-3">
-            <div className="w-48 text-[11px] text-slate-400 truncate font-mono" title={node.nodeDisplayName}>
+            <div className="w-48 text-[12px] text-slate-400 truncate font-mono" title={node.nodeDisplayName}>
               {node.nodeDisplayName || node.nodeIdInIrText}
             </div>
             <div className="flex-1 bg-slate-800 rounded h-5 overflow-hidden relative">
               <div className={`h-full ${barCls(node.runStatus)} rounded transition-all`} style={{ width: `${pct}%` }} />
-              <span className="absolute inset-0 flex items-center px-2 text-[11px] font-medium text-slate-200">
+              <span className="absolute inset-0 flex items-center px-2 text-[12px] font-medium text-slate-200">
                 {fmtDur(node.durationMs)}
               </span>
             </div>
             <StatusBadge status={node.runStatus} />
-            <div className="w-20 text-right text-[11px] text-slate-500">
+            <div className="w-20 text-right text-[12px] text-slate-300">
               {node.rowsOut !== null ? `${node.rowsOut.toLocaleString()} rows` : '—'}
             </div>
           </div>
@@ -109,7 +112,11 @@ function NodeTimeline({ nodes }: { nodes: NodeRunDetail[] }) {
 
 interface LogEntry { logDtm: string; logLevel: string; logMessage: string; nodeId?: string; }
 
-function LogViewer({ runId, autoRefresh }: { runId: string; autoRefresh: boolean }) {
+function LogViewer({ runId, autoRefresh, onAutoRefreshChange }: {
+  runId: string;
+  autoRefresh: boolean;
+  onAutoRefreshChange: (next: boolean) => void;
+}) {
   const [logs, setLogs]           = useState<LogEntry[]>([]);
   const [loading, setLoading]     = useState(true);
   const [search, setSearch]       = useState('');
@@ -148,7 +155,7 @@ function LogViewer({ runId, autoRefresh }: { runId: string; autoRefresh: boolean
       case 'ERROR': case 'FATAL': return 'text-red-400';
       case 'WARN':                return 'text-amber-400';
       case 'INFO':                return 'text-emerald-400';
-      case 'DEBUG': case 'TRACE': return 'text-slate-500';
+      case 'DEBUG': case 'TRACE': return 'text-slate-300';
       default:                    return 'text-slate-400';
     }
   };
@@ -175,40 +182,44 @@ function LogViewer({ runId, autoRefresh }: { runId: string; autoRefresh: boolean
       {/* Log toolbar */}
       <div className="flex items-center gap-2 mb-2 flex-shrink-0">
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600 pointer-events-none" />
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search logs…"
-            className="w-full h-7 pl-7 pr-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-300 placeholder-slate-600 outline-none focus:border-blue-600" />
+            className="w-full h-7 pl-7 pr-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-300 placeholder-slate-500 outline-none focus:border-blue-600" />
         </div>
         <select value={levelFilter} onChange={e => setLevel(e.target.value)}
           className="h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-300 outline-none focus:border-blue-600">
           <option value="">All levels</option>
           {uniqueLevels.map(l => <option key={l} value={l}>{l}</option>)}
         </select>
-        <span className="text-[11px] text-slate-600">{filtered.length} lines</span>
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-300 cursor-pointer">
+          <input type="checkbox" checked={autoRefresh} onChange={e => onAutoRefreshChange(e.target.checked)} className="accent-blue-500" />
+          Auto-refresh
+        </label>
+        <span className="text-[12px] text-slate-400">{filtered.length} lines</span>
         <div className="flex-1" />
         <button onClick={fetchLogs}
-          className="flex items-center gap-1 h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors">
+          className="flex items-center gap-1 h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors">
           <RefreshCw className="w-3 h-3" />
         </button>
         <button onClick={copyLogs}
-          className="flex items-center gap-1 h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors">
+          className="flex items-center gap-1 h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors">
           {copied ? <><CheckCircle2 className="w-3 h-3 text-emerald-400" /> Copied</> : <><Copy className="w-3 h-3" /> Copy</>}
         </button>
         <button onClick={downloadLogs}
-          className="flex items-center gap-1 h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors">
+          className="flex items-center gap-1 h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition-colors">
           <Download className="w-3 h-3" /> Download
         </button>
       </div>
 
       {/* Log output */}
       <div className="flex-1 overflow-auto bg-[#070910] border border-slate-800 rounded-lg p-3 font-mono text-[12px] min-h-0">
-        {loading && <div className="text-slate-600">Loading logs…</div>}
-        {!loading && filtered.length === 0 && <div className="text-slate-600">No log entries found.</div>}
+        {loading && <div className="text-slate-400">Loading logs…</div>}
+        {!loading && filtered.length === 0 && <div className="text-slate-400">No log entries found.</div>}
         {filtered.map((entry, i) => (
           <div key={i} className="flex gap-2 leading-5 hover:bg-slate-900/40 px-1 rounded">
-            <span className="text-slate-600 shrink-0 select-none">{new Date(entry.logDtm).toLocaleTimeString()}</span>
+            <span className="text-slate-400 shrink-0 select-none">{new Date(entry.logDtm).toLocaleTimeString()}</span>
             <span className={`shrink-0 w-11 font-medium ${levelCls(entry.logLevel)}`}>{entry.logLevel}</span>
-            {entry.nodeId && <span className="text-slate-600 shrink-0">[{entry.nodeId.slice(0, 8)}]</span>}
+            {entry.nodeId && <span className="text-slate-400 shrink-0">[{entry.nodeId.slice(0, 8)}]</span>}
             <span className="text-slate-300 break-all">{entry.logMessage}</span>
           </div>
         ))}
@@ -246,18 +257,30 @@ interface PipelineRunDetail {
   nodes: NodeRunDetail[];
 }
 
-export function ExecutionDetailTab({ runId, executionKind }: {
-  runId: string; executionKind: 'pipeline' | 'orchestrator';
+export function ExecutionDetailTab({
+  runId,
+  executionKind,
+  initialSubTab = 'summary',
+  refreshToken = 0,
+}: {
+  runId: string;
+  executionKind: 'pipeline' | 'orchestrator';
+  initialSubTab?: DetailSubTab;
+  refreshToken?: number;
 }) {
+  const dispatch = useDispatch();
   const [detail, setDetail]     = useState<PipelineRunDetail | null>(null);
   const [nodes, setNodes]       = useState<NodeRunDetail[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
-  const [subTab, setSubTab]     = useState<DetailSubTab>('summary');
-  const [autoRefresh, setAuto]  = useState(false);
+  const [subTab, setSubTab]     = useState<DetailSubTab>(initialSubTab);
+  const [autoRefresh, setAuto]  = useState(true);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const [markingOk, setMarkingOk] = useState(false);
 
-  const isRunning = detail?.runStatus === 'RUNNING' || detail?.runStatus === 'RETRYING';
+  const TERMINAL_STATUSES = ['SUCCESS', 'FAILED', 'CANCELLED', 'KILLED', 'TIMED_OUT'];
+  const isRunning = detail ? !TERMINAL_STATUSES.includes(detail.runStatus) : true;
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -313,11 +336,20 @@ export function ExecutionDetailTab({ runId, executionKind }: {
     } finally { setLoading(false); }
   }, [runId, executionKind]);
 
-  useEffect(() => { fetchDetail(); }, [fetchDetail]);
+  useEffect(() => { fetchDetail(); }, [fetchDetail, refreshToken]);
+
+  useEffect(() => {
+    setSubTab(initialSubTab);
+  }, [initialSubTab, runId]);
+
+  // Stop auto-refresh once the run reaches a terminal state
+  useEffect(() => {
+    if (detail && TERMINAL_STATUSES.includes(detail.runStatus)) setAuto(false);
+  }, [detail?.runStatus]);
 
   useEffect(() => {
     if (!autoRefresh || !isRunning) return;
-    const t = setInterval(fetchDetail, 5000);
+    const t = setInterval(fetchDetail, 3000);
     return () => clearInterval(t);
   }, [autoRefresh, isRunning, fetchDetail]);
 
@@ -330,13 +362,13 @@ export function ExecutionDetailTab({ runId, executionKind }: {
   ];
 
   if (loading) return (
-    <div className="flex-1 flex items-center justify-center bg-[#0d0f1a] text-slate-400 text-sm">
+    <div className="h-full w-full flex items-center justify-center bg-[#0d0f1a] text-slate-400 text-sm">
       Loading execution details…
     </div>
   );
 
   if (error || !detail) return (
-    <div className="flex-1 flex items-center justify-center bg-[#0d0f1a]">
+    <div className="h-full w-full flex items-center justify-center bg-[#0d0f1a]">
       <div className="bg-red-950/50 border border-red-800 rounded-lg p-6 max-w-sm text-center">
         <div className="text-red-400 font-medium mb-1">Could not load execution</div>
         <div className="text-sm text-red-500/80">{error ?? 'Unknown error'}</div>
@@ -349,7 +381,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
   );
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-[#0d0f1a]">
+    <div className="h-full w-full flex flex-col min-h-0 overflow-hidden bg-[#0d0f1a]">
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="px-5 pt-4 pb-3 border-b border-slate-800 flex-shrink-0">
         <div className="flex items-start gap-3">
@@ -358,7 +390,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
               <h1 className="text-[16px] font-semibold text-slate-100">{detail.pipelineName}</h1>
               <StatusBadge status={detail.runStatus} />
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
+            <div className="text-[12px] text-slate-300 mt-1">
               {executionKind === 'pipeline' ? 'Pipeline' : 'Orchestrator'} Run ·{' '}
               <span className="font-mono">{runId}</span>
               {detail.projectName && ` · ${detail.projectName}`}
@@ -371,10 +403,53 @@ export function ExecutionDetailTab({ runId, executionKind }: {
                 Live
               </label>
             )}
-            {(detail.runStatus === 'FAILED' || detail.runStatus === 'TIMED_OUT') && (
-              <button onClick={() => (executionKind === 'pipeline' ? api.retryPipelineRun : api.retryOrchestratorRun)(runId)}
-                className="flex items-center gap-1.5 h-7 px-3 bg-amber-700 hover:bg-amber-600 text-white rounded text-[12px] font-medium transition-colors">
-                <RotateCcw className="w-3.5 h-3.5" /> Retry
+            {(detail.runStatus === 'FAILED' || detail.runStatus === 'TIMED_OUT' || detail.runStatus === 'CANCELLED') && (
+              <button
+                disabled={markingOk}
+                onClick={async () => {
+                  setMarkingOk(true);
+                  try {
+                    if (executionKind === 'pipeline') {
+                      await api.markPipelineRunOk(runId);
+                    } else {
+                      await api.markOrchestratorRunOk(runId);
+                    }
+                    await fetchDetail();
+                  } catch { /* keep current detail open */ }
+                  finally { setMarkingOk(false); }
+                }}
+                className="flex items-center gap-1.5 h-7 px-3 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-[12px] font-medium transition-colors">
+                <CheckCircle2 className={`w-3.5 h-3.5 ${markingOk ? 'animate-pulse' : ''}`} />
+                {markingOk ? 'Marking…' : 'Mark OK'}
+              </button>
+            )}
+            {(detail.runStatus === 'FAILED' || detail.runStatus === 'TIMED_OUT' || detail.runStatus === 'CANCELLED') && (
+              <button
+                disabled={retrying}
+                onClick={async () => {
+                  setRetrying(true);
+                  try {
+                    const res = executionKind === 'pipeline'
+                      ? await api.retryPipelineRun(runId)
+                      : await api.retryOrchestratorRun(runId);
+                    const newRunId = res.data?.data?.pipelineRunId ?? res.data?.data?.orchRunId;
+                    if (newRunId) {
+                      dispatch(openTab({
+                        id: `execution-${newRunId}`,
+                        type: 'execution',
+                        objectId: newRunId,
+                        objectName: formatExecutionTabName(detail.pipelineName, newRunId),
+                        unsaved: false,
+                        isDirty: false,
+                        executionKind,
+                      }));
+                    }
+                  } catch { /* error surfaced via 4xx response — leave current tab open */ }
+                  finally { setRetrying(false); }
+                }}
+                className="flex items-center gap-1.5 h-7 px-3 bg-amber-700 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-[12px] font-medium transition-colors">
+                <RotateCcw className={`w-3.5 h-3.5 ${retrying ? 'animate-spin' : ''}`} />
+                {retrying ? 'Retrying…' : 'Retry'}
               </button>
             )}
             {(detail.runStatus === 'RUNNING' || detail.runStatus === 'QUEUED') && (
@@ -404,7 +479,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
             className={`flex items-center gap-1.5 px-4 py-2.5 text-[12px] font-medium border-b-2 transition-colors ${
               subTab === t.key
                 ? 'border-blue-500 text-blue-300'
-                : 'border-transparent text-slate-500 hover:text-slate-300'
+                : 'border-transparent text-slate-300 hover:text-slate-300'
             }`}>
             <t.Icon className="w-3.5 h-3.5" />
             {t.label}
@@ -413,7 +488,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
       </div>
 
       {/* ── Content ─────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-auto p-5 min-h-0">
+      <div className="flex-1 min-h-0 overflow-auto p-5">
 
         {subTab === 'summary' && (
           <div className="max-w-2xl space-y-4">
@@ -439,7 +514,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
             </div>
             {detail.errorMessage && (
               <div className="bg-red-950/40 border border-red-800 rounded-lg p-4">
-                <div className="text-[11px] font-semibold text-red-400 mb-2 flex items-center gap-1.5">
+                <div className="text-[12px] font-semibold text-red-400 mb-2 flex items-center gap-1.5">
                   <XCircle className="w-3.5 h-3.5" /> Error Details
                 </div>
                 <pre className="text-[12px] text-red-300/80 whitespace-pre-wrap font-mono">{detail.errorMessage}</pre>
@@ -450,7 +525,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
 
         {subTab === 'steps' && (
           <div className="max-w-3xl">
-            <div className="text-[12px] text-slate-500 mb-4">
+            <div className="text-[12px] text-slate-300 mb-4">
               {nodes.length} step{nodes.length !== 1 ? 's' : ''} · click a bar to expand metrics
             </div>
             <NodeTimeline nodes={nodes} />
@@ -458,8 +533,8 @@ export function ExecutionDetailTab({ runId, executionKind }: {
         )}
 
         {subTab === 'logs' && (
-          <div className="h-full flex flex-col" style={{ minHeight: '400px' }}>
-            <LogViewer runId={runId} autoRefresh={isRunning && autoRefresh} />
+          <div className="flex-1 min-h-0 flex flex-col">
+            <LogViewer runId={runId} autoRefresh={isRunning && autoRefresh} onAutoRefreshChange={setAuto} />
           </div>
         )}
 
@@ -490,7 +565,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
                 <pre className="p-4 text-[12px] text-slate-300 font-mono whitespace-pre">{detail.generatedCodeRef}</pre>
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+              <div className="flex flex-col items-center justify-center h-40 text-slate-400">
                 <Code2 className="w-8 h-8 mb-2 opacity-30" />
                 <p className="text-sm">Generated code snapshot not available for this run.</p>
               </div>
@@ -502,7 +577,7 @@ export function ExecutionDetailTab({ runId, executionKind }: {
           <div className="max-w-3xl space-y-4">
             <div className="text-[12px] font-medium text-slate-300 mb-4">Node-Level Metrics</div>
             {nodes.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+              <div className="flex flex-col items-center justify-center h-40 text-slate-400">
                 <BarChart3 className="w-8 h-8 mb-2 opacity-30" />
                 <p className="text-sm">No node metrics captured for this run.</p>
               </div>
@@ -511,18 +586,18 @@ export function ExecutionDetailTab({ runId, executionKind }: {
                 <div className="flex items-center justify-between py-2">
                   <span className="text-[12px] font-medium text-slate-200 font-mono">{node.nodeDisplayName || node.nodeIdInIrText}</span>
                   <div className="flex items-center gap-4">
-                    <span className="text-[12px] text-slate-500">{fmtDur(node.durationMs)}</span>
-                    <span className="text-[12px] text-slate-500">↓{node.rowsIn?.toLocaleString() ?? '—'} ↑{node.rowsOut?.toLocaleString() ?? '—'}</span>
+                    <span className="text-[12px] text-slate-300">{fmtDur(node.durationMs)}</span>
+                    <span className="text-[12px] text-slate-300">↓{node.rowsIn?.toLocaleString() ?? '—'} ↑{node.rowsOut?.toLocaleString() ?? '—'}</span>
                     <StatusBadge status={node.runStatus} />
                   </div>
                 </div>
                 {node.errorMessage && (
-                  <div className="text-[11px] text-red-400 pl-2 border-l border-red-800">{node.errorMessage.slice(0, 120)}</div>
+                  <div className="text-[12px] text-red-400 pl-2 border-l border-red-800">{node.errorMessage.slice(0, 120)}</div>
                 )}
                 {Object.keys(node.metrics).length > 0 && (
                   <details className="mt-2">
-                    <summary className="text-[11px] text-slate-500 cursor-pointer hover:text-slate-300">Raw metrics</summary>
-                    <pre className="mt-1 text-[11px] text-slate-500 bg-[#070910] rounded p-2 overflow-auto max-h-32 border border-slate-800">
+                    <summary className="text-[12px] text-slate-300 cursor-pointer hover:text-slate-300">Raw metrics</summary>
+                    <pre className="mt-1 text-[12px] text-slate-300 bg-[#070910] rounded p-2 overflow-auto max-h-32 border border-slate-800">
                       {JSON.stringify(node.metrics, null, 2)}
                     </pre>
                   </details>

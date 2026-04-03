@@ -1,9 +1,11 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useAppSelector } from '@/store/hooks';
+import api from '@/services/api';
 
 interface PreviewRow { [key: string]: unknown; }
 interface PreviewEnvelope {
   rows?: PreviewRow[];
+  columns?: string[];
   previewAvailable?: boolean;
   availabilityReason?: string;
 }
@@ -13,17 +15,21 @@ const VISIBLE_ITEMS = 15;
 
 interface DataPreviewPanelProps {
   embedded?: boolean;
+  nodeId: string | null;
+  onClose?: () => void;
 }
 
-export function DataPreviewPanel({ embedded = false }: DataPreviewPanelProps) {
+export function DataPreviewPanel({ embedded = false, nodeId, onClose }: DataPreviewPanelProps) {
   // Defensive guard: the old global app-shell preview should never render for
   // pipeline node selection anymore. Only the embedded designer preview is valid.
   if (!embedded) return null;
 
-  const selectedNodeIds = useAppSelector(s => s.pipeline.selectedNodeIds);
-  const selectedNodeId = selectedNodeIds[0] ?? null;
+  const activePipelineId = useAppSelector(s => s.pipeline.activePipeline?.id ?? null);
+  const activePipelineName = useAppSelector(s => s.pipeline.activePipeline?.name ?? '');
+  const selectedNode = useAppSelector(s => nodeId ? s.pipeline.nodes[nodeId] ?? null : null);
 
   const [rows, setRows] = useState<PreviewRow[]>([]);
+  const [columns, setColumns] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unavailableMessage, setUnavailableMessage] = useState<string | null>(null);
@@ -34,24 +40,56 @@ export function DataPreviewPanel({ embedded = false }: DataPreviewPanelProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const loadPreview = useCallback(async () => {
-    if (!selectedNodeId) return;
+    if (!nodeId || !activePipelineId || !selectedNode) return;
     setLoading(true);
     setError(null);
     setRows([]);
-    setUnavailableMessage('Row-level data preview is coming soon for this workspace.');
-    setLoading(false);
-  }, [selectedNodeId]);
+    setColumns([]);
+    setUnavailableMessage(null);
+    try {
+      let res;
+      try {
+        res = await api.previewNode(selectedNode, {
+          pipelineId: activePipelineId,
+          pipelineName: activePipelineName,
+          limit: 100,
+        });
+      } catch (previewErr: any) {
+        // Compatibility fallback while older backends are still serving only GET /nodes/:id/preview.
+        res = await api.getPreview(nodeId, { pipelineId: activePipelineId, limit: 100 });
+        if (!res) throw previewErr;
+      }
+      const data = (res.data?.data ?? {}) as PreviewEnvelope;
+      if (data.previewAvailable === false) {
+        setUnavailableMessage(data.availabilityReason ?? 'Preview is not available for this node.');
+        return;
+      }
+      const nextRows = Array.isArray(data.rows) ? data.rows : [];
+      const nextColumns = Array.isArray(data.columns) && data.columns.length > 0
+        ? data.columns
+        : nextRows.length > 0
+        ? Object.keys(nextRows[0]!)
+        : [];
+      setColumns(nextColumns);
+      setRows(nextRows);
+    } catch (err: any) {
+      setError(err?.response?.data?.userMessage ?? 'Failed to load preview');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedNode, nodeId, activePipelineId, activePipelineName]);
 
   useEffect(() => {
-    if (selectedNodeId) loadPreview();
+    if (nodeId && activePipelineId && selectedNode) loadPreview();
     else {
       setRows([]);
+      setColumns([]);
       setUnavailableMessage(null);
       setError(null);
     }
-  }, [selectedNodeId, loadPreview]);
+  }, [selectedNode, nodeId, activePipelineId, loadPreview]);
 
-  const allColumns = rows.length > 0 ? Object.keys(rows[0]) : [];
+  const allColumns = columns.length > 0 ? columns : rows.length > 0 ? Object.keys(rows[0]) : [];
 
   const filteredData = useMemo(() => {
     let result = [...rows];
@@ -111,7 +149,7 @@ export function DataPreviewPanel({ embedded = false }: DataPreviewPanelProps) {
       <div className="h-10 border-b border-slate-800 flex items-center justify-between px-4 bg-slate-950/60 flex-shrink-0">
         <div className="flex items-center gap-3">
           <h3 className="text-sm font-semibold text-slate-100">Data Preview</h3>
-          {selectedNodeId && (
+          {nodeId && (
             <div className="text-xs text-slate-400">
               {loading
                 ? 'Loading…'
@@ -122,21 +160,26 @@ export function DataPreviewPanel({ embedded = false }: DataPreviewPanelProps) {
                 : `${filteredData.length} rows`}
             </div>
           )}
-          {!selectedNodeId && <div className="text-xs text-slate-500">Select a node to preview data</div>}
+          {selectedNode && <div className="text-xs text-slate-300">{selectedNode.name}</div>}
+          {!nodeId && <div className="text-xs text-slate-300">Click a node preview icon to load data</div>}
         </div>
         <div className="flex items-center gap-2">
-          {selectedNodeId && (
+          {nodeId && (
             <>
               {!unavailableMessage && (
                 <>
                   <input type="text" placeholder="Search…" value={filterText}
                     onChange={e => setFilterText(e.target.value)}
-                    className="px-2 py-1 border border-slate-700 bg-[#131826] rounded text-xs w-32 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500/40 focus:border-blue-500" />
+                    className="px-2 py-1 border border-slate-700 bg-[#131826] rounded text-xs w-32 text-slate-100 placeholder:text-slate-300 focus:outline-none focus:ring-1 focus:ring-blue-500/40 focus:border-blue-500" />
                   <button onClick={loadPreview} title="Refresh"
-                    className="text-xs text-slate-500 hover:text-slate-200">⟳</button>
+                    className="text-xs text-slate-300 hover:text-slate-200">⟳</button>
                   <button onClick={() => setShowExportModal(true)} title="Export"
-                    className="text-xs text-slate-500 hover:text-slate-200">📥</button>
+                    className="text-xs text-slate-300 hover:text-slate-200">📥</button>
                 </>
+              )}
+              {onClose && (
+                <button onClick={onClose} title="Close preview"
+                  className="text-xs text-slate-300 hover:text-slate-200">✕</button>
               )}
             </>
           )}
@@ -144,38 +187,38 @@ export function DataPreviewPanel({ embedded = false }: DataPreviewPanelProps) {
       </div>
 
       {/* Empty state */}
-      {!selectedNodeId && (
-        <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
-          Select a canvas node to preview its output data.
+      {!nodeId && (
+        <div className="flex-1 flex items-center justify-center text-slate-300 text-sm">
+          Click the preview icon on a node to open data preview.
         </div>
       )}
 
       {/* Loading */}
-      {selectedNodeId && loading && (
+      {nodeId && loading && (
         <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">Loading preview…</div>
       )}
 
       {/* Error */}
-      {selectedNodeId && !loading && error && (
+      {nodeId && !loading && error && (
         <div className="flex-1 flex items-center justify-center text-red-400 text-sm">{error}</div>
       )}
 
       {/* Unavailable */}
-      {selectedNodeId && !loading && !error && unavailableMessage && (
-        <div className="flex-1 flex items-center justify-center text-slate-500 text-sm px-6 text-center">
+      {nodeId && !loading && !error && unavailableMessage && (
+        <div className="flex-1 flex items-center justify-center text-slate-300 text-sm px-6 text-center">
           {unavailableMessage}
         </div>
       )}
 
       {/* No data */}
-      {selectedNodeId && !loading && !error && !unavailableMessage && rows.length === 0 && (
-        <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+      {nodeId && !loading && !error && !unavailableMessage && rows.length === 0 && (
+        <div className="flex-1 flex items-center justify-center text-slate-300 text-sm">
           No preview data available for this node.
         </div>
       )}
 
       {/* Table */}
-      {selectedNodeId && !loading && !error && !unavailableMessage && rows.length > 0 && (
+      {nodeId && !loading && !error && !unavailableMessage && rows.length > 0 && (
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* Header */}
           <div className="bg-slate-950/80 border-b border-slate-800 flex h-8 flex-shrink-0">
@@ -184,7 +227,7 @@ export function DataPreviewPanel({ embedded = false }: DataPreviewPanelProps) {
                 className="flex-1 min-w-32 px-4 py-1.5 text-left text-xs font-semibold text-slate-300 border-r border-slate-800 flex items-center cursor-pointer hover:bg-slate-900"
                 onClick={() => handleColumnSort(col)}>
                 <span>{col}</span>
-                <span className="ml-1 text-slate-500">
+                <span className="ml-1 text-slate-300">
                   {sortBy?.column === col ? (sortBy.direction === 'asc' ? '▲' : '▼') : ''}
                 </span>
               </div>

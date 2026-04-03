@@ -27,7 +27,7 @@ type FormData = Record<string, unknown>;
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start gap-2 text-[12px]">
-      <span className="text-slate-500 w-32 flex-shrink-0">{label}</span>
+      <span className="text-slate-300 w-32 flex-shrink-0">{label}</span>
       <span className="text-slate-300">{value || '—'}</span>
     </div>
   );
@@ -37,7 +37,7 @@ function OverviewTab({ data }: { data: FormData }) {
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4 max-w-lg space-y-2">
-        <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Folder Details</div>
+        <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Folder Details</div>
         <InfoRow label="Folder ID" value={String(data.folderId ?? '')} />
         <InfoRow label="Name" value={String(data.name ?? '')} />
         <InfoRow label="Parent Path" value={String(data.parentPath ?? '')} />
@@ -54,12 +54,12 @@ function OverviewTab({ data }: { data: FormData }) {
 function PropertiesTab({ data, onChange }: { data: FormData; onChange: (f: string, v: string) => void }) {
   const F = ({ label, field, ro }: { label: string; field: string; ro?: boolean }) => (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="field-label">{label}</label>
       {ro ? (
-        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-500 font-mono">{String(data[field] ?? '—')}</div>
+        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-300 font-mono">{String(data[field] ?? '—')}</div>
       ) : (
         <input type="text" value={String(data[field] ?? '')} onChange={e => onChange(field, e.target.value)}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+          className="field-input" />
       )}
     </div>
   );
@@ -152,10 +152,10 @@ function ContentsTab({ folderId, projectId }: { folderId: string; projectId: str
           <GitMerge className="w-3.5 h-3.5 text-purple-400" /> New Orchestrator
         </button>
       </div>
-      {loading && <div className="text-[12px] text-slate-500">Loading folder contents…</div>}
+      {loading && <div className="text-[12px] text-slate-300">Loading folder contents…</div>}
       {error && <div className="text-[12px] text-red-400 mb-3">{error}</div>}
       {!loading && !error && children.length === 0 && pipelines.length === 0 && orchestrators.length === 0 && (
-        <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
           <Plus className="w-8 h-8 mb-2" />
           <p className="text-sm">This folder is empty.</p>
         </div>

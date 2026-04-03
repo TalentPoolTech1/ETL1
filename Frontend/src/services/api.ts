@@ -83,6 +83,10 @@ class APIClient {
     return this.client.get(`/pipelines/${id}`);
   }
 
+  getPipelineExecutions(id: string, params?: { limit?: number }) {
+    return this.client.get(`/pipelines/${id}/executions`, { params });
+  }
+
   createPipeline(data: { projectId?: string | null; pipelineDisplayName: string; pipelineDescText?: string; folderId?: string | null; }) {
     return this.client.post('/pipelines', data);
   }
@@ -153,6 +157,10 @@ class APIClient {
     return this.client.get(`/nodes/${nodeId}/preview`, { params: options });
   }
 
+  previewNode(node: unknown, options: Record<string, unknown> = {}) {
+    return this.client.post('/nodes/preview', { node, ...options });
+  }
+
   // ─── Orchestrators ─────────────────────────────────────────────────────────
 
   getOrchestratorsForProject(projectId: string) {
@@ -189,6 +197,10 @@ class APIClient {
 
   saveOrchestrator(id: string, data: unknown) {
     return this.client.put(`/orchestrators/${id}`, data);
+  }
+
+  saveOrchestratorDag(id: string, dagDefinitionJson: unknown) {
+    return this.client.put(`/orchestrators/${id}`, { dagDefinitionJson });
   }
 
   runOrchestrator(id: string, options?: { environment?: string; concurrency?: string }) {
@@ -279,6 +291,14 @@ class APIClient {
     return this.client.get(`/metadata/${datasetId}/permissions`);
   }
 
+  updateMetadataColumn(
+    datasetId: string,
+    columnId: string,
+    data: { overrideDataType?: string | null; parseFormat?: string | null; nullable?: boolean; description?: string | null },
+  ) {
+    return this.client.put(`/metadata/${datasetId}/columns/${columnId}`, data);
+  }
+
   getTechnologies() {
     return this.client.get('/metadata/technologies');
   }
@@ -294,7 +314,9 @@ class APIClient {
   }
 
   getConnection(id: string) {
-    return this.client.get(`/connections/${id}`);
+    return this.client.get(`/connections/${id}`, {
+      params: { _: Date.now() },
+    });
   }
 
   createConnection(data: unknown) {
@@ -412,12 +434,30 @@ class APIClient {
     return this.client.post(`/executions/pipeline-runs/${runId}/cancel`);
   }
 
+  markPipelineRunOk(runId: string, payload?: { reason?: string }) {
+    return this.client.post(`/executions/pipeline-runs/${runId}/mark-ok`, payload ?? {});
+  }
+
   retryOrchestratorRun(runId: string) {
     return this.client.post(`/executions/orchestrator-runs/${runId}/retry`);
   }
 
   cancelOrchestratorRun(runId: string) {
     return this.client.post(`/executions/orchestrator-runs/${runId}/cancel`);
+  }
+
+  markOrchestratorRunOk(runId: string, payload?: { reason?: string }) {
+    return this.client.post(`/executions/orchestrator-runs/${runId}/mark-ok`, payload ?? {});
+  }
+
+  // ─── Settings ──────────────────────────────────────────────────────────────
+
+  getComputeSettings() {
+    return this.client.get('/settings/compute');
+  }
+
+  updateComputeSettings(data: { sparkMaster: string; pysparkPath: string; scalaVersion: string; pythonVersion: string; additionalLibraries: string }) {
+    return this.client.put('/settings/compute', data);
   }
 
   // ─── Governance ────────────────────────────────────────────────────────────

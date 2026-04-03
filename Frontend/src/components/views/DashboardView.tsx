@@ -206,7 +206,7 @@ export function DashboardView() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-slate-100 tracking-tight">Platform Overview</h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-300 mt-0.5">
               Last refreshed {lastRefresh.toLocaleTimeString()} · auto-refresh 30s
             </p>
           </div>
@@ -275,9 +275,9 @@ export function DashboardView() {
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-slate-200 truncate">{r.pipelineName}</p>
-                    <p className="text-[11px] text-slate-500 truncate">{r.projectName} · started {fmtAgo(r.startDtm)}</p>
+                    <p className="text-[12px] text-slate-300 truncate">{r.projectName} · started {fmtAgo(r.startDtm)}</p>
                   </div>
-                  <span className="text-[11px] text-blue-400 font-mono tabular-nums shrink-0">
+                  <span className="text-[12px] text-blue-400 font-mono tabular-nums shrink-0">
                     {fmtTime(r.startDtm)}
                   </span>
                 </div>
@@ -296,9 +296,9 @@ export function DashboardView() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-slate-200 truncate">{r.pipelineName}</p>
-                      <p className="text-[11px] text-red-400/80 truncate mt-0.5">{r.errorMessage ?? 'Unknown error'}</p>
+                      <p className="text-[12px] text-red-400/80 truncate mt-0.5">{r.errorMessage ?? 'Unknown error'}</p>
                     </div>
-                    <span className="text-[11px] text-slate-500 shrink-0 tabular-nums">{fmtAgo(r.startDtm)}</span>
+                    <span className="text-[12px] text-slate-300 shrink-0 tabular-nums">{fmtAgo(r.startDtm)}</span>
                   </div>
                 </div>
               ))}
@@ -310,9 +310,9 @@ export function DashboardView() {
         <div className="bg-[#131829] border border-slate-800 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <GitBranch className="w-4 h-4 text-slate-500" />
+              <GitBranch className="w-4 h-4 text-slate-300" />
               <span className="text-sm font-medium text-slate-200">Recent Pipeline Runs</span>
-              <span className="text-xs text-slate-500">— last 7 days</span>
+              <span className="text-xs text-slate-300">— last 7 days</span>
             </div>
             <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors">
               View all <ChevronRight className="w-3.5 h-3.5" />
@@ -323,15 +323,15 @@ export function DashboardView() {
               <thead>
                 <tr className="border-b border-slate-800/60">
                   {['Status','Pipeline','Project','Trigger','Started','Duration','Submitted By'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-2.5 text-left text-[12px] font-medium text-slate-300 uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {runsLoading && recentRuns.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-xs">Loading...</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-300 text-xs">Loading...</td></tr>
                 ) : recentRuns.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500 text-xs">No runs in the last 7 days</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-300 text-xs">No runs in the last 7 days</td></tr>
                 ) : recentRuns.map((r, i) => (
                   <tr key={r.pipelineRunId} className={`border-b border-slate-800/40 hover:bg-slate-800/30 transition-colors ${i % 2 === 0 ? '' : 'bg-slate-800/10'}`}>
                     <td className="px-4 py-2.5 whitespace-nowrap"><StatusBadge status={r.runStatus} /></td>
@@ -395,7 +395,7 @@ export function DashboardView() {
             </div>
             {durationTrend.length > 2 && (
               <div className="mt-4 pt-3 border-t border-slate-800">
-                <p className="text-[11px] text-slate-500 mb-2">Duration trend (recent runs)</p>
+                <p className="text-[12px] text-slate-300 mb-2">Duration trend (recent runs)</p>
                 <MiniBar values={durationTrend.slice(-12)} color="fill-violet-500" />
               </div>
             )}
@@ -424,7 +424,7 @@ function KpiCard({ icon: Icon, label, value, sub, color, trend, pulse }: any) {
     red:     'text-red-500/60',
     amber:   'text-amber-500/60',
     violet:  'text-violet-500/60',
-    slate:   'text-slate-500/60',
+    slate:   'text-slate-300/60',
   };
   return (
     <div className="bg-[#131829] border border-slate-800 rounded-xl p-4 flex flex-col justify-between min-h-[96px] hover:border-slate-700 transition-colors">
@@ -437,8 +437,8 @@ function KpiCard({ icon: Icon, label, value, sub, color, trend, pulse }: any) {
       </div>
       <div>
         <div className={`text-xl font-bold tabular-nums ${colorMap[color] ?? colorMap.slate}`}>{value}</div>
-        <div className="text-[11px] text-slate-500 mt-0.5 leading-tight">{label}</div>
-        <div className="text-[10px] text-slate-600 mt-0.5">{sub}</div>
+        <div className="text-[12px] text-slate-300 mt-0.5 leading-tight">{label}</div>
+        <div className="text-[12px] text-slate-400 mt-0.5">{sub}</div>
       </div>
     </div>
   );
@@ -448,9 +448,9 @@ function SectionHeader({ icon: Icon, title, sub, dot }: any) {
   return (
     <div className="flex items-center gap-2">
       {dot && <span className={`w-2 h-2 rounded-full ${dot}`} />}
-      {!dot && <Icon className="w-4 h-4 text-slate-500" />}
+      {!dot && <Icon className="w-4 h-4 text-slate-300" />}
       <span className="text-sm font-medium text-slate-200">{title}</span>
-      {sub && <span className="text-xs text-slate-500">{sub}</span>}
+      {sub && <span className="text-xs text-slate-300">{sub}</span>}
     </div>
   );
 }
@@ -458,8 +458,8 @@ function SectionHeader({ icon: Icon, title, sub, dot }: any) {
 function EmptyState({ icon: Icon, text, success }: any) {
   return (
     <div className="flex flex-col items-center justify-center py-6 gap-2">
-      <Icon className={`w-6 h-6 ${success ? 'text-emerald-500/50' : 'text-slate-600'}`} />
-      <p className={`text-xs ${success ? 'text-emerald-500/70' : 'text-slate-500'}`}>{text}</p>
+      <Icon className={`w-6 h-6 ${success ? 'text-emerald-500/50' : 'text-slate-400'}`} />
+      <p className={`text-xs ${success ? 'text-emerald-500/70' : 'text-slate-300'}`}>{text}</p>
     </div>
   );
 }
@@ -468,7 +468,7 @@ function ComplianceStat({ label, value, unit, good, invert }: any) {
   const isGood = invert ? value === 0 : good;
   return (
     <div className="bg-slate-800/40 rounded-lg p-3">
-      <p className="text-[11px] text-slate-500 mb-1">{label}</p>
+      <p className="text-[12px] text-slate-300 mb-1">{label}</p>
       <p className={`text-lg font-bold tabular-nums ${isGood ? 'text-emerald-400' : 'text-red-400'}`}>
         {typeof value === 'number' ? value.toFixed(unit === '%' ? 1 : 0) : value}{unit}
       </p>
@@ -480,7 +480,7 @@ function ThroughputRow({ label, value, icon: Icon }: any) {
   return (
     <div className="flex items-center justify-between py-1.5 border-b border-slate-800/60 last:border-0">
       <div className="flex items-center gap-2">
-        <Icon className="w-3.5 h-3.5 text-slate-600" />
+        <Icon className="w-3.5 h-3.5 text-slate-400" />
         <span className="text-xs text-slate-400">{label}</span>
       </div>
       <span className="text-xs font-medium text-slate-200 tabular-nums font-mono">{value}</span>

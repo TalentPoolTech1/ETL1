@@ -226,17 +226,17 @@ export function IssueResolutionBanner({
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-lg">
+    <div className="fixed top-0 left-0 right-0 z-50 bg-[#161b25] border-b border-slate-800 shadow-lg">
       <div className="max-w-7xl mx-auto px-4 py-4">
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-red-600" />
             <div>
-              <h3 className="font-semibold text-gray-900">
+              <h3 className="font-semibold text-white">
                 Pipeline Issues Detected
               </h3>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <p className="text-sm text-slate-300 mt-0.5">
                 {errorCount > 0 && (
                   <span>
                     <span className="font-medium text-red-600">{errorCount} error{errorCount !== 1 ? 's' : ''}</span>
@@ -254,7 +254,7 @@ export function IssueResolutionBanner({
           {onDismiss && (
             <button
               onClick={onDismiss}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-slate-300 hover:text-slate-300 transition-colors"
               aria-label="Dismiss"
             >
               <X className="w-5 h-5" />
@@ -263,7 +263,7 @@ export function IssueResolutionBanner({
         </div>
 
         {/* Issues list */}
-        <div className="bg-gray-50 rounded-lg p-3 mb-3 max-h-48 overflow-y-auto">
+        <div className="bg-[#0d0f1a] rounded-lg p-3 mb-3 max-h-48 overflow-y-auto">
           {issues.map((issue, idx) => (
             <IssueCard
               key={idx}

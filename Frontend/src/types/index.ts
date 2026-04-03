@@ -263,6 +263,7 @@ export interface OrchestratorRunSummary {
   projectName: string | null;
   runStatus: RunStatus;
   triggerType: TriggerType;
+  submittedBy?: string | null;
   startDtm: string | null;
   endDtm: string | null;
   durationMs: number | null;

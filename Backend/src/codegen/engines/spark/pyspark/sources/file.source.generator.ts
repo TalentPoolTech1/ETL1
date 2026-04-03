@@ -1,6 +1,6 @@
 import { INodeGenerator, GeneratedNodeCode, GenerationContext } from '../../../../core/interfaces/engine.interfaces';
 import { PipelineNode, FileSourceConfig, Schema } from '../../../../core/types/pipeline.types';
-import { CodeBuilder, toVarName, pyStringLiteral, toPySparkType } from '../../../../utils/codegen.utils';
+import { CodeBuilder, toVarName, pyStringLiteral, toPySparkType, pyBoolLiteral } from '../../../../utils/codegen.utils';
 import { PYSPARK_IMPORTS } from '../../../../core/constants/codegen.constants';
 
 // ─── PySpark File Source Generator ────────────────────────────────────────────
@@ -78,12 +78,16 @@ export class PySparkFileSourceGenerator implements INodeGenerator {
       schemaDef = this.buildSchemaDefinition(`_schema_${varName}`, cfg.schema);
     }
 
+    const postReadCoercions = cfg.schema && !cfg.inferSchema
+      ? this.buildPostReadCoercions(varName, cfg.schema)
+      : '';
+
     if (context.options.includeLogging) {
       b.blank();
       b.line(`logger.info(${pyStringLiteral(`Configured file source '${node.name}' from ${cfg.path}`)})`);
     }
 
-    const code = schemaDef ? `${schemaDef}\n${b.build()}` : b.build();
+    const code = [schemaDef, b.build(), postReadCoercions].filter(Boolean).join('\n');
     return { varName, code, imports, warnings };
   }
 
@@ -150,10 +154,38 @@ export class PySparkFileSourceGenerator implements INodeGenerator {
     b.indent(b2 => {
       schema.fields.forEach((f, i) => {
         const comma = i < schema.fields.length - 1 ? ',' : '';
-        b2.line(`T.StructField(${pyStringLiteral(f.name)}, ${toPySparkType(f.dataType)}, ${f.nullable !== false})${comma}`);
+        b2.line(`T.StructField(${pyStringLiteral(f.name)}, ${this.toReadPySparkType(f)}, ${pyBoolLiteral(f.nullable !== false)})${comma}`);
       });
     });
     b.line('])');
     return b.build();
+  }
+
+  private toReadPySparkType(field: Schema['fields'][number]): string {
+    const parseFormat = field.tags?.['parseFormat'];
+    if (parseFormat && (field.dataType.name === 'date' || field.dataType.name === 'timestamp')) {
+      return 'T.StringType()';
+    }
+    return toPySparkType(field.dataType);
+  }
+
+  private buildPostReadCoercions(varName: string, schema: Schema): string {
+    const b = new CodeBuilder();
+    let hasCoercions = false;
+
+    schema.fields.forEach(field => {
+      const parseFormat = field.tags?.['parseFormat']?.trim();
+      if (!parseFormat) return;
+
+      if (field.dataType.name === 'date') {
+        hasCoercions = true;
+        b.line(`${varName} = ${varName}.withColumn(${pyStringLiteral(field.name)}, F.to_date(F.col(${pyStringLiteral(field.name)}), ${pyStringLiteral(parseFormat)}))`);
+      } else if (field.dataType.name === 'timestamp') {
+        hasCoercions = true;
+        b.line(`${varName} = ${varName}.withColumn(${pyStringLiteral(field.name)}, F.to_timestamp(F.col(${pyStringLiteral(field.name)}), ${pyStringLiteral(parseFormat)}))`);
+      }
+    });
+
+    return hasCoercions ? b.build() : '';
   }
 }

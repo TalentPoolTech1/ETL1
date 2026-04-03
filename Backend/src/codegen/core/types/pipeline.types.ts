@@ -52,6 +52,8 @@ export type SourceType =
 export interface JdbcSourceConfig {
   url: string;
   driver: string;
+  mavenCoords?: string;
+  driverPaths?: string[];
   table?: string;
   query?: string;
   user?: string;
@@ -434,6 +436,8 @@ export type SinkType =
 export interface JdbcSinkConfig {
   url: string;
   driver: string;
+  mavenCoords?: string;
+  driverPaths?: string[];
   table: string;
   mode: WriteMode;
   user?: string;

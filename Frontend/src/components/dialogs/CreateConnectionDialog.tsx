@@ -53,6 +53,19 @@ function initials(name: string): string {
   return (words[0]![0]! + words[1]![0]!).toUpperCase();
 }
 
+function findConnectorTypeForTechCode(types: ConnectorType[], techCode: string): ConnectorType | null {
+  const normalized = techCode.trim().toUpperCase();
+  if (!normalized) return null;
+
+  return types.find(t => t.typeCode.toUpperCase() === normalized)
+    ?? types.find(t => t.typeCode.toUpperCase() === `FILE_${normalized}`)
+    ?? types.find(t => t.typeCode.toUpperCase() === `JDBC_${normalized}`)
+    ?? types.find(t => t.typeCode.toUpperCase().endsWith(`_${normalized}`))
+    ?? types.find(t => t.displayName.trim().toUpperCase() === normalized)
+    ?? types.find(t => t.displayName.toUpperCase().includes(normalized))
+    ?? null;
+}
+
 // ─── Step 1: Technology grid ─────────────────────────────────────────────────
 
 function TechPicker({ types, onSelect }: { types: ConnectorType[]; onSelect: (t: ConnectorType) => void }) {
@@ -83,14 +96,14 @@ function TechPicker({ types, onSelect }: { types: ConnectorType[]; onSelect: (t:
       {/* Search */}
       <div className="px-5 py-3 border-b border-slate-800 flex-shrink-0">
         <div className="flex items-center gap-2 h-8 bg-slate-800/60 border border-slate-700/60 rounded-lg px-3">
-          <Search className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+          <Search className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
           <input
             autoFocus
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search technologies…"
-            className="flex-1 bg-transparent text-[13px] text-slate-200 placeholder-slate-600 outline-none min-w-0"
+            className="flex-1 bg-transparent text-[13px] text-slate-200 placeholder-slate-500 outline-none min-w-0"
           />
         </div>
       </div>
@@ -98,13 +111,13 @@ function TechPicker({ types, onSelect }: { types: ConnectorType[]; onSelect: (t:
       {/* Grid */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         {cats.length === 0 && (
-          <div className="text-center text-slate-600 text-sm py-8">No technologies match "{search}"</div>
+          <div className="text-center text-slate-400 text-sm py-8">No technologies match "{search}"</div>
         )}
         {cats.map(cat => {
           const p = pal(cat);
           return (
             <div key={cat}>
-              <p className="text-[10px] uppercase tracking-widest text-slate-600 font-semibold mb-2">{cat}</p>
+              <p className="text-[12px] uppercase tracking-widest text-slate-400 font-semibold mb-2">{cat}</p>
               <div className="grid grid-cols-4 gap-2">
                 {(filtered[cat] ?? []).map(t => (
                   <button
@@ -117,7 +130,7 @@ function TechPicker({ types, onSelect }: { types: ConnectorType[]; onSelect: (t:
                     <span className={`w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${p.bg} ${p.text} border ${p.border}`}>
                       {initials(t.displayName)}
                     </span>
-                    <span className={`text-[10px] font-medium text-center leading-tight line-clamp-2 ${p.text}`}>
+                    <span className={`text-[12px] font-medium text-center leading-tight line-clamp-2 ${p.text}`}>
                       {shortName(t.displayName)}
                     </span>
                   </button>
@@ -168,7 +181,7 @@ function FormField({
           onClick={() => onChange(checked ? 'false' : 'true')}
           className={`relative w-9 h-5 rounded-full transition-colors ${checked ? 'bg-blue-600' : 'bg-slate-700'}`}
         >
-          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
+          <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-[#161b25] shadow transition-transform ${checked ? 'translate-x-4' : 'translate-x-0.5'}`} />
         </button>
       </div>
     );
@@ -180,7 +193,7 @@ function FormField({
         {label}
         {def.required && <span className="text-red-400">*</span>}
         {def.isSecret && (
-          <span className="px-1.5 py-0.5 bg-amber-900/30 border border-amber-700/40 text-amber-400 text-[10px] rounded">secret</span>
+          <span className="px-1.5 py-0.5 bg-amber-900/30 border border-amber-700/40 text-amber-400 text-[12px] rounded">secret</span>
         )}
       </label>
       <div className="relative">
@@ -201,18 +214,18 @@ function FormField({
             onChange={e => onChange(e.target.value)}
             placeholder={s.default != null ? String(s.default) : (s.description ?? '')}
             className="w-full h-9 px-3 bg-slate-800/60 border border-slate-700/60 rounded-md text-sm text-slate-100
-              placeholder-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all pr-8"
+              placeholder-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all pr-8"
           />
         )}
         {def.isSecret && !s.enum && (
           <button type="button" onClick={() => setShow(v => !v)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-300">
             {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
       {s.description && !s.enum && (
-        <p className="text-[10px] text-slate-600 leading-tight">{s.description}</p>
+        <p className="text-[12px] text-slate-400 leading-tight">{s.description}</p>
       )}
     </div>
   );
@@ -301,10 +314,10 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
           </span>
           <div>
             <div className={`text-sm font-semibold ${p.text}`}>{type.displayName}</div>
-            <div className="text-[11px] text-slate-500">{type.category}</div>
+            <div className="text-[12px] text-slate-300">{type.category}</div>
           </div>
           {type.defaultPort && (
-            <div className="ml-auto text-[11px] text-slate-500">Default port: <span className="text-slate-300 font-mono">{type.defaultPort}</span></div>
+            <div className="ml-auto text-[12px] text-slate-300">Default port: <span className="text-slate-300 font-mono">{type.defaultPort}</span></div>
           )}
         </div>
 
@@ -320,14 +333,14 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
             onChange={e => setDisplayName(e.target.value)}
             placeholder={`e.g. Production ${type.displayName}`}
             className="w-full h-9 px-3 bg-slate-800/60 border border-slate-700/60 rounded-md text-sm text-slate-100
-              placeholder-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all"
+              placeholder-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all"
           />
         </div>
 
         {/* ── Core connection details ──────────────────────────────── */}
         {coreConfig.length > 0 && (
           <div className="space-y-3">
-            <p className="text-[10px] uppercase tracking-widest text-slate-600 font-semibold">Connection Details</p>
+            <p className="text-[12px] uppercase tracking-widest text-slate-400 font-semibold">Connection Details</p>
             {/* host + port side by side when both present */}
             {coreConfig.find(f => f.key === 'jdbc_host') && coreConfig.find(f => f.key === 'jdbc_port') ? (
               <>
@@ -354,8 +367,8 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
         {/* ── Credentials ──────────────────────────────────────────── */}
         {coreSecrets.length > 0 && (
           <div className="space-y-3">
-            <p className="text-[10px] uppercase tracking-widest text-slate-600 font-semibold">Credentials</p>
-            <p className="text-[11px] text-amber-400/80 -mt-1">Encrypted at rest via pgcrypto. Cannot be viewed after saving — only replaced.</p>
+            <p className="text-[12px] uppercase tracking-widest text-slate-400 font-semibold">Credentials</p>
+            <p className="text-[12px] text-amber-400/80 -mt-1">Encrypted at rest via pgcrypto. Cannot be viewed after saving — only replaced.</p>
             {coreSecrets.map(f => (
               <FormField key={f.key} def={f} value={secrets[f.key] ?? ''} onChange={v => setSec(f.key, v)} />
             ))}
@@ -365,7 +378,7 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
         {/* ── SSL ──────────────────────────────────────────────────── */}
         {sslModeField && (
           <div className="space-y-3">
-            <p className="text-[10px] uppercase tracking-widest text-slate-600 font-semibold">SSL / TLS</p>
+            <p className="text-[12px] uppercase tracking-widest text-slate-400 font-semibold">SSL / TLS</p>
             <FormField def={sslModeField} value={config['jdbc_ssl_mode'] ?? ''} onChange={v => setConf('jdbc_ssl_mode', v)} />
             {sslCertFields.map(f => (
               <div key={f.key} className={`transition-all ${sslEnabled ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
@@ -373,7 +386,7 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
               </div>
             ))}
             {!sslEnabled && sslCertFields.length > 0 && (
-              <p className="text-[10px] text-slate-600 -mt-2">SSL certificate fields are only required when SSL mode is not DISABLE.</p>
+              <p className="text-[12px] text-slate-400 -mt-2">SSL certificate fields are only required when SSL mode is not DISABLE.</p>
             )}
           </div>
         )}
@@ -381,7 +394,7 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
         {/* ── SSH Tunnel ───────────────────────────────────────────── */}
         {sshToggle && (
           <div className="space-y-3">
-            <p className="text-[10px] uppercase tracking-widest text-slate-600 font-semibold">SSH Tunnel</p>
+            <p className="text-[12px] uppercase tracking-widest text-slate-400 font-semibold">SSH Tunnel</p>
             <FormField def={sshToggle} value={config['ssh_tunnel_enabled'] ?? 'false'} onChange={v => setConf('ssh_tunnel_enabled', v)} />
             {sshChildren.map(f => (
               <div key={f.key} className={`transition-all ${sshEnabled ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
@@ -393,7 +406,7 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
               </div>
             ))}
             {!sshEnabled && sshChildren.length > 0 && (
-              <p className="text-[10px] text-slate-600 -mt-2">SSH tunnel fields are only required when SSH tunnel is enabled.</p>
+              <p className="text-[12px] text-slate-400 -mt-2">SSH tunnel fields are only required when SSH tunnel is enabled.</p>
             )}
           </div>
         )}
@@ -402,7 +415,7 @@ function ConfigForm({ type, onBack, onSave, saving, error }: {
         {advFields.length > 0 && (
           <div>
             <button type="button" onClick={() => setAdvOpen(o => !o)}
-              className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-600 hover:text-slate-400 font-semibold transition-colors">
+              className="flex items-center gap-1.5 text-[12px] uppercase tracking-widest text-slate-400 hover:text-slate-400 font-semibold transition-colors">
               {advOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
               Advanced Options
             </button>
@@ -484,9 +497,7 @@ export function CreateConnectionDialog() {
   // Auto-select the technology when preselectedTechCode is provided
   useEffect(() => {
     if (preselectedTechCode && connectorTypes.length > 0 && !selected) {
-      const match = connectorTypes.find(
-        t => t.typeCode.toUpperCase() === preselectedTechCode.toUpperCase(),
-      );
+      const match = findConnectorTypeForTechCode(connectorTypes, preselectedTechCode);
       if (match) setSelected(match);
     }
   }, [preselectedTechCode, connectorTypes, selected]);
@@ -528,8 +539,19 @@ export function CreateConnectionDialog() {
     }
   };
 
-  const title    = selected ? `Configure ${selected.displayName}` : 'New Connection';
-  const subtitle = selected ? 'Enter connection details and credentials' : 'Select the target technology';
+  const pendingPreselected = !selected && preselectedTechCode
+    ? findConnectorTypeForTechCode(connectorTypes, preselectedTechCode)
+    : null;
+  const title    = selected
+    ? `Configure ${selected.displayName}`
+    : pendingPreselected
+    ? `Configure ${pendingPreselected.displayName}`
+    : 'New Connection';
+  const subtitle = selected
+    ? 'Enter connection details and credentials'
+    : pendingPreselected
+    ? 'Loading the selected technology…'
+    : 'Select the target technology';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center"
@@ -544,22 +566,27 @@ export function CreateConnectionDialog() {
         <div className="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-slate-800 flex-shrink-0">
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-slate-100">{title}</h2>
-            <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>
+            <p className="text-[12px] text-slate-300 mt-0.5">{subtitle}</p>
           </div>
           <button onClick={() => dispatch(closeCreateConnection())}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors">
+            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-300 hover:text-slate-300 hover:bg-slate-700/50 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
         {!selected ? (
+          pendingPreselected ? (
+            <div className="flex items-center justify-center h-48 gap-2 text-slate-400 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading {pendingPreselected.displayName}…
+            </div>
+          ) :
           typesLoading ? (
-            <div className="flex items-center justify-center h-48 gap-2 text-slate-600 text-sm">
+            <div className="flex items-center justify-center h-48 gap-2 text-slate-400 text-sm">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading technologies…
             </div>
           ) : connectorTypes.length === 0 ? (
-            <div className="flex items-center justify-center h-48 text-slate-600 text-sm">
+            <div className="flex items-center justify-center h-48 text-slate-400 text-sm">
               No technologies available — is the backend running?
             </div>
           ) : (

@@ -22,10 +22,12 @@ import { GovernanceView } from '@/components/views/GovernanceView';
 import { MetadataPreviewPanel } from '@/components/preview/MetadataPreviewPanel';
 import { CommandPalette } from '@/components/common/CommandPalette';
 import { LoginPage } from '@/components/auth/LoginPage';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { setAuthSuccess, logout } from '@/store/slices/authSlice';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import api from '@/services/api';
 import '@/styles/globals.css';
-import React from 'react';
+import React, { useEffect } from 'react';
 
 /**
  * Routes to the correct workspace component based on active tab type.
@@ -63,7 +65,7 @@ function WorkspaceRouter() {
             </svg>
           </div>
           <h2 className="text-base font-semibold text-slate-200 mb-1">ETL1 Platform</h2>
-          <p className="text-sm text-slate-500">Select an object from the sidebar to get started.</p>
+          <p className="text-sm text-slate-300">Select an object from the sidebar to get started.</p>
         </div>
       </div>,
       undefined,
@@ -128,7 +130,7 @@ function WorkspaceRouter() {
 
     default:
       return shell(
-        <div className="flex-1 flex items-center justify-center bg-[#0d0f1a] text-slate-500 text-sm">
+        <div className="flex-1 flex items-center justify-center bg-[#0d0f1a] text-slate-300 text-sm">
           No workspace registered for tab type: <span className="ml-1 text-slate-400 font-mono">{activeTab.type}</span>
         </div>
       );
@@ -136,9 +138,33 @@ function WorkspaceRouter() {
 }
 
 function AppContent() {
+  const dispatch = useAppDispatch();
   const { commands, showCommandPalette, setShowCommandPalette, commandSearch, setCommandSearch } =
     useKeyboardShortcuts();
   const isAuthenticated = useAppSelector(s => s.auth.isAuthenticated);
+  const permissions     = useAppSelector(s => s.auth.permissions);
+
+  // ─── Re-hydrate permissions on page refresh ──────────────────────────────
+  // authSlice initialises permissions: [] from scratch on every load.
+  // The JWT in localStorage keeps us "authenticated" but we lose the
+  // permissions array. Call /auth/me once to restore them.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (permissions.length > 0) return; // already hydrated (first login in this session)
+
+    api.getMe()
+      .then(res => {
+        const d = res.data?.data ?? res.data;
+        dispatch(setAuthSuccess({
+          user: { id: d.userId, email: d.email, fullName: d.fullName },
+          permissions: d.permissions ?? [],
+        }));
+      })
+      .catch(() => {
+        // Token is invalid / expired — force logout
+        dispatch(logout());
+      });
+  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isAuthenticated) return <LoginPage />;
 

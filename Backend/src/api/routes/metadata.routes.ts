@@ -7,6 +7,7 @@
  * GET  /api/metadata/:id/lineage
  * GET  /api/metadata/:id/history
  * GET  /api/metadata/:id/permissions
+ * PUT  /api/metadata/:id/columns/:columnId
  * POST /api/metadata/:id/refresh
  */
 
@@ -131,8 +132,12 @@ router.get('/:id/profile', requirePermission('CONNECTION_VIEW'), async (req: Req
              column_id,
              column_name_text,
              data_type_code,
+             override_data_type_code,
+             effective_data_type_code,
+             parse_format_text,
              is_nullable_flag,
-             ordinal_position_num
+             ordinal_position_num,
+             column_desc_text
            FROM catalog.fn_get_dataset_columns($1::uuid)`,
           [req.params.id],
         ),
@@ -156,15 +161,87 @@ router.get('/:id/profile', requirePermission('CONNECTION_VIEW'), async (req: Req
         columns: columnsResult.rows.map((row: any) => ({
           columnId: row.column_id,
           name: row.column_name_text,
-          dataType: row.data_type_code,
+          importedDataType: row.data_type_code,
+          overrideDataType: row.override_data_type_code,
+          dataType: row.effective_data_type_code ?? row.data_type_code,
+          parseFormat: row.parse_format_text,
           nullable: row.is_nullable_flag,
           ordinal: row.ordinal_position_num,
+          description: row.column_desc_text,
         })),
       };
     });
 
     if (!data) return res.status(404).json({ success: false, userMessage: 'Metadata object not found' });
     return res.json({ success: true, data });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.put('/:id/columns/:columnId', requirePermission('CONNECTION_EDIT'), async (req: Request, res: Response, next: NextFunction) => {
+  if (!isValidUUID(req.params.id) || !isValidUUID(req.params.columnId)) {
+    return res.status(400).json({ success: false, userMessage: 'Invalid dataset or column ID' });
+  }
+
+  try {
+    const userId = getUserId(res);
+    const overrideDataType = typeof req.body?.overrideDataType === 'string'
+      ? req.body.overrideDataType.trim() || null
+      : null;
+    const parseFormat = typeof req.body?.parseFormat === 'string'
+      ? req.body.parseFormat.trim() || null
+      : null;
+    const description = typeof req.body?.description === 'string'
+      ? req.body.description.trim() || null
+      : null;
+    const nullable = typeof req.body?.nullable === 'boolean'
+      ? req.body.nullable
+      : null;
+
+    const updated = await db.transaction(async client => {
+      await setSession(client, userId);
+      const result = await client.query(
+        `UPDATE catalog.dataset_columns
+            SET override_data_type_code = $1,
+                parse_format_text = $2,
+                column_desc_text = COALESCE($3, column_desc_text),
+                is_nullable_flag = COALESCE($4, is_nullable_flag)
+          WHERE dataset_id = $5::uuid
+            AND column_id = $6::uuid
+        RETURNING
+            column_id,
+            column_name_text,
+            data_type_code,
+            override_data_type_code,
+            COALESCE(override_data_type_code, data_type_code) AS effective_data_type_code,
+            parse_format_text,
+            is_nullable_flag,
+            ordinal_position_num,
+            column_desc_text`,
+        [overrideDataType, parseFormat, description, nullable, req.params.id, req.params.columnId],
+      );
+      return result.rows[0] ?? null;
+    });
+
+    if (!updated) {
+      return res.status(404).json({ success: false, userMessage: 'Metadata column not found' });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        columnId: updated.column_id,
+        name: updated.column_name_text,
+        importedDataType: updated.data_type_code,
+        overrideDataType: updated.override_data_type_code,
+        dataType: updated.effective_data_type_code ?? updated.data_type_code,
+        parseFormat: updated.parse_format_text,
+        nullable: updated.is_nullable_flag,
+        ordinal: updated.ordinal_position_num,
+        description: updated.column_desc_text,
+      },
+    });
   } catch (err) {
     return next(err);
   }

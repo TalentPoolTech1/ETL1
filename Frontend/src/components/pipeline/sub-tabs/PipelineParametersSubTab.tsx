@@ -86,7 +86,7 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
 
   if (params.length === 0) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-slate-600 p-5">
+      <div className="flex-1 flex flex-col items-center justify-center text-slate-400 p-5">
         {loadError && (
           <div className="mb-3 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">
             {loadError}
@@ -114,7 +114,7 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
         <span className="text-[12px] text-slate-400 font-medium">{params.length} parameter{params.length !== 1 ? 's' : ''}</span>
         {loadError && (
-          <span className="ml-3 text-[11px] text-red-300">{loadError}</span>
+          <span className="ml-3 text-[12px] text-red-300">{loadError}</span>
         )}
         
         <div className="ml-auto flex items-center gap-2">
@@ -133,7 +133,7 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
       <div className="flex-1 overflow-auto">
         <table className="w-full border-collapse text-[12px]">
           <thead className="sticky top-0 bg-[#0a0c15] z-10">
-            <tr className="text-left text-[11px] text-slate-500 border-b border-slate-800">
+            <tr className="text-left text-[12px] text-slate-300 border-b border-slate-800">
               <th className="px-3 py-2 font-medium">Name</th>
               <th className="px-3 py-2 font-medium">Type</th>
               <th className="px-3 py-2 font-medium">Required</th>
@@ -162,7 +162,7 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
                 </td>
                 <td className="px-2 py-1.5">
                   {p.isSensitive ? (
-                    <div className="flex items-center gap-1 text-slate-600 text-[11px]"><Lock className="w-3 h-3" /> Hidden</div>
+                    <div className="flex items-center gap-1 text-slate-400 text-[12px]"><Lock className="w-3 h-3" /> Hidden</div>
                   ) : (
                     <input value={p.defaultValue} onChange={e => updateParam(p.id, 'defaultValue', e.target.value)}
                       className="w-full h-7 px-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
@@ -185,7 +185,7 @@ export function PipelineParametersSubTab({ pipelineId, onDirty }: { pipelineId: 
                 </td>
                 <td className="px-2 py-1.5">
                   <button onClick={() => removeParam(p.id)}
-                    className="w-6 h-6 flex items-center justify-center rounded text-slate-600 hover:text-red-400 hover:bg-red-900/30 transition-colors">
+                    className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-red-400 hover:bg-red-900/30 transition-colors">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </td>

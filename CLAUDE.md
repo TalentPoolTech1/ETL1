@@ -1,5 +1,7 @@
 # CLAUDE.md — Project Bootstrap Instructions
 
+Critical Instruction: Absolutely be mindful of token usage, reduce the token usage as much as possible and make use of the token efficiently. Do not read any file when it is not necessary.
+
 > **Every AI session must read this file first before making any changes.**
 > Read `database/memory.md` before touching any database file.
 > Read the relevant **service SKILL.md** before touching any service file (see Service SKILL.md Map below).
@@ -83,6 +85,7 @@ Before touching any service file, read its SKILL.md first.
 **ETL1** is a Cloud-Neutral, No-Code Spark ETL Platform.  
 A drag-and-drop UI lets data engineers visually design Spark pipelines and orchestrate them.  
 The backend generates optimised Spark code and submits it to any configured cluster.
+CRITICAL INSTRUCTION: READ ANY SKILL.md file only when necessary
 
 ```
 ETL1/
@@ -148,18 +151,6 @@ ETL1/
 13. **100% COMMENT coverage** on all tables, columns, functions, and procedures.
 14. **pgcrypto everywhere** for PII and credentials. Never store plaintext passwords or secrets.
 15. **All objects schema-qualified:** `etl.*`, `catalog.*`, `execution.*`, `gov.*`, `history.*`, `meta.*`
-
-## Database — Execution Plane Table Names
-These are the correct, user-approved names as of 2026-03-01:
-
-| Old (WRONG — do not use) | Current (CORRECT) |
-|---|---|
-| `execution.job_runs` | `execution.pipeline_runs` |
-| `execution.task_runs` | `execution.pipeline_node_runs` |
-| `execution.job_logs` | `execution.pipeline_run_logs` |
-| `execution.job_metrics` | `execution.pipeline_run_metrics` |
-| *(did not exist)* | `execution.orchestrator_runs` |
-| *(did not exist)* | `execution.orchestrator_pipeline_run_map` |
 
 ## Database — Columns Removed by Design (DO NOT RE-ADD)
 
@@ -282,83 +273,4 @@ These must all be answerable by the DB without parsing JSON blobs:
 - Database schema skill: `database/SKILL.md`
 - Per-service skills: `Backend/src/<service>/SKILL.md` (see Service SKILL.md Map above)
 
----
-
-## Living Decisions — Platform-Wide
-
-- `2026-03-29` — **MTX-UX-010 Transform Line Focus Fix:** Corrected the transform popup path in `RecursiveMappingBuilder.tsx` and `NodeConfigPanel.tsx` to remove the remaining nested-group wording and inner boxed editor framing. Added explicit active-line state (`L1`, `L2`, etc.), visible line highlight, add-below-active-line behavior, and smaller `h-4/w-4` action buttons so users can see exactly which transformation line they are editing or inserting.
-- `2026-03-29` — **MTX-UX-009 Workflow Sub-Tab Density Rollout:** Extended the compact zebra-row and shared compact-action standard into `PipelineAlertsSubTab.tsx` and `OrchestratorScheduleSubTab.tsx`. Alert rule creation/listing now uses dense zebra rows with compact icon actions, and schedule configuration now uses slim zebra sections instead of large selector cards and padded boxed groups.
-- `2026-03-29` — **MTX-UX-008 Row Editor Standard Rollout:** Extended the compact zebra-row standard in `NodeConfigPanel.tsx` beyond transform/target mapping into join key rows, aggregate rows, CASE rows, select/projection lists, cast/rename/drop rows, derived-column rows, and target audit toggles. Standardized on a shared icon-button size, zebra list container, and denser `h-6/h-7` controls instead of mixed chip/box layouts.
-- `2026-03-29` — **MTX-UX-007 Groupless Zebra Standard:** Removed transform group editing UI from recursive mapping and shifted to flat zebra-row transformations with per-row sub-transformation insertion, icon-only row actions, category-grouped transform dropdowns, previous-step type-aware operation enablement, and context/system operations (`current_job_name`, `current_user`, `current_date`, `current_time`). Applied same compact control density/icon sizing standard to transform mapping grid, target mapping popup grid, and JDBC column mapping panel.
-- `2026-03-29` — **MTX-UX-006 Compact + Date Guardrails:** Further densified transform mapping UX (`h-5/h-6` controls, reduced paddings), converted key transform actions to icon-first controls (copy/paste/add/delete/reorder), changed add-row/add-transformation triggers to compact icon buttons, and added type-aware date-operation safeguards in recursive mapping (`date_diff` now supports end column or literal via selectable operand, with required date format prompts when source/end types are non-temporal).
-- `2026-03-18` — **HEAD-001 Fix:** `Header.tsx` — Added real "Save All" button. Iterates all dirty tabs; saves the active pipeline with full canvas data from Redux; for non-active dirty pipeline tabs sends a metadata-only PUT (name only, since canvas content is not available without the workspace being mounted). Both dispatch `markTabSaved` on success. Disabled when no tabs are dirty.
-- `2026-03-18` — **HEAD-002 Fix:** `Header.tsx` — Added "Publish" button (Upload icon, primary variant) visible only for pipeline tabs. Calls `api.generateCode(objectId)` which triggers backend code generation and artifact persistence.
-- `2026-03-18` — **ORCH-001 Fix:** `OrchestratorPropertiesSubTab.tsx` — Fully rewritten. Loads orchestrator from `api.getOrchestrator(orchId)` on mount, maps real API fields (orch_display_name, orch_desc_text, created_dtm, updated_dtm). Save button calls `api.saveOrchestrator(orchId, {...})`. Load/save error banners included.
-- `2026-03-18` — **USER-002/003 Fix:** `UserWorkspace.tsx` — Added "Account Actions" section to Profile sub-tab. "Change Password" toggles an inline `ResetPasswordForm` that calls `api.changePassword({currentPassword, newPassword})`. "Deactivate Account" / "Reactivate Account" buttons (conditional on current status) call `api.updateUser(userId, {isActive})` and reflect the new status immediately.
-- `2026-03-18` — **API-015 / AUTHZ-001 Fix:** `node-template.routes.ts` — all five endpoints now gate behind `requirePermission`: GET routes use `PIPELINE_VIEW`, POST uses `PIPELINE_CREATE`, PUT uses `PIPELINE_EDIT`, DELETE uses `PIPELINE_DELETE`.
-- `2026-03-18` — **AUTHZ-002 Fix:** Added `requirePermission` gates to `folders.routes.ts` (VIEW/CREATE/EDIT/DELETE) and `nodes.routes.ts` preview endpoint (VIEW). Also aligned folder logging action names to `folders.<verb>`.
-- `2026-03-18` — **ORCH-002 Change:** `orchestrators.routes.ts` — Added `GET /api/orchestrators/:id/pipelines` backed by `catalog.fn_get_pipelines_for_orchestrator(...)`. Frontend `api.ts` now exposes `getOrchestratorPipelines(id)`.
-- `2026-03-18` — **ORCH-003 Fix:** Implemented real Orchestrator Schedule wiring. DB: added `execution.fn_get_entity_schedule`, `execution.pr_set_entity_schedule`, `execution.pr_delete_entity_schedule` in `database/logic/execution_logic.sql`. API: added `GET/PUT/DELETE /api/orchestrators/:id/schedule`. UI: `OrchestratorScheduleSubTab.tsx` now loads/saves/deletes via API (Cron/Manual persist; Interval/Event shown as not-yet-persisted).
-- `2026-03-18` — **PIPE-ALERTS-001 Fix:** Implemented real Pipeline Alerts persistence using `gov.notification_rules`. DB: added `gov.fn_get_notification_rules_for_entity`, `gov.pr_set_notification_rule_active`, `gov.pr_delete_notification_rule` (in `database/logic/rbac_logic.sql`). API: added `GET/PUT /api/pipelines/:id/alerts`. UI: `PipelineAlertsSubTab.tsx` now loads/saves via API; local-only rules removed.
-- `2026-03-18` — **EXEC-ENV-001 Fix:** Removed hardcoded environment list in `Header.tsx`. Added `execution.fn_get_environments()` and `GET /api/executions/environments` so UI environment selector is DB-backed (functions for SELECT). Frontend `api.getEnvironments()` added.
-- `2026-03-18` — **SYS-001 / Artifact FK Fix:** `generated_artifacts.pipeline_id` previously had `REFERENCES pipelines(id) ON DELETE CASCADE` pointing at the legacy public schema table. New pipelines land in `catalog.pipelines` so every generate call threw a FK violation. Fix: dropped the FK in `001_create_codegen_tables.sql` (clean-install path) and added `009_fix_artifact_pipeline_fk.sql` migration (running-DB path — auto-applied by migration runner on next restart). Application-layer enforcement: `catalog.fn_get_pipeline_codegen_source()` is called before the artifact INSERT.
-
-- `2026-03-18` — **Backend Wiring + Stub Elimination Session:**
-  1. `governance.routes.ts` — NEW. Full CRUD for users, roles, permissions, user-role assignments, project member management. Registered in `server.ts` at `/api/governance`.
-  2. SQL injection fix in `executions.routes.ts` KPI endpoint — `projectId` was interpolated into SQL string; replaced with parameterised `$3::uuid`.
-  3. `api.ts` — Added governance methods: `getUsers`, `getUser`, `getRoles`, `getPermissions`, `assignUserRole`, `revokeUserRole`, `getProjectMembers`, `addProjectMember`, `removeProjectMember`.
-  4. `LeftSidebar.tsx` — `UsersSection` and `RolesSection` now call real API on expand (lazy-load). Refresh button wired. Stubs removed.
-  5. `OrchestratorExecutionHistorySubTab.tsx` — Replaced MOCK_RUNS with real `api.getOrchestratorRuns()` call. Dark theme, pagination, real status badges, opens execution detail tab on double-click. `orchId` prop passed from `OrchestratorWorkspace`.
-
-- `2026-03-18` — **v2 Execution & Scheduling Session:** Implemented nocode_etl_ui_requirements_v2.md.
-  1. ExecutionHistorySubTab rewritten — full v2 column set (Exec ID, Status, Start, End, Duration, Run By, Trigger, Rows In/Out/Failed, Data Vol, Env, Version, Retries), multi-field filter panel (date range, status, trigger type, user, duration, rows), CSV export, dark theme.
-  2. ExecutionDetailTab rewritten — dark theme, 5 sub-tabs (Summary, Steps, Logs, Code, Metrics), LogViewer with search + level filter + copy + download, Code tab with syntax highlight + copy + download.
-  3. PipelineCodeSubTab — NEW. Generate PySpark/Scala/SQL via API, syntax highlighted viewer, copy + download.
-  4. PipelineMetricsSubTab — NEW. Success rate, avg/min/max duration, status breakdown bar, duration trend chart. Loads from last 30 runs API.
-  5. PipelineAlertsSubTab — NEW. Alert rule CRUD with event types (EXECUTION_FAILED, SLA_BREACHED, etc.) and channels (email, Slack, webhook, PagerDuty), silence window, enable/disable toggle.
-  6. OrchestratorScheduleSubTab rewritten — 4 schedule types (Cron, Interval, Event, Manual), Name field, retry policy (fixed/exponential), failure handling (stop/continue/rollback/skip), blackout windows, holiday calendar.
-  7. PipelineWorkspace expanded to 12 sub-tabs: Designer, Properties, Parameters, Validation, Executions, Metrics, Code, Alerts, History, Dependencies, Permissions, Activity.
-  8. PipelineSubTab type extended with metrics, code, alerts, logs.
-
-- `2026-03-18` — **UI Architecture Session:** Implemented full tab-based NoCode ETL workspace per nocode_etl_ui_requirements.md.
-  Key decisions:
-  1. All objects open as typed tabs — project, folder, connection, metadata, user, role added as tab types to `Tab` interface.
-  2. `TabBar` rewritten with type icons, dirty italic+asterisk rendering, right-click context menu (close/close-others/close-all/pin/restore-last-closed), horizontal scroll on wheel.
-  3. `tabsSlice` extended with: closeOthers, closeAll, pinTab, unpinTab, restoreLastClosed, updateTab.
-  4. `Tab` interface extended with `hierarchyPath` (full breadcrumb string) and `isPinned`.
-  5. New shared components: `ObjectHeader` (hierarchy breadcrumb, status badges, dirty indicators), `ObjectHistoryGrid` (sortable/filterable audit grid), `ObjectPermissionsGrid` (inherited vs direct permissions).
-  6. New workspaces created: ProjectWorkspace (6 tabs), FolderWorkspace (5 tabs), ConnectionWorkspace (7 tabs), MetadataBrowserWorkspace (6 tabs), UserWorkspace (6 tabs), RoleWorkspace (6 tabs).
-  7. PipelineWorkspace expanded from 7 to 9 sub-tabs per spec: added Properties, Parameters, Validation, Dependencies, Activity.
-  8. OrchestratorWorkspace expanded from 6 to 9 sub-tabs per spec: added Properties, Schedule, Parameters, History, Dependencies, Activity.
-  9. `LeftSidebar` updated: project nodes now open Project tab on click, connections open ConnectionWorkspace, Users/Roles sections added.
-  10. `Header` rewritten with context-aware toolbar (Save, SaveAll, Undo, Redo, Validate, Run, Publish), environment selector dropdown, dirty-count badge.
-  11. `ResizableAppShell` — right and bottom panels only render when content is passed AND `*Visible` flag is true.
-  12. All new components use dark theme (`bg-[#0d0f1a]`, `border-slate-800`) consistent with existing dark design.
-  13. HierarchyPath format: `Root → Parent → ... → ObjectName` using `→` separator.
-
-- `2026-03-18` — **Enterprise UI Overhaul & RBAC Access Fix:**
-  1. `Header.tsx` — Reduced height to 32px (h-8), logo to 20px (w-5 h-5), and `TBtn` to 22px high-density layout. Simplified spacer logic to prevent search bar overlap.
-  2. `LeftSidebar.tsx` — Boosted icon opacity and label contrast. Brightened default text from `slate-400` to `slate-300` and bolstered hover states.
-  3. RBAC Fix — Resolved `403 Forbidden` on pipeline creation by granting `ADMIN` and `DEVELOPER` roles to the default user (`admin@etl1.local`) using `gov.pr_assign_user_role` procedure.
-> Service-specific decisions go in the relevant service SKILL.md instead.
-
-- `2026-03-17` — **User Instruction:** All file writes go directly to the user's local
-  filesystem via `Filesystem:write_file` / `Filesystem:edit_file`. Never write to Claude's
-  container (`/home/claude`, `/mnt/...`). Never use `bash_tool` or `create_file` for project files.
-- `2026-03-17` — **Service SKILL.md files created** for all 10 service domains.
-  Each SKILL.md contains: purpose, file map, API surface, DB tables, business rules,
-  known issues/tech debt, and a living decisions log.
-- `2026-03-17` — **Living Documentation Rule established:** Every session that makes a
-  change MUST append to the relevant SKILL.md Living Decisions section before ending.
-- `2026-03-17` — **Critical Tech Debt Identified:**
-  1. `pipeline.repository.ts` uses unqualified `pipelines` table with banned columns — must be eliminated.
-  2. Governance service has NO API layer — `GovernanceView.tsx` renders nothing real.
-  3. Metadata/Dataset API is missing — `MetadataTree.tsx` uses mock data.
-  4. KPI endpoint in `executions.routes.ts` has SQL injection risk (string interpolation for projectFilter).
-  5. RBAC is frontend-only — `rbac.middleware.ts` is not applied to any route.
-  6. `GET /api/orchestrators` (list) endpoint does not exist.
-- `2026-03-29` — **MTX-RECURSIVE-001 Feature:** `MultiTransformEditor.tsx` now uses a recursive mapping tree builder (`RecursiveMappingBuilder.tsx`) supporting nested groups (parallel/sequence/case), dynamic parameter injection by operation, hybrid value-or-column inputs, condition-list CASE editing, per-group collapse/expand, global collapse/expand all, copy/paste of nodes, subgroup creation, and reorder controls. Save flow now persists `mappingTree` and generates a compiled expression into a `custom_sql` step for compatibility with existing transform sequence persistence.
-- `2026-03-29` — **MTX-POPUP-002 UX Fix:** Transform node double-click now reliably opens configuration using native `onDoubleClick` in `PipelineCanvas.tsx`. `TransformNodeConfig` now auto-opens a bulk mapping popup (`matrix` mode) on transform-node open, pre-seeds one mapping row per discovered source column when empty, and displays editable source/target column mapping with direct row-level launch into `MultiTransformEditor`.
-- `2026-03-29` — **MTX-POPUP-003 UX Fix:** Repeated double-click on the same node now re-triggers popup open via an explicit `openSignal` from `PipelineWorkspace` to `NodeConfigPanel`. Added a JDBC target bulk-mapping popup in `TargetConfig` that lists source columns on the left and target columns on the right; leaving source empty now represents "skip this target in generated code", while source+target mapping includes that target. 
-- `2026-03-29` — **MTX-POPUP-004 UX Simplification:** `TransformNodeConfig` matrix popup redesigned into a compact dense table (target alias, source, status, delete) to show significantly more rows at once, with an inline right-side properties editor using `RecursiveMappingBuilder` in the same popup. Removed secondary edit modal flow; selecting a row now edits transformations inline without opening another window.
-- `2026-03-29` — **MTX-CATALOG-005 Expansion + Density:** `RecursiveMappingBuilder.tsx` expanded from 5 hardcoded operations to broad scalar support using main `TransformRegistry` primitives (string/date/numeric/regex/conditional/custom) plus ranking operators (`rank`, `dense_rank`, `row_number`). UI controls in matrix + recursive editors were compacted (smaller row/control heights, icon-based expand/collapse and move arrows) to increase visible rows while keeping inline properties editing in the same popup.
+--

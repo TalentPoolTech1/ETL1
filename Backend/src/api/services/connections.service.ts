@@ -38,6 +38,8 @@ export interface CreateConnectorInput {
     config: ConnectorConfig;
     secrets?: ConnectorSecrets;
     jdbcDriverClass?: string;
+    jdbcDriverMavenCoords?: string;
+    jdbcDriverPaths?: string;
     testQuery?: string;
     sparkConfig?: Record<string, string>;
     sslMode?: string;
@@ -55,6 +57,8 @@ export interface UpdateConnectorInput {
     config?: ConnectorConfig;
     secrets?: ConnectorSecrets;
     jdbcDriverClass?: string;
+    jdbcDriverMavenCoords?: string;
+    jdbcDriverPaths?: string;
     testQuery?: string;
     sparkConfig?: Record<string, string>;
     sslMode?: string;
@@ -78,6 +82,10 @@ export interface ConnectorSummary {
     technologyId?: string | null;
     configJson?: Record<string, unknown> | null;
     secretsUsername?: string;
+    jdbcDriverClass?: string | null;
+    jdbcDriverMavenCoords?: string | null;
+    jdbcDriverPaths?: string | null;
+    fileFormatOptions?: Record<string, unknown> | null;
 }
 
 export interface ConnectorPageResult {
@@ -186,6 +194,23 @@ export class ConnectionsService {
             if (!summary) throw connErrors.notFound(connectorId);
             const base = this.toSummary(summary as any);
             base.configJson = (decrypted?.conn_config_json as Record<string, unknown>) ?? null;
+            base.fileFormatOptions = decrypted?.conn_config_json
+                ? {
+                    file_format_code: decrypted.conn_config_json['file_format_code'] ?? null,
+                    field_separator_char: decrypted.conn_config_json['field_separator_char'] ?? null,
+                    date_format_text: decrypted.conn_config_json['date_format_text'] ?? null,
+                    timestamp_format_text: decrypted.conn_config_json['timestamp_format_text'] ?? null,
+                    encoding_standard_code: decrypted.conn_config_json['encoding_standard_code'] ?? null,
+                    has_header_flag: decrypted.conn_config_json['has_header_flag'] ?? null,
+                    multiline_flag: decrypted.conn_config_json['multiline_flag'] ?? null,
+                    quote_char_text: decrypted.conn_config_json['quote_char_text'] ?? null,
+                    escape_char_text: decrypted.conn_config_json['escape_char_text'] ?? null,
+                    null_value_text: decrypted.conn_config_json['null_value_text'] ?? null,
+                    corrupt_record_mode: decrypted.conn_config_json['corrupt_record_mode'] ?? null,
+                    skip_rows_num: decrypted.conn_config_json['skip_rows_num'] ?? null,
+                    compression_code: decrypted.conn_config_json['compression_code'] ?? null,
+                  }
+                : null;
             // Expose only the username (never the password) so the UI can populate the credentials field
             const secrets = (decrypted?.conn_secrets_json ?? {}) as Record<string, unknown>;
             const username = secrets['username'] ?? secrets['user'] ?? secrets['jdbc_username'] ?? secrets['jdbc_user'] ?? null;
@@ -227,6 +252,8 @@ export class ConnectionsService {
                 configJson: input.config,
                 secretsJson: input.secrets ?? null,
                 jdbcDriverClass: input.jdbcDriverClass ?? null,
+                jdbcDriverMavenCoords: input.jdbcDriverMavenCoords ?? null,
+                jdbcDriverPaths: input.jdbcDriverPaths ?? null,
                 testQuery: input.testQuery ?? null,
                 sparkConfigJson: input.sparkConfig ?? null,
                 sslMode: input.sslMode ?? 'REQUIRE',
@@ -270,18 +297,29 @@ export class ConnectionsService {
         try {
             const existing = await connectionsRepository.getById(input.connectorId, input.userId, getEncryptionKey());
             if (!existing) throw connErrors.notFound(input.connectorId);
+            const existingDecrypted = await connectionsRepository.getDecrypted(input.connectorId, input.userId, getEncryptionKey());
+            if (!existingDecrypted) throw connErrors.notFound(input.connectorId);
 
-            if (input.config) {
+            const mergedConfig = input.config
+                ? { ...(existingDecrypted.conn_config_json ?? {}), ...input.config }
+                : undefined;
+            const mergedSecrets = input.secrets
+                ? { ...(existingDecrypted.conn_secrets_json ?? {}), ...input.secrets }
+                : undefined;
+
+            if (mergedConfig) {
                 const plugin = ConnectorRegistry.get(existing.connector_type_code)!;
-                this.validateConfig(plugin, input.config, input.secrets, false);
+                this.validateConfig(plugin, mergedConfig, mergedSecrets, false);
             }
 
             await connectionsRepository.update({
                 connectorId: input.connectorId,
                 connectorDisplayName: input.connectorDisplayName,
-                configJson: input.config,
-                secretsJson: input.secrets,
+                configJson: mergedConfig,
+                secretsJson: mergedSecrets,
                 jdbcDriverClass: input.jdbcDriverClass,
+                jdbcDriverMavenCoords: input.jdbcDriverMavenCoords,
+                jdbcDriverPaths: input.jdbcDriverPaths,
                 testQuery: input.testQuery,
                 sparkConfigJson: input.sparkConfig,
                 sslMode: input.sslMode,
@@ -677,6 +715,9 @@ export class ConnectionsService {
             createdByFullName: row.created_by_name,
             updatedDtm: row.updated_dtm,
             technologyId: row.technology_id ?? null,
+            jdbcDriverClass: row.conn_jdbc_driver_class ?? null,
+            jdbcDriverMavenCoords: row.conn_jdbc_driver_maven_coords ?? null,
+            jdbcDriverPaths: row.conn_jdbc_driver_paths ?? null,
         };
     }
 }

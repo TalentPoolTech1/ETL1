@@ -40,9 +40,9 @@ export function Input({
           'px-3 py-2 border rounded-md text-sm font-family-base',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-600',
           {
-            'border-neutral-300 bg-white hover:border-neutral-400': !error && !disabled,
+            'border-slate-700 bg-[#161b25] hover:border-neutral-400': !error && !disabled,
             'border-danger-600 bg-danger-50': Boolean(error),
-            'border-neutral-200 bg-neutral-50 text-neutral-500 cursor-not-allowed': Boolean(disabled),
+            'border-slate-800 bg-neutral-50 text-neutral-500 cursor-not-allowed': Boolean(disabled),
           },
           className
         )}

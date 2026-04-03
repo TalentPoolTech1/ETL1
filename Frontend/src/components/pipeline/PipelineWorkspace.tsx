@@ -3,20 +3,18 @@
  * Active sub-tabs: Designer | Properties | Parameters | Validation |
  *                  Executions | Metrics | Permissions | Code | Alerts |
  *                  Audit Logs | Dependencies | Activity | Lineage
- *
- * Executions slot contains two inner views:
- *   "Run"     — live trigger panel (ExecutionSubTab)
- *   "History" — historical run list (ExecutionHistorySubTab)
  */
 import React, { useEffect, useCallback, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setPipeline, markSaved } from '@/store/slices/pipelineSlice';
 import { markTabUnsaved, markTabSaved } from '@/store/slices/tabsSlice';
+import { setBottomPanelHeight, setRightRailWidth } from '@/store/slices/uiSlice';
 import { SubTabBar } from '@/components/shared/SubTabBar';
 import { ObjectHeader } from '@/components/shared/ObjectHeader';
 import { PipelineCanvas }             from '@/components/canvas/PipelineCanvas';
 import { NodeConfigPanel }           from '@/components/canvas/NodeConfigPanel';
 import { DataPreviewPanel }          from '@/components/preview/DataPreviewPanel';
+import { ResizeHandle } from '@/components/layout/ResizableAppShell';
 import { PipelinePropertiesSubTab }   from './sub-tabs/PipelinePropertiesSubTab';
 import { PipelineParametersSubTab }   from './sub-tabs/PipelineParametersSubTab';
 import { PipelineValidationSubTab }   from './sub-tabs/PipelineValidationSubTab';
@@ -24,7 +22,6 @@ import { PipelineCodeSubTab }         from './sub-tabs/PipelineCodeSubTab';
 import { PipelineMetricsSubTab }      from './sub-tabs/PipelineMetricsSubTab';
 import { PermissionsSubTab }          from './sub-tabs/PermissionsSubTab';
 import { ExecutionHistorySubTab }     from './sub-tabs/ExecutionHistorySubTab';
-import { ExecutionSubTab }            from './sub-tabs/ExecutionSubTab';
 import { PipelineAlertsSubTab }       from './sub-tabs/PipelineAlertsSubTab';
 import { AuditLogsSubTab }            from './sub-tabs/AuditLogsSubTab';
 import { PipelineActivitySubTab }     from './sub-tabs/PipelineActivitySubTab';
@@ -53,31 +50,10 @@ const PIPELINE_SUB_TABS = [
   { id: 'lineage',      label: 'Lineage',      shortcut: '' },
 ] as { id: PipelineSubTab; label: string; shortcut: string }[];
 
-// ─── Inner view switcher for Executions slot ──────────────────────────────────
-type ExecView = 'run' | 'history';
-
 function ExecutionsSlot({ pipelineId }: { pipelineId: string }) {
-  const [view, setView] = useState<ExecView>('run');
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Inner view toggle */}
-      <div className="flex items-center gap-0 px-4 border-b border-slate-800 flex-shrink-0 bg-[#0a0c15]">
-        {(['run', 'history'] as ExecView[]).map(v => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`h-8 px-4 text-[12px] font-medium border-b-2 transition-colors capitalize ${
-              view === v
-                ? 'border-blue-500 text-blue-300'
-                : 'border-transparent text-slate-500 hover:text-slate-300'
-            }`}
-          >
-            {v === 'run' ? 'Run Pipeline' : 'History'}
-          </button>
-        ))}
-      </div>
-      {view === 'run'     && <ExecutionSubTab        pipelineId={pipelineId} />}
-      {view === 'history' && <ExecutionHistorySubTab pipelineId={pipelineId} />}
+      <ExecutionHistorySubTab pipelineId={pipelineId} />
     </div>
   );
 }
@@ -119,16 +95,16 @@ function ExportImportButtons({ pipelineId }: { pipelineId: string }) {
     <>
       <button onClick={handleExport}
         title="Export pipeline to JSON"
-        className="h-7 px-2.5 rounded bg-[#1e2035] border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-[11px] font-medium transition-colors">
+        className="h-7 px-2.5 rounded bg-[#1e2035] border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-[12px] font-medium transition-colors">
         ↓ Export
       </button>
       <button onClick={() => fileRef.current?.click()} disabled={importing}
         title="Import pipeline from JSON"
-        className="h-7 px-2.5 rounded bg-[#1e2035] border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-[11px] font-medium transition-colors disabled:opacity-50">
+        className="h-7 px-2.5 rounded bg-[#1e2035] border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-[12px] font-medium transition-colors disabled:opacity-50">
         {importing ? 'Importing…' : '↑ Import'}
       </button>
       <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
-      {importErr && <span className="text-[10px] text-red-400">{importErr}</span>}
+      {importErr && <span className="text-[12px] text-red-400">{importErr}</span>}
     </>
   );
 }
@@ -143,7 +119,8 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
   const activePipeline = useAppSelector(s => s.pipeline.activePipeline);
   const canvasNodes    = useAppSelector(s => Object.values(s.pipeline.nodes));
   const canvasEdges    = useAppSelector(s => Object.values(s.pipeline.edges));
-  const hasSelectedNode = useAppSelector(s => s.pipeline.selectedNodeIds.length > 0);
+  const rightRailWidth  = useAppSelector(s => s.ui.rightRailWidth);
+  const bottomPanelHeight = useAppSelector(s => s.ui.bottomPanelHeight);
   const tab            = useAppSelector(s => s.tabs.allTabs.find(t => t.id === tabId));
   const pipelineId     = tab?.objectId ?? '';
 
@@ -152,6 +129,7 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
   const [isSaving, setIsSaving]   = useState(false);
   const [configNodeId, setConfigNodeId] = useState<string | null>(null);
   const [configOpenSignal, setConfigOpenSignal] = useState(0);
+  const [previewNodeId, setPreviewNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!pipelineId) return;
@@ -208,6 +186,20 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave]);
 
+  const handleRightResize = useCallback((delta: number) => {
+    const newWidth = rightRailWidth - delta;
+    if (newWidth >= 300 && newWidth <= 600) {
+      dispatch(setRightRailWidth(newWidth));
+    }
+  }, [dispatch, rightRailWidth]);
+
+  const handleBottomResize = useCallback((delta: number) => {
+    const newHeight = bottomPanelHeight + delta;
+    if (newHeight >= 150 && newHeight <= 700) {
+      dispatch(setBottomPanelHeight(newHeight));
+    }
+  }, [bottomPanelHeight, dispatch]);
+
   if (isLoading) return <div className="flex-1 flex items-center justify-center text-slate-400 text-sm bg-[#0d0f1a]">Loading pipeline…</div>;
 
   if (loadError) return (
@@ -229,8 +221,8 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
         type="pipeline"
         name={activePipeline?.name ?? tab?.objectName ?? ''}
         hierarchyPath={tab?.hierarchyPath}
-        status="draft"
         isDirty={unsavedChanges}
+        hideTitle
         actions={
           <div className="flex items-center gap-1.5">
             <ExportImportButtons pipelineId={pipelineId} />
@@ -254,15 +246,32 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
               setConfigNodeId(nodeId);
               setConfigOpenSignal(prev => prev + 1);
             }}
+            onPreviewNode={setPreviewNodeId}
             pipelineId={pipelineId}
           />
-          {hasSelectedNode && (
-            <div className="h-64 shrink-0 border-t border-slate-800/80 bg-[#0a0c15]">
-              <DataPreviewPanel embedded />
-            </div>
+          {previewNodeId && (
+            <>
+              <ResizeHandle
+                position="bottom"
+                onResize={handleBottomResize}
+                minSize={150}
+                maxSize={700}
+              />
+              <div style={{ height: `${bottomPanelHeight}px` }} className="shrink-0 border-t border-slate-800/80 bg-[#0a0c15] overflow-hidden">
+                <DataPreviewPanel embedded nodeId={previewNodeId} onClose={() => setPreviewNodeId(null)} />
+              </div>
+            </>
           )}
         </div>
-        <NodeConfigPanel nodeId={configNodeId} openSignal={configOpenSignal} onClose={() => setConfigNodeId(null)} />
+        <ResizeHandle
+          position="right"
+          onResize={handleRightResize}
+          minSize={300}
+          maxSize={600}
+        />
+        <div style={{ width: `${rightRailWidth}px` }} className="shrink-0 border-l border-slate-600/40 overflow-hidden">
+          <NodeConfigPanel nodeId={configNodeId} openSignal={configOpenSignal} onClose={() => setConfigNodeId(null)} />
+        </div>
       </div>
 
       {activeSubTab === 'properties'   && <PipelinePropertiesSubTab   pipelineId={pipelineId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}
@@ -271,7 +280,10 @@ export function PipelineWorkspace({ tabId }: PipelineWorkspaceProps) {
       {activeSubTab === 'executions'   && <ExecutionsSlot              pipelineId={pipelineId} />}
       {activeSubTab === 'metrics'      && <PipelineMetricsSubTab       pipelineId={pipelineId} />}
       {activeSubTab === 'permissions'  && <PermissionsSubTab           pipelineId={pipelineId} />}
-      {activeSubTab === 'code'         && <PipelineCodeSubTab          pipelineId={pipelineId} />}
+      {/* Code: always mounted so generated output persists across sub-tab switches */}
+      <div className={`flex-1 overflow-hidden ${activeSubTab === 'code' ? 'flex' : 'hidden'}`}>
+        <PipelineCodeSubTab pipelineId={pipelineId} />
+      </div>
       {activeSubTab === 'alerts'       && <PipelineAlertsSubTab        pipelineId={pipelineId} />}
       {activeSubTab === 'logs'         && <AuditLogsSubTab             pipelineId={pipelineId} />}
       {activeSubTab === 'dependencies' && <PipelineDependenciesSubTab  pipelineId={pipelineId} />}

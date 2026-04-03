@@ -22,37 +22,37 @@ export function AppShell({
 
   if (focusMode) {
     return (
-      <div className="flex flex-col h-screen bg-white">
-        <div className="h-14 border-b border-neutral-200">{header}</div>
+      <div className="flex flex-col h-screen bg-[#161b25]">
+        <div className="h-14 border-b border-slate-800">{header}</div>
         <div className="flex-1 overflow-hidden">{mainArea}</div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col h-screen bg-[#161b25]">
       {/* Header */}
-      <div className="h-14 border-b border-neutral-200 flex-shrink-0">{header}</div>
+      <div className="h-14 border-b border-slate-800 flex-shrink-0">{header}</div>
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar */}
-        {leftRailVisible && <div className="w-70 border-r border-neutral-200">{leftSidebar}</div>}
+        {leftRailVisible && <div className="w-70 border-r border-slate-800">{leftSidebar}</div>}
 
         {/* Main Area */}
         <div className="flex-1 flex flex-col overflow-hidden">{mainArea}</div>
 
         {/* Right Sidebar */}
-        {rightRailVisible && <div className="w-90 border-l border-neutral-200">{rightSidebar}</div>}
+        {rightRailVisible && <div className="w-90 border-l border-slate-800">{rightSidebar}</div>}
       </div>
 
       {/* Bottom Panel */}
       {bottomPanelVisible && (
-        <div className="h-65 border-t border-neutral-200 flex-shrink-0">{bottomPanel}</div>
+        <div className="h-65 border-t border-slate-800 flex-shrink-0">{bottomPanel}</div>
       )}
 
       {/* Footer */}
-      <div className="h-6 border-t border-neutral-200 bg-neutral-50 flex items-center px-2 text-xs text-neutral-500 flex-shrink-0">
+      <div className="h-6 border-t border-slate-800 bg-neutral-50 flex items-center px-2 text-xs text-neutral-500 flex-shrink-0">
         Ready
       </div>
     </div>

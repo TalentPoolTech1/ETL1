@@ -59,7 +59,7 @@ export function CommandPalette({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center pt-12 z-50">
-      <div className="bg-white rounded-lg shadow-xl w-96 max-h-96 overflow-hidden flex flex-col">
+      <div className="bg-[#161b25] rounded-lg shadow-xl w-96 max-h-96 overflow-hidden flex flex-col">
         {/* Search */}
         <input
           ref={inputRef}
@@ -70,7 +70,7 @@ export function CommandPalette({
             onSearchChange(e.target.value);
             setSelectedIndex(0);
           }}
-          className="px-4 py-3 border-b border-neutral-200 text-sm focus:outline-none"
+          className="px-4 py-3 border-b border-slate-800 text-sm focus:outline-none"
           onKeyDown={e => {
             if (e.key === 'Escape') {
               onClose();

@@ -98,6 +98,7 @@ export class ExecutionRepository {
     return result.rows.map(row => ({
       runId: row.pipeline_run_id,
       pipelineId,
+      pipelineName: row.pipeline_name ?? null,
       versionId: row.version_id, // Note: version_id is not in fn_get_pipeline_run_history currently, need to check
       status: row.run_status_code,
       triggerType: row.trigger_type_code,

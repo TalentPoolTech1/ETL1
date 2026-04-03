@@ -41,7 +41,7 @@ interface MultiTransformEditorProps {
 }
 
 const CONTROL_CLASSNAME = 'h-10 w-full rounded-lg border border-slate-600 bg-[#1e2035] px-3 text-[12px] text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30';
-const MINI_CONTROL_CLASSNAME = 'h-9 w-full rounded-md border border-slate-600 bg-[#1e2035] px-2.5 text-[11px] text-slate-100 focus:outline-none focus:border-blue-400';
+const MINI_CONTROL_CLASSNAME = 'h-9 w-full rounded-md border border-slate-600 bg-[#1e2035] px-2.5 text-[12px] text-slate-100 focus:outline-none focus:border-blue-400';
 
 function cloneValue<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -204,7 +204,7 @@ function renderInlineParamInput(
 
   if (param.type === 'toggle') {
     return (
-      <label className="flex h-9 items-center gap-2 rounded-md border border-slate-600 bg-[#1e2035] px-3 text-[11px] text-slate-200">
+      <label className="flex h-9 items-center gap-2 rounded-md border border-slate-600 bg-[#1e2035] px-3 text-[12px] text-slate-200">
         <input
           type="checkbox"
           checked={Boolean(value)}
@@ -267,7 +267,7 @@ function CaseWhenEditor({
     <div className="space-y-3">
       <div className="overflow-hidden rounded-lg border border-slate-700">
         <table className="w-full table-fixed">
-          <thead className="bg-[#101426] text-left text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <thead className="bg-[#101426] text-left text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
             <tr>
               <th className="px-3 py-2">When</th>
               <th className="px-3 py-2">Then</th>
@@ -302,7 +302,7 @@ function CaseWhenEditor({
                     type="button"
                     onClick={() => removeBranch(index)}
                     disabled={disabled}
-                    className="h-9 w-full rounded-md border border-red-500/30 bg-red-500/10 text-[11px] font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-40"
+                    className="h-9 w-full rounded-md border border-red-500/30 bg-red-500/10 text-[12px] font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-40"
                   >
                     Remove
                   </button>
@@ -318,12 +318,12 @@ function CaseWhenEditor({
           type="button"
           onClick={addBranch}
           disabled={disabled}
-          className="rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-[11px] font-semibold text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-40"
+          className="rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-[12px] font-semibold text-blue-300 transition hover:bg-blue-500/20 disabled:opacity-40"
         >
           Add Branch
         </button>
         <div className="flex-1">
-          <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
             Else
           </label>
           <input
@@ -358,7 +358,7 @@ function ExpandedStepPanel({
   return (
     <div className="grid gap-3 xl:grid-cols-[minmax(0,2.2fr)_260px]">
       <div className="rounded-lg border border-slate-700 bg-[#111320] p-3">
-        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">
+        <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.16em] text-blue-300">
           Advanced Inputs
         </div>
         {primitive.id === 'case_when' ? (
@@ -378,12 +378,12 @@ function ExpandedStepPanel({
       </div>
 
       <div className="rounded-lg border border-slate-700 bg-[#111320] p-3">
-        <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">
+        <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.16em] text-blue-300">
           Row Settings
         </div>
         <div className="space-y-2.5">
           <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">On Error</label>
+            <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">On Error</label>
             <select
               value={step.onError}
               onChange={e => onStepChange({ ...step, onError: e.target.value as TransformStep['onError'] })}
@@ -398,7 +398,7 @@ function ExpandedStepPanel({
 
           {step.onError === 'USE_DEFAULT' && (
             <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Default Value</label>
+              <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.14em] text-slate-400">Default Value</label>
               <input
                 type="text"
                 value={step.defaultValue ?? ''}
@@ -410,7 +410,7 @@ function ExpandedStepPanel({
             </div>
           )}
 
-          <div className="rounded-md border border-slate-700 bg-[#0d1020] px-3 py-2 text-[11px] text-slate-400">
+          <div className="rounded-md border border-slate-700 bg-[#0d1020] px-3 py-2 text-[12px] text-slate-400">
             {primitive.description}
           </div>
         </div>
@@ -543,11 +543,11 @@ export const MultiTransformEditor: React.FC<MultiTransformEditorProps> = ({
       <div className="shrink-0 border-b border-slate-700/80 bg-[#0e1022] px-5 py-3">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Transform Column</div>
+            <div className="text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">Transform Column</div>
             <div className="mt-1 truncate text-[17px] font-semibold text-white">
               {deriveSequenceName(sourceColumnName, outputColumnName)}
             </div>
-            <p className="mt-1 text-[11px] text-slate-400">
+            <p className="mt-1 text-[12px] text-slate-400">
               Configure one source-to-output mapping, then stack transformations in a compact grid.
             </p>
           </div>
@@ -565,10 +565,10 @@ export const MultiTransformEditor: React.FC<MultiTransformEditorProps> = ({
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <div className="space-y-3">
           <section className="rounded-xl border border-slate-700 bg-[#111320] px-4 py-3">
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Mapping Row</div>
+            <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">Mapping Row</div>
             <div className="grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)_minmax(0,1fr)]">
               <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</label>
+                <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">Active</label>
                 <label className="flex h-10 items-center gap-2 rounded-lg border border-slate-600 bg-[#1e2035] px-3 text-[12px] text-slate-200">
                   <input
                     type="checkbox"
@@ -581,7 +581,7 @@ export const MultiTransformEditor: React.FC<MultiTransformEditorProps> = ({
               </div>
 
               <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Source Column</label>
+                <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">Source Column</label>
                 {availableColumns.length > 0 ? (
                   <select
                     value={sourceColumnName}
@@ -607,7 +607,7 @@ export const MultiTransformEditor: React.FC<MultiTransformEditorProps> = ({
               </div>
 
               <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Output Column</label>
+                <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">Output Column</label>
                 <input
                   type="text"
                   list={outputListId}
@@ -636,14 +636,14 @@ export const MultiTransformEditor: React.FC<MultiTransformEditorProps> = ({
             <button
               type="button"
               onClick={() => setShowPreview(prev => !prev)}
-              className="flex w-full items-center justify-between px-4 py-2 text-left text-[11px] font-semibold text-slate-200 transition hover:bg-[#151a2d]"
+              className="flex w-full items-center justify-between px-4 py-2 text-left text-[12px] font-semibold text-slate-200 transition hover:bg-[#151a2d]"
             >
               <span>Expression Preview</span>
-              <span className="text-slate-500">{showPreview ? 'Hide' : 'Show'}</span>
+              <span className="text-slate-300">{showPreview ? 'Hide' : 'Show'}</span>
             </button>
             {showPreview && (
               <div className="border-t border-slate-700 px-4 py-3">
-                <div className="overflow-x-auto rounded-md border border-slate-800 bg-[#070910] px-3 py-2 font-mono text-[11px] text-slate-100">
+                <div className="overflow-x-auto rounded-md border border-slate-800 bg-[#070910] px-3 py-2 font-mono text-[12px] text-slate-100">
                   {sequence.enabled === false ? 'Mapping disabled' : generatedExpression || 'No active transformations selected'}
                 </div>
               </div>
@@ -651,7 +651,7 @@ export const MultiTransformEditor: React.FC<MultiTransformEditorProps> = ({
           </section>
 
           {saveError && (
-            <section className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-[11px] text-red-200">
+            <section className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-[12px] text-red-200">
               {saveError}
             </section>
           )}

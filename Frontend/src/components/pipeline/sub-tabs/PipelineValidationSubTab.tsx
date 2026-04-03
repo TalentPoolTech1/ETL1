@@ -79,10 +79,10 @@ export function PipelineValidationSubTab({ pipelineId }: { pipelineId: string })
               {issues.length === 0 && <span className="text-emerald-400 font-medium flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> All checks passed</span>}
             </div>
             <div className="flex items-center gap-1 ml-auto">
-              <Filter className="w-3.5 h-3.5 text-slate-500" />
+              <Filter className="w-3.5 h-3.5 text-slate-300" />
               {(['all', 'error', 'warning', 'info'] as const).map(f => (
                 <button key={f} onClick={() => setFilter(f)}
-                  className={`h-6 px-2 rounded text-[11px] transition-colors capitalize ${filter === f ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-700'}`}>
+                  className={`h-6 px-2 rounded text-[12px] transition-colors capitalize ${filter === f ? 'bg-blue-600 text-white' : 'text-slate-300 hover:text-slate-300 hover:bg-slate-700'}`}>
                   {f}
                 </button>
               ))}
@@ -94,7 +94,7 @@ export function PipelineValidationSubTab({ pipelineId }: { pipelineId: string })
       {/* Issues list */}
       <div className="flex-1 overflow-auto p-4 space-y-2">
         {!hasRun && (
-          <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+          <div className="flex flex-col items-center justify-center h-40 text-slate-400">
             <AlertCircle className="w-8 h-8 mb-2 opacity-30" />
             <p className="text-sm">Click "Validate" to check the pipeline for issues.</p>
           </div>
@@ -113,12 +113,12 @@ export function PipelineValidationSubTab({ pipelineId }: { pipelineId: string })
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 text-[12px]">
                   <span className={`font-medium ${cfg.color}`}>{cfg.label}</span>
-                  <span className="text-slate-600 font-mono">{issue.ruleId}</span>
-                  {issue.affectedNode && <span className="text-slate-500">· {issue.affectedNode}</span>}
+                  <span className="text-slate-400 font-mono">{issue.ruleId}</span>
+                  {issue.affectedNode && <span className="text-slate-300">· {issue.affectedNode}</span>}
                 </div>
                 <p className="text-[12px] text-slate-300 mt-0.5">{issue.message}</p>
                 {issue.suggestedFix && (
-                  <p className="text-[11px] text-slate-500 mt-1">💡 {issue.suggestedFix}</p>
+                  <p className="text-[12px] text-slate-300 mt-1">💡 {issue.suggestedFix}</p>
                 )}
               </div>
             </div>

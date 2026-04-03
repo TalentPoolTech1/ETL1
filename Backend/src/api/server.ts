@@ -12,6 +12,7 @@ import { governanceRouter }   from './routes/governance.routes';
 import { foldersRouter }      from './routes/folders.routes';
 import { nodesRouter }        from './routes/nodes.routes';
 import { metadataRouter }     from './routes/metadata.routes';
+import { settingsRouter }     from './routes/settings.routes';
 import { authGuard }          from './middleware/auth.middleware';
 import { pipelineBodyGuard }  from './middleware/middleware';
 import { correlationMiddleware }    from './middleware/correlation.middleware';
@@ -77,6 +78,7 @@ export function createApp(): express.Application {
   app.use('/api/folders',        foldersRouter);
   app.use('/api/nodes',          nodesRouter);
   app.use('/api/metadata',       metadataRouter);
+  app.use('/api/settings',       settingsRouter);
 
   // ─── API Info ────────────────────────────────────────────────────────────────
   app.get('/api', (_req, res) => {

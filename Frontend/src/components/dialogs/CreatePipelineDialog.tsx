@@ -87,7 +87,7 @@ export function CreatePipelineDialog() {
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-semibold text-slate-100">New Pipeline</h2>
             {contextLabel && (
-              <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 truncate">
+              <p className="text-[12px] text-slate-300 mt-0.5 flex items-center gap-1 truncate">
                 {folderId && <Folder className="w-3 h-3 flex-shrink-0" />}
                 {contextLabel}
               </p>
@@ -95,7 +95,7 @@ export function CreatePipelineDialog() {
           </div>
           <button
             onClick={() => dispatch(closeCreatePipeline())}
-            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-md text-slate-300 hover:text-slate-300 hover:bg-slate-700/50 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -112,20 +112,20 @@ export function CreatePipelineDialog() {
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="e.g. ingest-customers"
-              className="w-full h-9 px-3 bg-slate-800/60 border border-slate-700/60 rounded-md text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all"
+              className="w-full h-9 px-3 bg-slate-800/60 border border-slate-700/60 rounded-md text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all"
             />
           </div>
 
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-1.5">
-              Description <span className="text-slate-600">(optional)</span>
+              Description <span className="text-slate-400">(optional)</span>
             </label>
             <textarea
               value={desc}
               onChange={e => setDesc(e.target.value)}
               placeholder="What does this pipeline do?"
               rows={2}
-              className="w-full px-3 py-2 bg-slate-800/60 border border-slate-700/60 rounded-md text-sm text-slate-100 placeholder-slate-600 resize-none focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all"
+              className="w-full px-3 py-2 bg-slate-800/60 border border-slate-700/60 rounded-md text-sm text-slate-100 placeholder-slate-500 resize-none focus:outline-none focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 transition-all"
             />
           </div>
 

@@ -106,7 +106,7 @@ function UserStatusBadge({ status }: { status: string }) {
     ? 'bg-slate-700 text-slate-400 border-slate-600'
     : 'bg-red-900/40 text-red-300 border-red-700';
   return (
-    <span className={`px-2 py-0.5 text-[11px] font-medium rounded border ${cfg}`}>{status}</span>
+    <span className={`px-2 py-0.5 text-[12px] font-medium rounded border ${cfg}`}>{status}</span>
   );
 }
 
@@ -143,19 +143,19 @@ function ResetPasswordForm({ onDone }: { onDone: () => void }) {
       <div className="text-[12px] font-medium text-slate-300">Change Password</div>
       {error && <div className="text-[12px] text-red-400">{error}</div>}
       <div>
-        <label className="block text-[11px] text-slate-500 mb-1">Current password</label>
+        <label className="field-label">Current password</label>
         <input type="password" value={current} onChange={e => setCurrent(e.target.value)} required
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+          className="field-input" />
       </div>
       <div>
-        <label className="block text-[11px] text-slate-500 mb-1">New password</label>
+        <label className="field-label">New password</label>
         <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} required
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+          className="field-input" />
       </div>
       <div>
-        <label className="block text-[11px] text-slate-500 mb-1">Confirm new password</label>
+        <label className="field-label">Confirm new password</label>
         <input type="password" value={confirmPwd} onChange={e => setConfirm(e.target.value)} required
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+          className="field-input" />
       </div>
       <div className="flex items-center gap-2">
         <button type="submit" disabled={saving}
@@ -174,12 +174,12 @@ function ResetPasswordForm({ onDone }: { onDone: () => void }) {
 function ProfileTab({ data, onChange }: { data: FD; onChange: (f: string, v: string) => void }) {
   const F = ({ label, field, ro }: { label: string; field: string; ro?: boolean }) => (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="field-label">{label}</label>
       {ro ? (
-        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-500">{String(data[field] ?? '—')}</div>
+        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-300">{String(data[field] ?? '—')}</div>
       ) : (
         <input type="text" value={String(data[field] ?? '')} onChange={e => onChange(field, e.target.value)}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+          className="field-input" />
       )}
     </div>
   );
@@ -194,7 +194,7 @@ function ProfileTab({ data, onChange }: { data: FD; onChange: (f: string, v: str
         </div>
         <div>
           <div className="text-[18px] font-semibold text-slate-100">{String(data.displayName ?? '—')}</div>
-          <div className="text-[13px] text-slate-500 mt-0.5">{String(data.email ?? '—')}</div>
+          <div className="text-[13px] text-slate-300 mt-0.5">{String(data.email ?? '—')}</div>
           <div className="mt-1">
             <UserStatusBadge status={String(data.status ?? 'active')} />
           </div>
@@ -208,7 +208,7 @@ function ProfileTab({ data, onChange }: { data: FD; onChange: (f: string, v: str
         </div>
         <F label="Email" field="email" />
         <div>
-          <label className="block text-[11px] text-slate-500 mb-1">Account Status</label>
+          <label className="field-label">Account Status</label>
           <select
             value={String(data.status ?? 'active')}
             onChange={e => onChange('status', e.target.value)}
@@ -249,9 +249,9 @@ function AccessTab({ data }: { data: FD }) {
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-2xl space-y-4">
         <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Assigned Roles</div>
+          <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Assigned Roles</div>
           {roles.length === 0 ? (
-            <p className="text-[12px] text-slate-600">No roles assigned.</p>
+            <p className="text-[12px] text-slate-400">No roles assigned.</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {roles.map(r => (
@@ -263,15 +263,15 @@ function AccessTab({ data }: { data: FD }) {
           )}
         </div>
         <div className="bg-slate-800/30 border border-slate-800 rounded-lg p-4">
-          <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Admin Flags</div>
+          <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Admin Flags</div>
           {[
             { label: 'Platform Admin', flag: data.isPlatformAdmin },
             { label: 'User Admin',     flag: data.isUserAdmin },
             { label: 'Audit Access',   flag: data.hasAuditAccess },
           ].map(f => (
             <div key={f.label} className="flex items-center gap-2 text-[12px] py-1">
-              <UserCheck className={`w-3.5 h-3.5 ${f.flag ? 'text-emerald-400' : 'text-slate-600'}`} />
-              <span className={f.flag ? 'text-slate-300' : 'text-slate-600'}>{f.label}</span>
+              <UserCheck className={`w-3.5 h-3.5 ${f.flag ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span className={f.flag ? 'text-slate-300' : 'text-slate-400'}>{f.label}</span>
             </div>
           ))}
         </div>
@@ -287,7 +287,7 @@ function PreferencesTab({ data }: { data: FD }) {
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-lg space-y-4">
         <div>
-          <label className="block text-[11px] text-slate-500 mb-1">Theme</label>
+          <label className="field-label">Theme</label>
           <select value={String(data.theme ?? 'dark')} disabled
             className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full disabled:opacity-70">
             <option value="dark">Dark</option>
@@ -295,7 +295,7 @@ function PreferencesTab({ data }: { data: FD }) {
           </select>
         </div>
         <div>
-          <label className="block text-[11px] text-slate-500 mb-1">Date Format</label>
+          <label className="field-label">Date Format</label>
           <select value={String(data.dateFormat ?? 'YYYY-MM-DD')} disabled
             className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full disabled:opacity-70">
             <option value="YYYY-MM-DD">YYYY-MM-DD</option>
@@ -304,7 +304,7 @@ function PreferencesTab({ data }: { data: FD }) {
           </select>
         </div>
         <div>
-          <label className="block text-[11px] text-slate-500 mb-1">Default Landing Page</label>
+          <label className="field-label">Default Landing Page</label>
           <select value={String(data.landingPage ?? 'dashboard')} disabled
             className="h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 w-full disabled:opacity-70">
             <option value="dashboard">Dashboard</option>
@@ -440,7 +440,7 @@ export function UserWorkspace({ tabId }: { tabId: string }) {
           <ProfileTab data={formData} onChange={handleFieldChange} />
           <div className="flex-shrink-0 px-5 pb-5">
             <div className="max-w-2xl border-t border-slate-800 pt-4">
-              <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Account Actions</div>
+              <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Account Actions</div>
               {deactivateError && (
                 <div className="mb-3 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{deactivateError}</div>
               )}

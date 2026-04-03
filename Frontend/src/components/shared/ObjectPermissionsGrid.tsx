@@ -49,7 +49,7 @@ export function ObjectPermissionsGrid({ rows, loading, readOnly, onAdd, onRemove
       {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
         <span className="text-[12px] text-slate-400 font-medium">Access Control</span>
-        <span className="text-[11px] text-slate-600 ml-1">· {rows.length} entries</span>
+        <span className="text-[12px] text-slate-400 ml-1">· {rows.length} entries</span>
         {!readOnly && onAdd && (
           <button
             onClick={onAdd}
@@ -63,13 +63,13 @@ export function ObjectPermissionsGrid({ rows, loading, readOnly, onAdd, onRemove
       {/* Table */}
       <div className="flex-1 overflow-auto min-h-0">
         {loading ? (
-          <div className="flex items-center justify-center h-32 text-sm text-slate-500">Loading permissions…</div>
+          <div className="flex items-center justify-center h-32 text-sm text-slate-300">Loading permissions…</div>
         ) : rows.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-sm text-slate-600">No permissions configured</div>
+          <div className="flex items-center justify-center h-32 text-sm text-slate-400">No permissions configured</div>
         ) : (
           <table className="w-full border-collapse text-[12px]">
             <thead className="sticky top-0 bg-[#0a0c15] z-10">
-              <tr className="text-left text-[11px] text-slate-500 border-b border-slate-800">
+              <tr className="text-left text-[12px] text-slate-300 border-b border-slate-800">
                 <th className="px-3 py-2 font-medium">Principal</th>
                 <th className="px-3 py-2 font-medium">Type</th>
                 <th className="px-3 py-2 font-medium">Access Level</th>
@@ -92,29 +92,29 @@ export function ObjectPermissionsGrid({ rows, loading, readOnly, onAdd, onRemove
                         <span className="text-slate-200">{row.principalName}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 text-slate-500 capitalize">{row.principalType}</td>
+                    <td className="px-3 py-1.5 text-slate-300 capitalize">{row.principalType}</td>
                     <td className="px-3 py-1.5">
-                      <span className={`px-2 py-0.5 rounded border text-[11px] font-medium ${ACCESS_COLORS[row.accessLevel.toLowerCase()] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`}>
+                      <span className={`px-2 py-0.5 rounded border text-[12px] font-medium ${ACCESS_COLORS[row.accessLevel.toLowerCase()] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`}>
                         {row.accessLevel}
                       </span>
                     </td>
                     <td className="px-3 py-1.5">
                       {row.isInherited ? (
-                        <span className="text-slate-500 italic text-[11px]" title={row.inheritedFrom}>
+                        <span className="text-slate-300 italic text-[12px]" title={row.inheritedFrom}>
                           Inherited {row.inheritedFrom ? `from ${row.inheritedFrom}` : ''}
                         </span>
                       ) : (
-                        <span className="text-slate-300 text-[11px]">Direct</span>
+                        <span className="text-slate-300 text-[12px]">Direct</span>
                       )}
                     </td>
                     <td className="px-3 py-1.5 text-slate-400">{row.grantedBy}</td>
-                    <td className="px-3 py-1.5 text-slate-500">{row.grantedOn}</td>
+                    <td className="px-3 py-1.5 text-slate-300">{row.grantedOn}</td>
                     {!readOnly && (
                       <td className="px-3 py-1.5">
                         {!row.isInherited && onRemove && (
                           <button
                             onClick={e => { e.stopPropagation(); onRemove(row.id); }}
-                            className="w-5 h-5 flex items-center justify-center rounded text-slate-600 hover:text-red-400 hover:bg-red-900/30 transition-colors"
+                            className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-red-400 hover:bg-red-900/30 transition-colors"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -125,10 +125,10 @@ export function ObjectPermissionsGrid({ rows, loading, readOnly, onAdd, onRemove
                   {expandedId === row.id && row.permissions && row.permissions.length > 0 && (
                     <tr className="bg-slate-900/40">
                       <td colSpan={readOnly ? 6 : 7} className="px-6 py-2">
-                        <div className="text-[11px] text-slate-500 mb-1 font-medium">Effective Permissions:</div>
+                        <div className="text-[12px] text-slate-300 mb-1 font-medium">Effective Permissions:</div>
                         <div className="flex flex-wrap gap-1">
                           {row.permissions.map(p => (
-                            <span key={p} className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[11px] text-slate-300">{p}</span>
+                            <span key={p} className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-300">{p}</span>
                           ))}
                         </div>
                       </td>

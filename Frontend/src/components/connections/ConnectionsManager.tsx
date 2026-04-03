@@ -51,7 +51,7 @@ export function ConnectionsManager() {
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-neutral-200 overflow-hidden">
+      <div className="bg-[#161b25] rounded-2xl shadow-sm border border-slate-800 overflow-hidden">
         {/* Toolbar */}
         <div className="p-4 border-b border-neutral-100 bg-neutral-50/50 flex items-center gap-4">
           <div className="relative flex-1 max-w-md">
@@ -61,7 +61,7 @@ export function ConnectionsManager() {
               placeholder="Search connections..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all"
+              className="w-full pl-10 pr-4 py-2 bg-[#161b25] border border-slate-800 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/10 focus:border-brand-500 outline-none transition-all"
             />
           </div>
           <button 
@@ -103,7 +103,7 @@ export function ConnectionsManager() {
               return (
               <div 
                 key={conn.connectorId}
-                className="group border border-neutral-200 rounded-2xl p-5 hover:border-brand-500 hover:shadow-lg hover:shadow-brand-50 transition-all cursor-pointer bg-white relative overflow-hidden"
+                className="group border border-slate-800 rounded-2xl p-5 hover:border-brand-500 hover:shadow-lg hover:shadow-brand-50 transition-all cursor-pointer bg-[#161b25] relative overflow-hidden"
               >
                 {/* Status bar */}
                 <div className={`absolute top-0 left-0 right-0 h-1 ${
@@ -134,13 +134,13 @@ export function ConnectionsManager() {
                     ) : (
                       <RefreshCw className="text-brand-500" size={14} />
                     )}
-                    <span className={`text-[11px] font-bold uppercase tracking-tight ${
+                    <span className={`text-[12px] font-bold uppercase tracking-tight ${
                       isActive ? 'text-success-700' : isError ? 'text-danger-700' : 'text-brand-700'
                     }`}>
                       {conn.healthStatusCode || 'UNKNOWN'}
                     </span>
                   </div>
-                  <span className="text-[10px] text-neutral-400 font-medium italic">
+                  <span className="text-[12px] text-neutral-400 font-medium italic">
                     {conn.updatedDtm ? new Date(conn.updatedDtm).toLocaleDateString() : 'Never tested'}
                   </span>
                 </div>

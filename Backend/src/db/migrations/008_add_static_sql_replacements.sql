@@ -240,6 +240,8 @@ RETURNS TABLE (
     conn_max_pool_size_num INTEGER,
     conn_idle_timeout_sec  INTEGER,
     conn_jdbc_driver_class TEXT,
+    conn_jdbc_driver_maven_coords TEXT,
+    conn_jdbc_driver_paths TEXT,
     conn_test_query        TEXT,
     conn_spark_config_json JSONB,
     created_dtm            TIMESTAMPTZ,
@@ -260,6 +262,8 @@ LANGUAGE sql STABLE AS $$
         c.conn_max_pool_size_num,
         c.conn_idle_timeout_sec,
         c.conn_jdbc_driver_class,
+        c.conn_jdbc_driver_maven_coords,
+        c.conn_jdbc_driver_paths,
         c.conn_test_query,
         c.conn_spark_config_json,
         c.created_dtm,
@@ -397,6 +401,67 @@ END;
 $$;
 COMMENT ON PROCEDURE catalog.pr_update_orchestrator(UUID, TEXT, TEXT, JSONB, UUID) IS 'Updates orchestrator display name, description, and/or DAG JSON. Only non-NULL fields are applied. Raises P0002 on missing orchestrator.';
 
+CREATE OR REPLACE PROCEDURE execution.pr_start_orchestrator_run(
+    p_orch_run_id UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE execution.orchestrator_runs
+    SET
+        run_status_code = 'RUNNING',
+        start_dtm = COALESCE(start_dtm, CURRENT_TIMESTAMP)
+    WHERE orch_run_id = p_orch_run_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Orchestrator run not found' USING ERRCODE = 'P0002';
+    END IF;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_start_orchestrator_run(UUID) IS 'Transitions an orchestrator run from PENDING to RUNNING and stamps start_dtm when needed.';
+
+CREATE OR REPLACE PROCEDURE execution.pr_set_orchestrator_run_error(
+    p_orch_run_id UUID,
+    p_error_message_text TEXT
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE execution.orchestrator_runs
+    SET error_message_text = p_error_message_text
+    WHERE orch_run_id = p_orch_run_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Orchestrator run not found' USING ERRCODE = 'P0002';
+    END IF;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_set_orchestrator_run_error(UUID, TEXT) IS 'Persists the latest aggregated orchestrator error summary for run-detail and monitoring views.';
+
+CREATE OR REPLACE PROCEDURE execution.pr_mark_pipeline_run_ok(
+    p_pipeline_run_id UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE execution.pipeline_runs SET
+        run_status_code = 'SUCCESS',
+        end_dtm = COALESCE(end_dtm, CURRENT_TIMESTAMP)
+    WHERE pipeline_run_id = p_pipeline_run_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_mark_pipeline_run_ok(UUID) IS 'Manually overrides a pipeline run to SUCCESS while preserving the original run record for audit.';
+
+CREATE OR REPLACE PROCEDURE execution.pr_mark_orchestrator_run_ok(
+    p_orch_run_id UUID
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE execution.orchestrator_runs SET
+        run_status_code = 'SUCCESS',
+        end_dtm = COALESCE(end_dtm, CURRENT_TIMESTAMP)
+    WHERE orch_run_id = p_orch_run_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_mark_orchestrator_run_ok(UUID) IS 'Manually overrides an orchestrator run to SUCCESS while preserving the original run record for audit.';
+
 CREATE OR REPLACE PROCEDURE catalog.pr_clear_pipeline_parameters(p_pipeline_id UUID)
 LANGUAGE plpgsql AS $$
 BEGIN
@@ -505,6 +570,36 @@ COMMENT ON FUNCTION execution.fn_get_execution_kpis(DATE, DATE, UUID) IS 'Return
 -- ============================================================================
 -- execution schema: Pipeline run list + count (replaces dynamic SQL in executions.routes.ts)
 -- ============================================================================
+
+CREATE OR REPLACE FUNCTION execution.fn_get_pipeline_run_history(p_pipeline_id UUID, p_limit INTEGER DEFAULT 50)
+RETURNS TABLE (
+    pipeline_run_id UUID,
+    pipeline_id UUID,
+    pipeline_name TEXT,
+    run_status_code TEXT,
+    trigger_type_code TEXT,
+    start_dtm TIMESTAMPTZ,
+    end_dtm TIMESTAMPTZ,
+    created_dtm TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        pr.pipeline_run_id,
+        pr.pipeline_id,
+        p.pipeline_display_name AS pipeline_name,
+        pr.run_status_code,
+        pr.trigger_type_code,
+        pr.start_dtm,
+        pr.end_dtm,
+        pr.created_dtm
+    FROM execution.pipeline_runs pr
+    JOIN catalog.pipelines p
+      ON p.pipeline_id = pr.pipeline_id
+    WHERE pr.pipeline_id = p_pipeline_id
+    ORDER BY COALESCE(pr.start_dtm, pr.created_dtm) DESC NULLS LAST, pr.created_dtm DESC
+    LIMIT p_limit;
+$$;
+COMMENT ON FUNCTION execution.fn_get_pipeline_run_history(UUID, INTEGER) IS 'Returns the most recent N execution runs for a pipeline including pipeline identity in descending order.';
 
 CREATE OR REPLACE FUNCTION execution.fn_list_pipeline_runs(
     p_pipeline_id    UUID    DEFAULT NULL,
@@ -856,5 +951,64 @@ BEGIN
 END;
 $$;
 COMMENT ON PROCEDURE execution.pr_retry_orchestrator_run(UUID, UUID) IS 'Creates a new PENDING orchestrator run as a retry of the given original. Increments retry_count_num. Returns new run ID via OUT param.';
+
+CREATE OR REPLACE PROCEDURE execution.pr_set_pipeline_run_options(
+    p_pipeline_run_id UUID,
+    p_run_options_json JSONB
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE execution.pipeline_runs
+    SET run_options_json = p_run_options_json
+    WHERE pipeline_run_id = p_pipeline_run_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_set_pipeline_run_options(UUID, JSONB) IS 'Stores the original trigger-time options payload for a pipeline run.';
+
+CREATE OR REPLACE PROCEDURE execution.pr_set_orchestrator_run_options(
+    p_orch_run_id UUID,
+    p_run_options_json JSONB
+)
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE execution.orchestrator_runs
+    SET run_options_json = p_run_options_json
+    WHERE orch_run_id = p_orch_run_id;
+END;
+$$;
+COMMENT ON PROCEDURE execution.pr_set_orchestrator_run_options(UUID, JSONB) IS 'Stores the original trigger-time options payload for an orchestrator run.';
+
+CREATE OR REPLACE FUNCTION execution.fn_get_child_orchestrator_runs(
+    p_parent_orch_run_id UUID
+)
+RETURNS TABLE (
+    orch_run_id UUID,
+    orch_id UUID,
+    orch_display_name TEXT,
+    dag_step_id_text TEXT,
+    run_status_code TEXT,
+    start_dtm TIMESTAMPTZ,
+    end_dtm TIMESTAMPTZ,
+    error_message_text TEXT,
+    created_dtm TIMESTAMPTZ
+)
+LANGUAGE sql STABLE AS $$
+    SELECT
+        child.orch_run_id,
+        child.orch_id,
+        o.orch_display_name,
+        child.run_options_json->>'dagStepId' AS dag_step_id_text,
+        child.run_status_code,
+        child.start_dtm,
+        child.end_dtm,
+        child.error_message_text,
+        child.created_dtm
+    FROM execution.orchestrator_runs child
+    JOIN catalog.orchestrators o
+      ON o.orch_id = child.orch_id
+    WHERE child.run_options_json->>'parentOrchestratorRunId' = p_parent_orch_run_id::text
+    ORDER BY child.created_dtm DESC;
+$$;
+COMMENT ON FUNCTION execution.fn_get_child_orchestrator_runs(UUID) IS 'Returns child orchestrator runs spawned by a parent orchestrator run, keyed by DAG step id.';
 
 COMMIT;

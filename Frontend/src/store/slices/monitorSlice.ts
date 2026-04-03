@@ -186,6 +186,10 @@ const monitorSlice = createSlice({
       state.selectedRunIds = [];
     },
 
+    setSelectedRuns(state, action: PayloadAction<string[]>) {
+      state.selectedRunIds = action.payload;
+    },
+
     selectAll(state) {
       const pIds = state.pipelineRuns.map(r => r.pipelineRunId);
       const oIds = state.orchestratorRuns.map(r => r.orchRunId);
@@ -219,7 +223,7 @@ export const {
   setAutoRefresh, setAutoRefreshInterval,
   setLoading, setKpis, setPipelineRuns, setOrchestratorRuns,
   setPage, setPageSize,
-  toggleOrchRunExpanded, toggleRunSelected, clearSelection, selectAll,
+  toggleOrchRunExpanded, toggleRunSelected, clearSelection, setSelectedRuns, selectAll,
   markRefreshed,
 } = monitorSlice.actions;
 

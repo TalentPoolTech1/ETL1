@@ -41,7 +41,7 @@ export function Modal({
     >
       <div
         ref={focusTrapRef}
-        className={`bg-white rounded-lg shadow-lg ${sizeClasses[size]} max-h-96 overflow-hidden flex flex-col`}
+        className={`bg-[#161b25] rounded-lg shadow-lg ${sizeClasses[size]} max-h-96 overflow-hidden flex flex-col`}
         onClick={e => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -49,7 +49,7 @@ export function Modal({
         aria-describedby={ariaDescribedBy || descId}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
           <h2 id={titleId} className="text-lg font-semibold text-neutral-900">
             {title}
           </h2>
@@ -68,7 +68,7 @@ export function Modal({
         </div>
 
         {/* Footer */}
-        {actions && <div className="border-t border-neutral-200 px-6 py-4 flex gap-2 justify-end">{actions}</div>}
+        {actions && <div className="border-t border-slate-800 px-6 py-4 flex gap-2 justify-end">{actions}</div>}
       </div>
     </div>
   );

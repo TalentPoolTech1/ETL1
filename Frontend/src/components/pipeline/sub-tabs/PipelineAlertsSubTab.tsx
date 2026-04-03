@@ -224,7 +224,7 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800 flex-shrink-0">
         <Bell className="w-4 h-4 text-amber-400" />
         <span className="text-[12px] font-medium text-slate-300">Alert Rules</span>
-        <span className="text-[11px] text-slate-600">· {rules.filter(r => r.enabled).length} active / {rules.length} total</span>
+        <span className="text-[12px] text-slate-400">· {rules.filter(r => r.enabled).length} active / {rules.length} total</span>
         <button onClick={load}
           disabled={isLoading || isSaving}
           className="ml-2 h-7 px-3 bg-slate-800/40 hover:bg-slate-700/40 text-slate-200 rounded text-[12px] transition-colors disabled:opacity-50">
@@ -254,16 +254,16 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
           <ZebraList>
             <ZebraRow index={0}>
               <div className="grid grid-cols-[92px,1fr] items-center gap-2">
-                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Rule Name</label>
+                <label className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-300">Rule Name</label>
                 <input value={newRule.name ?? ''} onChange={e => setNewRule(p => ({ ...p, name: e.target.value }))}
-                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500" />
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[12px] text-slate-200 outline-none focus:border-blue-500" />
               </div>
             </ZebraRow>
             <ZebraRow index={1}>
               <div className="grid grid-cols-[92px,1fr] items-center gap-2">
-                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Event</label>
+                <label className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-300">Event</label>
                 <select value={newRule.event} onChange={e => setNewRule(p => ({ ...p, event: e.target.value as AlertEvent }))}
-                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500">
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[12px] text-slate-200 outline-none focus:border-blue-500">
                   {(Object.keys(EVENT_LABELS) as AlertEvent[]).map(e => (
                     <option key={e} value={e}>{EVENT_LABELS[e]}</option>
                   ))}
@@ -272,9 +272,9 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
             </ZebraRow>
             <ZebraRow index={2}>
               <div className="grid grid-cols-[92px,1fr] items-center gap-2">
-                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Channel</label>
+                <label className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-300">Channel</label>
                 <select value={newRule.channel} onChange={e => setNewRule(p => ({ ...p, channel: e.target.value as AlertChannel }))}
-                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500">
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[12px] text-slate-200 outline-none focus:border-blue-500">
                   <option value="email">Email</option>
                   <option value="slack">Slack</option>
                   <option value="webhook">Webhook</option>
@@ -284,22 +284,22 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
             </ZebraRow>
             <ZebraRow index={3}>
               <div className="grid grid-cols-[92px,1fr] items-center gap-2">
-                <label className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">Target</label>
+                <label className="text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-300">Target</label>
                 <input value={newRule.target ?? ''} onChange={e => setNewRule(p => ({ ...p, target: e.target.value }))}
                   placeholder={newRule.channel === 'email' ? 'email@example.com' : newRule.channel === 'slack' ? '#channel' : 'https://…'}
-                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[10px] text-slate-200 outline-none focus:border-blue-500" />
+                  className="w-full h-6 rounded bg-slate-800 border border-slate-700 px-1.5 text-[12px] text-slate-200 outline-none focus:border-blue-500" />
               </div>
             </ZebraRow>
           </ZebraList>
           <div className="mt-2 flex items-center justify-between px-1">
-            <span className="text-[10px] text-slate-500">New alert rule</span>
+            <span className="text-[12px] text-slate-300">New alert rule</span>
             <div className="flex items-center gap-1.5">
               <button onClick={addRule}
-                className="h-6 px-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[10px] font-medium transition-colors">
+                className="h-6 px-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors">
                 Add
               </button>
               <button onClick={() => setShowAdd(false)}
-                className="h-6 px-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded text-[10px] transition-colors">
+                className="h-6 px-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded text-[12px] transition-colors">
                 Cancel
               </button>
             </div>
@@ -310,7 +310,7 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
       {/* Rules list */}
       <div className="flex-1 overflow-auto p-4">
         {rules.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+          <div className="flex flex-col items-center justify-center h-40 text-slate-400">
             <BellOff className="w-8 h-8 mb-2 opacity-30" />
             <p className="text-sm">No alert rules configured.</p>
           </div>
@@ -321,28 +321,28 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
                 <ZebraRow key={rule.id} index={index} className={`${!rule.enabled ? 'opacity-60' : ''}`}>
                   <div className="flex items-center gap-2">
                     <button onClick={() => toggleRule(rule.id)}
-                      className={`flex-shrink-0 transition-colors ${rule.enabled ? 'text-emerald-400' : 'text-slate-600'}`}
+                      className={`flex-shrink-0 transition-colors ${rule.enabled ? 'text-emerald-400' : 'text-slate-400'}`}
                       title={rule.enabled ? 'Disable' : 'Enable'}>
                       {rule.enabled ? <Bell className="w-3.5 h-3.5" /> : <BellOff className="w-3.5 h-3.5" />}
                     </button>
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       {EVENT_ICONS[rule.event]}
-                      <span className="truncate text-[10px] font-medium text-slate-200">{rule.name}</span>
+                      <span className="truncate text-[12px] font-medium text-slate-200">{rule.name}</span>
                     </div>
-                    <span className={`px-1.5 py-0.5 rounded border text-[9px] font-medium capitalize ${CHANNEL_COLORS[rule.channel]}`}>
+                    <span className={`px-1.5 py-0.5 rounded border text-[12px] font-medium capitalize ${CHANNEL_COLORS[rule.channel]}`}>
                       {rule.channel}
                     </span>
-                    <span className="truncate max-w-[220px] text-[10px] text-slate-400 font-mono" title={rule.target}>
+                    <span className="truncate max-w-[220px] text-[12px] text-slate-400 font-mono" title={rule.target}>
                       {rule.target}
                     </span>
                     {rule.silenceMinutes && (
-                      <span className="text-[9px] text-slate-600 whitespace-nowrap">Silence {rule.silenceMinutes}m</span>
+                      <span className="text-[12px] text-slate-400 whitespace-nowrap">Silence {rule.silenceMinutes}m</span>
                     )}
                     <CompactIconButton title="Delete alert rule" tone="danger" onClick={() => deleteRule(rule.id)}>
                       <Trash2 className="w-3 h-3" />
                     </CompactIconButton>
                   </div>
-                  <div className="mt-1 pl-5 text-[9px] uppercase tracking-[0.12em] text-slate-500">
+                  <div className="mt-1 pl-5 text-[12px] uppercase tracking-[0.12em] text-slate-300">
                     {EVENT_LABELS[rule.event]}
                   </div>
                 </ZebraRow>
@@ -354,7 +354,7 @@ export function PipelineAlertsSubTab({ pipelineId }: { pipelineId: string }) {
 
       {/* Info */}
       <div className="px-4 py-2 border-t border-slate-800 flex-shrink-0">
-        <p className="text-[11px] text-slate-600">Alert delivery requires the notification backend to be configured. Contact your platform administrator.</p>
+        <p className="text-[12px] text-slate-400">Alert delivery requires the notification backend to be configured. Contact your platform administrator.</p>
       </div>
     </div>
   );

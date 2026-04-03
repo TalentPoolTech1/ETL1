@@ -142,7 +142,7 @@ export function GovernanceView() {
   return (
     <div className="flex-1 flex flex-col h-full bg-neutral-50 overflow-hidden">
       {/* Header */}
-      <div className="bg-white border-b border-neutral-200 px-8 py-6 flex items-center justify-between">
+      <div className="bg-[#161b25] border-b border-slate-800 px-8 py-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Governance & Security</h1>
           <p className="text-xs text-neutral-500 mt-1">Manage users, roles, and audit trails across the platform.</p>
@@ -160,7 +160,7 @@ export function GovernanceView() {
       {/* Main Content Area */}
       <div className="flex-1 flex overflow-hidden">
         {/* Navigation Sidebar */}
-        <div className="w-64 bg-white border-r border-neutral-200">
+        <div className="w-64 bg-[#161b25] border-r border-slate-800">
           <div className="p-4 space-y-1">
             <NavButton 
               icon={Users} 
@@ -197,17 +197,17 @@ export function GovernanceView() {
                       value={searchText}
                       onChange={e => setSearchText(e.target.value)}
                       placeholder="Search users..." 
-                      className="w-full pl-10 pr-4 py-2 bg-white border border-neutral-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                      className="w-full pl-10 pr-4 py-2 bg-[#161b25] border border-slate-800 rounded-lg text-sm focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                     />
                   </div>
-                  <button onClick={() => setShowActiveOnly(v => !v)} className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-600 border border-neutral-200 rounded-lg hover:bg-white hover:shadow-sm transition-all">
+                  <button onClick={() => setShowActiveOnly(v => !v)} className="flex items-center gap-2 px-3 py-2 text-sm text-neutral-600 border border-slate-800 rounded-lg hover:bg-[#161b25] hover:shadow-sm transition-all">
                     <Filter className="w-4 h-4" />
                     <span>{showActiveOnly ? 'Active Only' : 'Filter'}</span>
                   </button>
                 </div>
 
                 {/* User Table */}
-                <div className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
+                <div className="bg-[#161b25] rounded-xl border border-slate-800 shadow-sm overflow-hidden">
                   <table className="w-full text-left">
                     <thead className="bg-neutral-50 border-b border-neutral-100">
                       <tr>
@@ -239,7 +239,7 @@ export function GovernanceView() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="px-2 py-1 bg-primary-50 text-primary-600 text-[10px] font-bold uppercase tracking-wider rounded border border-primary-100">
+                            <span className="px-2 py-1 bg-primary-50 text-primary-600 text-[12px] font-bold uppercase tracking-wider rounded border border-primary-100">
                               {user.role}
                             </span>
                           </td>
@@ -274,12 +274,12 @@ export function GovernanceView() {
                   </div>
                 )}
                 {loadingRoles ? (
-                  <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm text-sm text-neutral-500">
+                  <div className="p-6 bg-[#161b25] rounded-xl border border-slate-800 shadow-sm text-sm text-neutral-500">
                     Loading roles and permissions…
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm">
+                    <div className="p-6 bg-[#161b25] rounded-xl border border-slate-800 shadow-sm">
                       <div className="flex items-center gap-2 mb-4">
                         <Key className="w-5 h-5 text-amber-500" />
                         <h3 className="text-sm font-semibold text-neutral-900">Roles</h3>
@@ -289,7 +289,7 @@ export function GovernanceView() {
                       ) : (
                         <div className="space-y-3">
                           {roles.map(role => (
-                            <div key={role.roleName} className="rounded border border-neutral-200 p-3">
+                            <div key={role.roleName} className="rounded border border-slate-800 p-3">
                               <div className="flex items-center justify-between">
                                 <p className="text-sm font-semibold text-neutral-900">{role.roleName}</p>
                                 <span className="text-xs text-neutral-500">{role.memberCount} members</span>
@@ -300,7 +300,7 @@ export function GovernanceView() {
                         </div>
                       )}
                     </div>
-                    <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm">
+                    <div className="p-6 bg-[#161b25] rounded-xl border border-slate-800 shadow-sm">
                       <div className="flex items-center gap-2 mb-4">
                         <Shield className="w-5 h-5 text-primary-600" />
                         <h3 className="text-sm font-semibold text-neutral-900">Permissions</h3>
@@ -310,7 +310,7 @@ export function GovernanceView() {
                       ) : (
                         <div className="space-y-2 max-h-96 overflow-auto pr-1">
                           {permissions.map(perm => (
-                            <div key={perm.permCode} className="rounded border border-neutral-200 p-3">
+                            <div key={perm.permCode} className="rounded border border-slate-800 p-3">
                               <p className="text-xs font-semibold text-neutral-900">{perm.permCode}</p>
                               <p className="text-xs text-neutral-500 mt-1">{perm.permDesc || 'No description'}</p>
                             </div>
@@ -325,7 +325,7 @@ export function GovernanceView() {
 
             {activeTab === 'audit' && (
               <div className="space-y-8">
-                <div className="p-6 bg-white rounded-xl border border-neutral-200 shadow-sm">
+                <div className="p-6 bg-[#161b25] rounded-xl border border-slate-800 shadow-sm">
                   <h3 className="text-sm font-semibold text-neutral-900 mb-2">System Audit Log</h3>
                   <p className="text-xs text-neutral-500">
                     Dedicated governance/system audit API is not yet implemented.
@@ -336,7 +336,7 @@ export function GovernanceView() {
           </div>
 
           {/* Right Sidebar - Activity Summary */}
-          <div className="w-80 border-l border-neutral-200 bg-white p-6 overflow-y-auto">
+          <div className="w-80 border-l border-slate-800 bg-[#161b25] p-6 overflow-y-auto">
             <ActivityTimeline activities={[]} />
           </div>
         </div>

@@ -7,15 +7,10 @@ import {
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { logout } from '@/store/slices/authSlice';
 import { markTabSaved } from '@/store/slices/tabsSlice';
+import { markSaved } from '@/store/slices/pipelineSlice';
 import api from '@/services/api';
 
 // ─── Environment selector ─────────────────────────────────────────────────────
-
-const FALLBACK_ENV_COLORS: Record<string, string> = {
-  default: 'bg-slate-800/40 text-slate-300 border-slate-700',
-  prod:    'bg-red-900/40 text-red-300 border-red-700',
-  nonProd: 'bg-emerald-900/40 text-emerald-300 border-emerald-700',
-};
 
 function EnvironmentSelector() {
   const [env, setEnv]   = useState<string>('');
@@ -26,14 +21,13 @@ function EnvironmentSelector() {
     let mounted = true;
     api.getEnvironments()
       .then(res => {
-        const rows = (res.data as any)?.data ?? [];
+        const rows = (res.data as Record<string, unknown>)?.data ?? [];
         const normalized = Array.isArray(rows) ? rows : [];
         if (!mounted) return;
         setEnvs(normalized);
         if (!env && normalized.length > 0) setEnv(String(normalized[0].env_display_name ?? ''));
       })
       .catch(() => {
-        // Keep selector usable even if environments endpoint is unavailable.
         if (!mounted) return;
         setEnvs([]);
         if (!env) setEnv('Default');
@@ -41,17 +35,26 @@ function EnvironmentSelector() {
     return () => { mounted = false; };
   }, [env]);
 
-  const colorClass = useMemo(() => {
+  const isProdEnv = useMemo(() => {
     const match = envs.find(e => String(e.env_display_name) === env);
-    if (!match) return FALLBACK_ENV_COLORS.default;
-    return match.is_prod_env_flag ? FALLBACK_ENV_COLORS.prod : FALLBACK_ENV_COLORS.nonProd;
+    return match?.is_prod_env_flag ?? false;
   }, [env, envs]);
+
+  // Use design-system status vars — no raw hex
+  const envStyle: React.CSSProperties = isProdEnv
+    ? { background: 'var(--err-bg)', color: 'var(--err)', borderColor: 'rgba(248,113,113,0.30)' }
+    : { background: 'var(--ok-bg)',  color: 'var(--ok)',  borderColor: 'rgba(52,211,153,0.30)' };
+
+  if (!env) {
+    Object.assign(envStyle, { background: 'var(--bg-5)', color: 'var(--tx2)', borderColor: 'var(--bd-2)' });
+  }
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className={`flex items-center gap-1.5 h-7 px-2.5 rounded border text-[12px] font-medium transition-colors ${colorClass}`}
+        className="flex items-center gap-1.5 px-2.5 rounded border transition-colors flex-shrink-0"
+        style={{ height: 22, fontSize: 'var(--fs-sm)', fontWeight: 'var(--fw-medium)', ...envStyle }}
       >
         <span className="w-1.5 h-1.5 rounded-full bg-current opacity-80" />
         {env || 'Environment'}
@@ -60,14 +63,26 @@ function EnvironmentSelector() {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1d2e] border border-slate-700 rounded-lg shadow-xl py-1 min-w-[140px]">
+          <div
+            className="absolute right-0 top-full mt-1 z-50 shadow-xl py-1 min-w-[140px] rounded-lg"
+            style={{ background: 'var(--bg-4)', border: '1px solid var(--bd-2)' }}
+          >
             {(envs.length > 0 ? envs : [{ env_id: 'default', env_display_name: env || 'Default', is_prod_env_flag: false }]).map(e => {
-              const name = String((e as any).env_display_name ?? 'Default');
-              const isProd = Boolean((e as any).is_prod_env_flag);
+              const name   = String((e as Record<string, unknown>).env_display_name ?? 'Default');
+              const isProd = Boolean((e as Record<string, unknown>).is_prod_env_flag);
               return (
-                <button key={String((e as any).env_id ?? name)} onClick={() => { setEnv(name); setOpen(false); }}
-                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors hover:bg-slate-700 ${name === env ? 'text-blue-300' : 'text-slate-300'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${isProd ? 'bg-red-400' : 'bg-emerald-400'}`} />
+                <button
+                  key={String((e as Record<string, unknown>).env_id ?? name)}
+                  onClick={() => { setEnv(name); setOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors"
+                  style={{
+                    fontSize: 'var(--fs-sm)',
+                    color: name === env ? 'var(--ac-lt)' : 'var(--tx2)',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-5)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isProd ? 'bg-err' : 'bg-ok'}`} />
                   {name}
                 </button>
               );
@@ -85,23 +100,26 @@ function TBtn({ icon: Icon, label, onClick, disabled, variant = 'ghost', title, 
   icon: React.ElementType; label?: string; onClick?: () => void; disabled?: boolean;
   variant?: 'ghost' | 'primary' | 'success' | 'warning'; title?: string; loading?: boolean;
 }) {
-  const base = 'flex items-center gap-1 h-[22px] px-1.5 rounded text-[11px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0';
-  const colors = {
-    ghost:   'text-slate-400 hover:text-slate-200 hover:bg-slate-700/60',
-    primary: 'text-blue-300 hover:text-blue-100 hover:bg-blue-900/40',
-    success: 'bg-emerald-700/80 hover:bg-emerald-600 text-white',
-    warning: 'bg-amber-700/80 hover:bg-amber-600 text-white',
-  };
   return (
-    <button title={title ?? label} onClick={onClick} disabled={disabled || loading} className={`${base} ${colors[variant]}`}>
-      {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Icon className="w-3 h-3" strokeWidth={1.5} />}
+    <button
+      title={title ?? label}
+      onClick={onClick}
+      disabled={disabled || loading}
+      className={`thm-header-btn ${
+        variant === 'primary' ? 'thm-header-btn--primary' :
+        variant === 'success' ? 'thm-header-btn--success' :
+        variant === 'warning' ? 'thm-header-btn--warning' : ''
+      }`}
+    >
+      {loading
+        ? <Loader2 className="w-3 h-3 animate-spin" />
+        : <Icon className="w-3 h-3" strokeWidth={1.5} />}
       {label && <span className="hidden lg:inline ml-0.5">{label}</span>}
     </button>
   );
 }
 
 // ─── Context-aware toolbar ────────────────────────────────────────────────────
-// All useAppSelector calls return primitives to avoid new-reference re-render warnings.
 
 function ToolbarActions() {
   const dispatch       = useAppDispatch();
@@ -109,14 +127,15 @@ function ToolbarActions() {
   const activeTab      = useAppSelector(s => s.tabs.allTabs.find(t => t.id === activeTabId));
   const allTabs        = useAppSelector(s => s.tabs.allTabs);
   const activePipeline = useAppSelector(s => s.pipeline.activePipeline);
+  const canvasNodes    = useAppSelector(s => Object.values(s.pipeline.nodes));
+  const canvasEdges    = useAppSelector(s => Object.values(s.pipeline.edges));
   const unsaved        = useAppSelector(s => s.pipeline.unsavedChanges);
-  // ↓ count (number) — stable reference, no memoization needed
 
-  const [isSaving, setIsSaving]       = useState(false);
+  const [isSaving,    setIsSaving]    = useState(false);
   const [isSavingAll, setIsSavingAll] = useState(false);
-  const [isPublishing, setPublishing] = useState(false);
-  const [isRunning, setIsRunning]     = useState(false);
-  const [isValidating, setValidating] = useState(false);
+  const [isPublishing,setPublishing]  = useState(false);
+  const [isRunning,   setIsRunning]   = useState(false);
+  const [isValidating,setValidating]  = useState(false);
 
   const type     = activeTab?.type;
   const objectId = activeTab?.objectId ?? '';
@@ -129,17 +148,17 @@ function ToolbarActions() {
         await api.savePipeline(activePipeline.id, {
           pipelineDisplayName: activePipeline.name,
           pipelineDescText: activePipeline.description,
-          nodes: activePipeline.nodes,
-          edges: activePipeline.edges,
+          nodes: canvasNodes,
+          edges: canvasEdges,
           changeSummary: 'Saved from Header toolbar',
         });
+        dispatch(markSaved());
       }
       dispatch(markTabSaved(activeTab.id));
     } catch (err: unknown) {
       alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Save failed');
-    }
-    finally { setIsSaving(false); }
-  }, [activeTab, activePipeline, isSaving, type, dispatch]);
+    } finally { setIsSaving(false); }
+  }, [activeTab, activePipeline, canvasEdges, canvasNodes, isSaving, type, dispatch]);
 
   const handleRun = useCallback(async () => {
     if (isRunning || !objectId) return;
@@ -164,18 +183,17 @@ function ToolbarActions() {
     if (isSavingAll) return;
     setIsSavingAll(true);
     try {
-      // Save the active pipeline (full canvas data from Redux)
       if (type === 'pipeline' && activePipeline && activeTab) {
         await api.savePipeline(activePipeline.id, {
           pipelineDisplayName: activePipeline.name,
           pipelineDescText: activePipeline.description,
-          nodes: activePipeline.nodes,
-          edges: activePipeline.edges,
+          nodes: canvasNodes,
+          edges: canvasEdges,
           changeSummary: 'Saved via Save All',
         });
+        dispatch(markSaved());
         dispatch(markTabSaved(activeTab.id));
       }
-      // For non-active dirty pipeline tabs: save metadata only (no canvas data available without load)
       const otherDirtyPipelineTabs = allTabs.filter(
         t => t.isDirty && t.type === 'pipeline' && t.id !== activeTab?.id,
       );
@@ -188,21 +206,17 @@ function ToolbarActions() {
       );
     } catch (err: unknown) {
       alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Save All failed');
-    } finally {
-      setIsSavingAll(false);
-    }
-  }, [allTabs, activeTab, activePipeline, isSavingAll, type, dispatch]);
+    } finally { setIsSavingAll(false); }
+  }, [allTabs, activeTab, activePipeline, canvasEdges, canvasNodes, isSavingAll, type, dispatch]);
 
-  const handlePublish = useCallback(async () => {
+  const handleGenerateCode = useCallback(async () => {
     if (isPublishing || !objectId || type !== 'pipeline') return;
     setPublishing(true);
     try {
       await api.generateCode(objectId);
     } catch (err: unknown) {
-      alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Publish failed');
-    } finally {
-      setPublishing(false);
-    }
+      alert((err as { response?: { data?: { userMessage?: string } } })?.response?.data?.userMessage ?? 'Code generation failed');
+    } finally { setPublishing(false); }
   }, [type, objectId, isPublishing]);
 
   const canRun      = type === 'pipeline' || type === 'orchestrator';
@@ -215,7 +229,7 @@ function ToolbarActions() {
         <>
           <TBtn icon={Undo2} title="Undo (Ctrl+Z)" disabled />
           <TBtn icon={Redo2} title="Redo (Ctrl+Y)" disabled />
-          <div className="w-px h-5 bg-slate-700 mx-1 flex-shrink-0" />
+          <div className="w-px h-4 mx-1 flex-shrink-0" style={{ background: 'var(--bd-2)' }} />
         </>
       )}
 
@@ -224,12 +238,12 @@ function ToolbarActions() {
         disabled={!activeTab}
         variant={hasDirty ? 'warning' : 'ghost'} />
 
-      <TBtn icon={Layers} label="Save All" title="Save All dirty tabs (Ctrl+Shift+S)"
+      <TBtn icon={Layers} label="Save All" title="Save All (Ctrl+Shift+S)"
         onClick={handleSaveAll} loading={isSavingAll}
         disabled={!allTabs.some(t => t.isDirty || t.unsaved)}
         variant="ghost" />
 
-      <div className="w-px h-5 bg-slate-700 mx-1 flex-shrink-0" />
+      <div className="w-px h-4 mx-1 flex-shrink-0" style={{ background: 'var(--bd-2)' }} />
 
       {canValidate && (
         <TBtn icon={CheckCircle2} label="Validate" title="Validate"
@@ -242,10 +256,9 @@ function ToolbarActions() {
       )}
 
       {type === 'pipeline' && (
-        <TBtn icon={Upload} label="Publish" title="Generate & publish code"
-          onClick={handlePublish} loading={isPublishing} variant="primary" />
+        <TBtn icon={Upload} label="Generate Code" title="Generate code bundle"
+          onClick={handleGenerateCode} loading={isPublishing} variant="primary" />
       )}
-
     </div>
   );
 }
@@ -255,31 +268,41 @@ function ToolbarActions() {
 export function Header() {
   const dispatch = useAppDispatch();
   const user     = useAppSelector(s => s.auth.user);
-  // Primitive count — stable reference, no memoization warning
   const dirtyCount = useAppSelector(s => s.tabs.allTabs.filter(t => t.isDirty || t.unsaved).length);
 
   const displayName = user?.fullName ?? user?.email ?? 'User';
   const initials    = displayName.split(' ').map((w: string) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('');
 
   return (
-    <header className="h-8 bg-[#0a0c15] border-b border-slate-800 flex items-center px-3 gap-2 flex-shrink-0 z-20">
+    <header className="thm-header">
 
       {/* Logo */}
       <div className="flex items-center gap-2 flex-shrink-0">
-        <div className="w-5 h-5 bg-blue-600 rounded flex items-center justify-center shadow-md shadow-blue-900/50">
+        <div className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0"
+          style={{ background: 'var(--ac)', boxShadow: '0 0 8px var(--ac-bg)' }}>
           <Zap className="w-3 h-3 text-white" fill="currentColor" />
         </div>
-        <span className="text-sm font-bold text-slate-100 tracking-tight hidden sm:block">ETL1</span>
+        <span
+          className="hidden sm:block tracking-tight font-bold flex-shrink-0 text-base text-tx1"
+        >ETL1</span>
       </div>
 
-      <div className="w-px h-5 bg-slate-800 flex-shrink-0" />
+      <div className="w-px h-4 flex-shrink-0" style={{ background: 'var(--bd-2)' }} />
 
       <ToolbarActions />
 
-      <div className="w-px h-5 bg-slate-800 flex-shrink-0 mx-1" />
+      <div className="w-px h-4 mx-1 flex-shrink-0" style={{ background: 'var(--bd-2)' }} />
 
       {dirtyCount > 0 && (
-        <div className="flex items-center gap-1 px-2 py-0.5 bg-amber-900/30 border border-amber-700/40 rounded text-[11px] text-amber-300 flex-shrink-0">
+        <div
+          className="flex items-center gap-1 px-2 py-0.5 rounded flex-shrink-0"
+          style={{
+            background: 'var(--warn-bg)',
+            border: '1px solid rgba(251,191,36,0.25)',
+            fontSize: 'var(--fs-sm)',
+            color: 'var(--warn)',
+          }}
+        >
           <AlertTriangle className="w-3 h-3" />
           {dirtyCount} unsaved
         </div>
@@ -287,15 +310,25 @@ export function Header() {
 
       <div className="flex-1" />
 
-      {/* Global search placeholder */}
-      <div className="w-[300px] relative">
+      {/* Global search */}
+      <div className="w-[280px] relative flex-shrink-0">
         <button
           type="button"
-          className="w-full h-[22px] pl-7 pr-2 bg-slate-800/40 border border-slate-700/50 rounded text-[10px] text-left text-slate-500 hover:text-slate-300 hover:bg-slate-800/60 transition-all"
           title="Global search is not yet available. Use Command Palette (Ctrl/Cmd+K)."
+          className="w-full pl-7 pr-2 rounded text-left transition-all"
+          style={{
+            height: 22,
+            background: 'var(--bg-5)',
+            border: '1px solid var(--bd)',
+            fontSize: 'var(--fs-sm)',
+            color: 'var(--tx3)',
+          }}
         >
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none" />
-          Search pipelines, orchestrators... (Ctrl+K)
+          <Search
+            className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 pointer-events-none"
+            style={{ color: 'var(--tx3)' }}
+          />
+          Search pipelines, orchestrators… (Ctrl+K)
         </button>
       </div>
 
@@ -303,29 +336,52 @@ export function Header() {
 
       <EnvironmentSelector />
 
-      <button title="Notifications"
-        className="relative w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors flex-shrink-0">
+      {/* Notifications */}
+      <button
+        title="Notifications"
+        className="relative w-6 h-6 flex items-center justify-center rounded flex-shrink-0 transition-colors"
+        style={{ color: 'var(--tx2)' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-5)', e.currentTarget.style.color = 'var(--tx1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = '', e.currentTarget.style.color = 'var(--tx2)')}
+      >
         <Bell className="w-3.5 h-3.5" />
-        <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-500 rounded-full ring-1 ring-[#0a0c15]" />
+        {/* Notification dot — uses design system error color */}
+        <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-err rounded-full"
+          style={{ boxShadow: '0 0 0 1px var(--bg-2)' }} />
       </button>
 
-      <button title="Help & documentation"
-        className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors flex-shrink-0">
+      {/* Help */}
+      <button
+        title="Help & documentation"
+        className="w-6 h-6 flex items-center justify-center rounded flex-shrink-0 transition-colors"
+        style={{ color: 'var(--tx2)' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-5)', e.currentTarget.style.color = 'var(--tx1)')}
+        onMouseLeave={e => (e.currentTarget.style.background = '', e.currentTarget.style.color = 'var(--tx2)')}
+      >
         <HelpCircle className="w-3.5 h-3.5" />
       </button>
 
-      <div className="w-px h-5 bg-slate-800 mx-1 flex-shrink-0" />
+      <div className="w-px h-4 mx-1 flex-shrink-0" style={{ background: 'var(--bd-2)' }} />
 
+      {/* User */}
       <button
         title={`Signed in as ${displayName} — click to sign out`}
         onClick={() => dispatch(logout())}
-        className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-slate-700 transition-colors flex-shrink-0"
+        className="flex items-center gap-1.5 px-2 py-1 rounded flex-shrink-0 transition-colors"
+        onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-5)')}
+        onMouseLeave={e => (e.currentTarget.style.background = '')}
       >
-        <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center flex-shrink-0">
-          <span className="text-white text-[11px] font-bold leading-none select-none">{initials || 'U'}</span>
+        {/* Avatar — gradient uses ac + a purple complement, both on-brand */}
+        <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, var(--ac), var(--ic-orch))' }}>
+          <span className="text-white font-bold leading-none select-none" style={{ fontSize: 'var(--fs-micro)' }}>
+            {initials || 'U'}
+          </span>
         </div>
-        <span className="hidden lg:inline text-[12px] text-slate-400 max-w-[100px] truncate">{displayName}</span>
-        <ChevronDown className="w-3 h-3 text-slate-600" />
+        <span className="hidden lg:inline max-w-[100px] truncate" style={{ fontSize: 'var(--fs-sm)', color: 'var(--tx2)' }}>
+          {displayName}
+        </span>
+        <ChevronDown className="w-3 h-3" style={{ color: 'var(--tx3)' }} />
       </button>
     </header>
   );

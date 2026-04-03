@@ -32,7 +32,7 @@ export function OptimizeSubTab() {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       {nodes.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-slate-600 text-sm">
+        <div className="flex-1 flex items-center justify-center text-slate-400 text-sm">
           <p>Add nodes to the pipeline canvas to enable optimization analysis.</p>
         </div>
       ) : (

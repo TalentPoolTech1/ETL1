@@ -54,16 +54,16 @@ export function PipelineActivitySubTab({ pipelineId }: { pipelineId: string }) {
       <div className="flex items-center gap-2 mb-4">
         <Activity className="w-4 h-4 text-slate-400" />
         <span className="text-[12px] font-medium text-slate-300">Pipeline Activity</span>
-        <button onClick={load} className="ml-auto text-[11px] text-slate-500 hover:text-slate-300 flex items-center gap-1 border border-slate-700 px-2 py-1 rounded transition-colors">
+        <button onClick={load} className="ml-auto text-[12px] text-slate-300 hover:text-slate-300 flex items-center gap-1 border border-slate-700 px-2 py-1 rounded transition-colors">
           <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
         </button>
       </div>
       {loading ? (
-        <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
           <p className="text-sm">Loading activity…</p>
         </div>
       ) : events.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-40 text-slate-600">
+        <div className="flex flex-col items-center justify-center h-40 text-slate-400">
           <Activity className="w-8 h-8 mb-2 opacity-30" />
           <p className="text-sm">No activity recorded yet for this pipeline.</p>
         </div>
@@ -71,10 +71,10 @@ export function PipelineActivitySubTab({ pipelineId }: { pipelineId: string }) {
         <div className="max-w-2xl space-y-0">
           {events.map(e => (
             <div key={e.id} className="flex items-start gap-3 py-2.5 border-b border-slate-800/50">
-              <div className="text-[11px] text-slate-600 font-mono w-32 flex-shrink-0 mt-0.5">{e.timestamp ? new Date(e.timestamp).toLocaleString() : '—'}</div>
-              <span className={`text-[12px] font-medium ${EVENT_COLORS[e.action] ?? 'text-slate-400'}`}>{(e.action ?? '').replace(/_/g, ' ')}</span>
-              <span className="text-[12px] text-slate-400">{e.actor}</span>
-              {e.detail && <span className="text-[11px] text-slate-600 ml-auto">{e.detail}</span>}
+              <div className="text-[12px] text-slate-400 font-mono w-36 flex-shrink-0 mt-0.5">{e.timestamp ? new Date(e.timestamp).toLocaleString() : '—'}</div>
+              <span className={`text-[12px] font-semibold ${EVENT_COLORS[e.action] ?? 'text-slate-300'}`}>{(e.action ?? '').replace(/_/g, ' ')}</span>
+              <span className="text-[12px] text-slate-300">{e.actor}</span>
+              {e.detail && <span className="text-[12px] text-slate-400 ml-auto">{e.detail}</span>}
             </div>
           ))}
         </div>

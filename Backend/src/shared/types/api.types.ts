@@ -54,6 +54,7 @@ export interface ProjectHierarchyNode {
 export interface PipelineRun {
   runId: string;
   pipelineId: string;
+  pipelineName?: string | null;
   versionId?: string | null;
   status: string;
   triggerType: string;

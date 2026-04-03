@@ -161,12 +161,28 @@ router.get('/:id/introspect/columns', requirePermission('CONNECTION_VIEW'), asyn
         const catalogCols = await db.transaction(async client => {
             await setSession(client, userId);
             const r = await client.query(
-                `SELECT c.column_name_text, c.data_type_code, c.is_nullable_flag, c.ordinal_position_num
-                 FROM catalog.dataset_columns c
-                 JOIN catalog.datasets d ON d.dataset_id = c.dataset_id
-                 WHERE d.connector_id = $1::uuid
-                   AND (d.schema_name_text = $2 OR $2 = '')
-                   AND d.table_name_text   = $3
+                `WITH latest_dataset AS (
+                    SELECT d.dataset_id
+                    FROM catalog.datasets d
+                    WHERE d.connector_id = $1::uuid
+                      AND (d.schema_name_text = $2 OR $2 = '')
+                      AND d.table_name_text = $3
+                    ORDER BY
+                        d.last_introspection_dtm DESC NULLS LAST,
+                        d.updated_dtm DESC NULLS LAST,
+                        d.created_dtm DESC NULLS LAST
+                    LIMIT 1
+                 )
+                 SELECT
+                    c.column_name_text,
+                    c.data_type_code,
+                    c.override_data_type_code,
+                    COALESCE(c.override_data_type_code, c.data_type_code) AS effective_data_type_code,
+                    c.parse_format_text,
+                    c.is_nullable_flag,
+                    c.ordinal_position_num
+                 FROM latest_dataset ld
+                 JOIN catalog.dataset_columns c ON c.dataset_id = ld.dataset_id
                  ORDER BY c.ordinal_position_num`,
                 [connId, schema, table],
             );
@@ -179,7 +195,10 @@ router.get('/:id/introspect/columns', requirePermission('CONNECTION_VIEW'), asyn
                 source: 'catalog',
                 data: catalogCols.map((c: any) => ({
                     columnName:      c.column_name_text,
-                    dataType:        c.data_type_code,
+                    dataType:        c.effective_data_type_code ?? c.data_type_code,
+                    importedDataType: c.data_type_code,
+                    overrideDataType: c.override_data_type_code,
+                    parseFormat:     c.parse_format_text,
                     nullable:        c.is_nullable_flag ?? true,
                     ordinalPosition: c.ordinal_position_num,
                 })),

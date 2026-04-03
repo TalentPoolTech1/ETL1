@@ -51,6 +51,13 @@ authRouter.post('/login', async (req: Request, res: Response, next: NextFunction
 
     await db.query(`CALL etl.pr_record_user_login($1::uuid)`, [user.user_id]);
 
+    // Fetch user permissions
+    const permRows = await db.query<{ perm_code_name: string }>(
+      `SELECT perm_code_name FROM gov.fn_get_user_permissions($1::uuid)`,
+      [user.user_id]
+    );
+    const permissions = permRows.rows.map(r => r.perm_code_name);
+
     log.info('users.login', 'Login successful', { userId: user.user_id });
 
     res.json({
@@ -62,6 +69,7 @@ authRouter.post('/login', async (req: Request, res: Response, next: NextFunction
           email:    user.email_address,
           fullName: user.user_full_name,
         },
+        permissions,
       },
     });
   } catch (err) {
@@ -89,12 +97,20 @@ authRouter.get('/me', authGuard, async (req: Request, res: Response, next: NextF
       return next(AppErrors.usr.notFound(userId));
     }
 
+    // Fetch user permissions
+    const permRows = await db.query<{ perm_code_name: string }>(
+      `SELECT perm_code_name FROM gov.fn_get_user_permissions($1::uuid)`,
+      [userId]
+    );
+    const permissions = permRows.rows.map(r => r.perm_code_name);
+
     res.json({
       success: true,
       data: {
         userId:   user.user_id,
         email:    user.email_address,
         fullName: user.user_full_name,
+        permissions,
       },
     });
   } catch (err) {

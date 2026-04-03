@@ -1,6 +1,6 @@
 import { INodeGenerator, GeneratedNodeCode, GenerationContext } from '../../../../core/interfaces/engine.interfaces';
 import { PipelineNode, KafkaSourceConfig } from '../../../../core/types/pipeline.types';
-import { CodeBuilder, toVarName, pyStringLiteral, toPySparkType } from '../../../../utils/codegen.utils';
+import { CodeBuilder, toVarName, pyStringLiteral, toPySparkType, pyBoolLiteral } from '../../../../utils/codegen.utils';
 import { PYSPARK_IMPORTS } from '../../../../core/constants/codegen.constants';
 
 // ─── PySpark Kafka Source Generator ───────────────────────────────────────────
@@ -80,7 +80,7 @@ export class PySparkKafkaSourceGenerator implements INodeGenerator {
         b.indent(b2 => {
           cfg.valueSchema!.fields.forEach((f, i) => {
             const comma = i < cfg.valueSchema!.fields.length - 1 ? ',' : '';
-            b2.line(`T.StructField(${pyStringLiteral(f.name)}, ${toPySparkType(f.dataType)}, ${f.nullable !== false})${comma}`);
+            b2.line(`T.StructField(${pyStringLiteral(f.name)}, ${toPySparkType(f.dataType)}, ${pyBoolLiteral(f.nullable !== false)})${comma}`);
           });
         });
         b.line('])');

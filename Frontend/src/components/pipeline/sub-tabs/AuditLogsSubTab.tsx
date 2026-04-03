@@ -71,7 +71,7 @@ export function AuditLogsSubTab({ pipelineId }: Props) {
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search by user, action or summary…"
           className="h-8 w-72 px-3 rounded bg-[#1e2035] border border-slate-600 text-slate-200 text-[12px]
-                     placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
+                     placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
         />
         <button onClick={load}
           className="h-8 px-2.5 rounded border border-slate-700 bg-[#1e2035] text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5 text-[12px]">
@@ -87,44 +87,42 @@ export function AuditLogsSubTab({ pipelineId }: Props) {
       {/* Timeline */}
       <div className="flex-1 overflow-y-auto px-6 py-4">
         {loading && (
-          <div className="text-[13px] text-slate-500 py-10 text-center">Loading audit log…</div>
+          <div className="text-[13px] text-slate-300 py-10 text-center">Loading audit log…</div>
         )}
         {!loading && (
           <div className="relative">
             <div className="absolute left-4 top-2 bottom-2 w-px bg-slate-800" />
-            <div className="space-y-3">
+            <div className="space-y-1.5">
               {filtered.length === 0 && (
-                <div className="pl-12 text-[13px] text-slate-600 py-10 text-center">
+                <div className="pl-12 text-[13px] text-slate-400 py-10 text-center">
                   {entries.length === 0 ? 'No audit entries recorded yet.' : 'No entries match filter.'}
                 </div>
               )}
               {filtered.map(entry => (
-                <div key={entry.id} className="relative pl-12">
-                  <div className="absolute left-[9px] top-3 w-2.5 h-2.5 rounded-full bg-[#0d0f1a] border-2 border-slate-700" />
-                  <div className="bg-[#13152a] border border-slate-800 rounded-lg p-3.5 hover:border-slate-700 transition-colors">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-semibold tracking-wide ${ACTION_BADGE[entry.action] ?? 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
-                            {(entry.action ?? '').replace(/_/g, ' ')}
-                          </span>
-                          <span className="text-[11px] text-slate-400">{entry.user}</span>
-                          <span className="text-[11px] text-slate-600 font-mono">
-                            {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '—'}
-                          </span>
-                        </div>
-                        <p className="text-[12px] text-slate-300 mt-1.5">{entry.summary}</p>
+                <div key={entry.id} className="relative pl-10">
+                  <div className="absolute left-[7px] top-2.5 w-2 h-2 rounded-full bg-[#0d0f1a] border-2 border-slate-600" />
+                  <div className="bg-slate-800/30 border border-slate-700/60 rounded px-3 py-2 hover:border-slate-600 transition-colors">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[12px] font-semibold tracking-wide flex-shrink-0 ${ACTION_BADGE[entry.action] ?? 'bg-slate-800/60 text-slate-400 border-slate-700'}`}>
+                          {(entry.action ?? '').replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-[12px] text-slate-300">{entry.user}</span>
+                        <span className="text-[12px] text-slate-400 font-mono">
+                          {entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '—'}
+                        </span>
+                        <span className="text-[12px] text-slate-300 truncate">{entry.summary}</span>
                       </div>
                       {entry.diffJson && (
                         <button
                           onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
-                          className="text-[11px] text-blue-400 hover:text-blue-300 flex-shrink-0 transition-colors">
+                          className="text-[12px] text-blue-400 hover:text-blue-300 flex-shrink-0 transition-colors">
                           {expanded === entry.id ? 'Hide diff' : 'View diff'}
                         </button>
                       )}
                     </div>
                     {expanded === entry.id && entry.diffJson && (
-                      <pre className="mt-2.5 p-3 bg-[#0a0c15] rounded border border-slate-800 text-[11px] font-mono text-slate-300 whitespace-pre overflow-x-auto">
+                      <pre className="mt-2 p-2 bg-[#0a0c15] rounded border border-slate-800 text-[12px] font-mono text-slate-300 whitespace-pre overflow-x-auto">
                         {JSON.stringify(entry.diffJson, null, 2)}
                       </pre>
                     )}

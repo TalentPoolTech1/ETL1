@@ -50,9 +50,9 @@ function Field({ label, value, onChange, readOnly = false, multiline = false }: 
 }) {
   return (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="field-label">{label}</label>
       {readOnly ? (
-        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-500">
+        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-300">
           {value || '—'}
         </div>
       ) : multiline ? (
@@ -67,7 +67,7 @@ function Field({ label, value, onChange, readOnly = false, multiline = false }: 
           type="text"
           value={value}
           onChange={e => onChange?.(e.target.value)}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500"
+          className="field-input"
         />
       )}
     </div>
@@ -97,7 +97,7 @@ function MembersTab({
     <div className="flex-1 overflow-auto p-5">
       <div className="flex items-center gap-2 mb-4">
         <span className="text-[13px] font-medium text-slate-300">Members</span>
-        <span className="text-[11px] text-slate-600">· {members.length}</span>
+        <span className="text-[12px] text-slate-400">· {members.length}</span>
       </div>
 
       {canMutate && (
@@ -129,7 +129,7 @@ function MembersTab({
       )}
 
       {members.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-32 text-slate-600 border border-slate-800 rounded-lg">
+        <div className="flex flex-col items-center justify-center h-32 text-slate-400 border border-slate-800 rounded-lg">
           <Users className="w-6 h-6 mb-2 opacity-40" />
           <p className="text-sm">No members assigned to this role.</p>
         </div>
@@ -138,22 +138,22 @@ function MembersTab({
           {members.map(member => (
             <div key={member.userId} className="flex items-center gap-3 px-4 py-2.5 border border-slate-800 rounded-lg hover:bg-slate-800/40 group">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center flex-shrink-0">
-                <span className="text-[11px] font-bold text-white">
+                <span className="text-[12px] font-bold text-white">
                   {(member.displayName || member.email || 'U').slice(0, 2).toUpperCase()}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] text-slate-200 truncate">{member.displayName || member.email}</div>
-                <div className="text-[11px] text-slate-500 truncate">{member.email}</div>
+                <div className="text-[12px] text-slate-300 truncate">{member.email}</div>
               </div>
-              <span className={`text-[11px] ${member.isActive ? 'text-emerald-400' : 'text-slate-500'}`}>
+              <span className={`text-[12px] ${member.isActive ? 'text-emerald-400' : 'text-slate-300'}`}>
                 {member.isActive ? 'Active' : 'Inactive'}
               </span>
               {canMutate && (
                 <button
                   onClick={() => onRemove(member.userId)}
                   disabled={busyUserId === member.userId}
-                  className="w-6 h-6 flex items-center justify-center rounded text-slate-600 hover:text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-40"
+                  className="w-6 h-6 flex items-center justify-center rounded text-slate-400 hover:text-red-400 hover:bg-red-900/30 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-40"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -177,7 +177,7 @@ function PermissionsTab({
 }) {
   return (
     <div className="flex-1 overflow-auto p-5">
-      <div className="text-[11px] text-slate-500 mb-3">
+      <div className="text-[12px] text-slate-300 mb-3">
         Toggle permissions assigned to this role.
       </div>
       <div className="space-y-2">
@@ -192,14 +192,14 @@ function PermissionsTab({
             />
             <div className="min-w-0">
               <div className="text-[12px] font-semibold text-slate-200">{perm.permCode}</div>
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[12px] text-slate-300">
                 {perm.permDisplayName || perm.permDesc || 'No description'}
               </div>
             </div>
           </label>
         ))}
         {permissions.length === 0 && (
-          <div className="text-[12px] text-slate-500 border border-slate-800 rounded-lg p-4">No permissions returned for this role.</div>
+          <div className="text-[12px] text-slate-300 border border-slate-800 rounded-lg p-4">No permissions returned for this role.</div>
         )}
       </div>
     </div>
@@ -210,8 +210,8 @@ function ScopeTab() {
   return (
     <div className="flex-1 overflow-auto p-5">
       <div className="max-w-lg">
-        <div className="text-[11px] text-slate-500 font-semibold uppercase tracking-wide mb-3">Scope Definition</div>
-        <div className="flex flex-col items-center justify-center h-32 text-slate-600 border border-slate-800 rounded-lg">
+        <div className="text-[12px] text-slate-300 font-semibold uppercase tracking-wide mb-3">Scope Definition</div>
+        <div className="flex flex-col items-center justify-center h-32 text-slate-400 border border-slate-800 rounded-lg">
           <Shield className="w-6 h-6 mb-2 opacity-40" />
           <p className="text-sm">Role scope is global in the current governance model.</p>
         </div>
@@ -375,7 +375,7 @@ export function RoleWorkspace({ tabId }: { tabId: string }) {
       )}
 
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-sm text-slate-500">Loading role…</div>
+        <div className="flex-1 flex items-center justify-center text-sm text-slate-300">Loading role…</div>
       ) : (
         <>
           {subTab === 'properties' && (

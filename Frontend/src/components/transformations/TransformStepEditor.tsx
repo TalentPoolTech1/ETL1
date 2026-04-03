@@ -103,7 +103,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
   return (
     <div className="rounded-xl border border-slate-700 bg-[#15182c] p-4 shadow-[0_8px_24px_rgba(2,6,23,0.24)]">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+        <label className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-300">
           <input
             type="checkbox"
             checked={step.enabled}
@@ -116,7 +116,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
         <button
           onClick={onRemove}
           disabled={disabled}
-          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[11px] font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
+          className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-[12px] font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
         >
           Remove
         </button>
@@ -129,12 +129,12 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
           disabled={disabled}
           className="w-full rounded-lg border border-slate-600 bg-[#101426] px-4 py-3 text-left transition hover:border-blue-500 hover:bg-[#141934]"
         >
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">
+          <div className="mb-1 text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">
             Transformation
           </div>
           <div className="font-semibold text-[13px] text-slate-100">{primitive?.label || 'Select a transformation'}</div>
           {primitive && (
-            <div className="mt-1 text-[11px] text-slate-400">{primitive.description}</div>
+            <div className="mt-1 text-[12px] text-slate-400">{primitive.description}</div>
           )}
         </button>
       </div>
@@ -145,7 +145,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
           <div className="mb-4 flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedCategory(null)}
-              className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+              className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${
                 selectedCategory === null
                   ? 'bg-blue-600 text-white'
                   : 'border border-slate-600 bg-[#171b31] text-slate-300 hover:border-slate-400 hover:text-white'
@@ -157,7 +157,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
               <button
                 key={cat}
                 onClick={() => setSelectedCategory(cat)}
-                className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${
                   selectedCategory === cat
                     ? 'bg-blue-600 text-white'
                     : 'border border-slate-600 bg-[#171b31] text-slate-300 hover:border-slate-400 hover:text-white'
@@ -181,7 +181,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
                     <span className="text-lg">{primitive.icon}</span>
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-[12px] text-slate-100">{primitive.label}</div>
-                      <div className="text-[11px] text-slate-400">{primitive.description}</div>
+                      <div className="text-[12px] text-slate-400">{primitive.description}</div>
                     </div>
                   </div>
                 </button>
@@ -195,7 +195,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
         <div className="space-y-6">
           {primitive.parameters.length > 0 && (
             <div>
-              <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Configuration</h4>
+              <h4 className="mb-3 text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">Configuration</h4>
               <ParameterPanel
                 primitive={primitive}
                 values={step.params}
@@ -208,7 +208,7 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
 
           {/* Error handling */}
           <div className="border-t border-slate-700 pt-4">
-            <h4 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">If This Step Fails</h4>
+            <h4 className="mb-3 text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">If This Step Fails</h4>
             <div className="space-y-3">
               <select
                 value={step.onError}
@@ -236,15 +236,15 @@ export const TransformStepEditor: React.FC<TransformStepEditorProps> = ({
 
           {/* Code preview */}
           <div className="border-t border-slate-700 pt-4">
-            <h4 className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-300">Generated Code ({engine})</h4>
-            <div className="overflow-x-auto rounded-md border border-slate-800 bg-[#070910] p-3 font-mono text-[11px] text-slate-100 whitespace-nowrap">
+            <h4 className="mb-2 text-[12px] font-bold uppercase tracking-[0.18em] text-blue-300">Generated Code ({engine})</h4>
+            <div className="overflow-x-auto rounded-md border border-slate-800 bg-[#070910] p-3 font-mono text-[12px] text-slate-100 whitespace-nowrap">
               {codePreview.sql || 'Select parameters to generate code'}
             </div>
 
             {codePreview.warnings.length > 0 && (
               <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
                 {codePreview.warnings.map((warn, i) => (
-                  <div key={i} className="text-[11px] text-amber-300">
+                  <div key={i} className="text-[12px] text-amber-300">
                     {warn}
                   </div>
                 ))}

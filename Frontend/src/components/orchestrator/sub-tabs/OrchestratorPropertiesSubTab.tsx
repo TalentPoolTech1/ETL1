@@ -6,21 +6,49 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import api from '@/services/api';
 
-function Field({ label, value, onChange, ro }: { label: string; value: string; onChange?: (v: string) => void; ro?: boolean }) {
+function Field({ label, value, onChange, ro, required }: { label: string; value: string; onChange?: (v: string) => void; ro?: boolean; required?: boolean }) {
   return (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="field-label">{label}{required && <span className="field-required">*</span>}</label>
       {ro ? (
-        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-500 font-mono">{value || '—'}</div>
+        <div className="field-input-ro">{value || '—'}</div>
       ) : (
-        <input type="text" value={value} onChange={e => onChange?.(e.target.value)}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+        <input type="text" value={value} onChange={e => onChange?.(e.target.value)} className="field-input" />
       )}
     </div>
   );
 }
 
 type FD = Record<string, string>;
+
+function SectionCard({
+  title,
+  description,
+  children,
+  className = '',
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-xl border border-slate-800 bg-[#0f1424] shadow-[0_0_0_1px_rgba(15,23,42,0.35)] ${className}`}>
+      <div className="border-b border-slate-800 px-5 py-4">
+        <div>
+          <div className="text-[12px] font-semibold uppercase tracking-[0.18em] text-slate-300">{title}</div>
+          {description && <p className="mt-1 text-[13px] text-slate-400">{description}</p>}
+        </div>
+      </div>
+      <div className="p-5">{children}</div>
+    </section>
+  );
+}
+
+function isMeaningfulValue(value: string | undefined): boolean {
+  const trimmed = value?.trim() ?? '';
+  return trimmed !== '' && trimmed !== '—';
+}
 
 function mapApiToForm(prev: FD, d: any): FD {
   return {
@@ -103,65 +131,78 @@ export function OrchestratorPropertiesSubTab({ orchId, onDirty }: { orchId: stri
     }
   };
 
-  const F = (p: { label: string; field: string; ro?: boolean }) => (
-    <Field label={p.label} value={data[p.field] ?? ''} onChange={v => update(p.field, v)} ro={p.ro} />
+  const F = (p: { label: string; field: string; ro?: boolean; required?: boolean }) => (
+    <Field label={p.label} value={data[p.field] ?? ''} onChange={v => update(p.field, v)} ro={p.ro} required={p.required} />
   );
 
+  const auditFields = [
+    { label: 'Created On', field: 'createdOn' },
+    { label: 'Updated On', field: 'updatedOn' },
+    { label: 'Last Executed On', field: 'lastExecutedOn' },
+    { label: 'Last Success On', field: 'lastSuccessOn' },
+    { label: 'Last Failed On', field: 'lastFailedOn' },
+  ].filter(item => isMeaningfulValue(data[item.field]));
+
   return (
-    <div className="flex-1 overflow-auto p-5">
-      {loadError && (
-        <div className="mb-4 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{loadError}</div>
-      )}
-      {saveError && (
-        <div className="mb-4 rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{saveError}</div>
-      )}
+    <div className="panel-page px-6 py-5">
+      <div className="mx-auto w-full max-w-[1680px] space-y-5">
+        {loadError && <div className="rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{loadError}</div>}
+        {saveError && <div className="rounded border border-red-800 bg-red-950/40 px-3 py-2 text-[12px] text-red-300">{saveError}</div>}
 
-      <div className="max-w-2xl space-y-4">
-        {isDirty && (
-          <div className="flex justify-end">
-            <button
-              onClick={() => { void handleSave(); }}
-              disabled={isSaving}
-              className="flex items-center gap-1.5 h-7 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded text-[12px] font-medium transition-colors disabled:opacity-50"
-            >
-              <Save className="w-3.5 h-3.5" />{isSaving ? 'Saving…' : 'Save'}
-            </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="rounded-lg border border-slate-800 bg-[#11182b] px-3 py-2 text-[13px] text-slate-300">
+            {isDirty ? 'Unsaved orchestrator changes' : 'Properties saved'}
           </div>
-        )}
+          <button onClick={() => { void handleSave(); }} disabled={!isDirty || isSaving}
+            className="ml-auto inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-medium hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed">
+            <Save className="w-3.5 h-3.5" />{isSaving ? 'Saving…' : 'Save Properties'}
+          </button>
+        </div>
 
-        <F label="Orchestrator ID" field="orchId" ro />
-        <F label="Orchestrator Name *" field="name" />
-        <div>
-          <label className="block text-[11px] text-slate-500 mb-1">Description</label>
-          <textarea rows={3} value={data.description ?? ''} onChange={e => update('description', e.target.value)}
-            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 resize-none" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <F label="Status" field="status" ro />
-          <F label="Owner" field="owner" />
-        </div>
-        <F label="Tags" field="tags" />
-        <div className="border-t border-slate-800 pt-4 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <F label="Timeout Policy" field="timeoutPolicy" />
-            <F label="Retry Policy" field="retryPolicy" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <F label="Concurrency Rule" field="concurrencyRule" />
-            <F label="Published State" field="publishedState" ro />
-          </div>
-        </div>
-        <div className="border-t border-slate-800 pt-4 grid grid-cols-2 gap-4">
-          <F label="Created On" field="createdOn" ro />
-          <F label="Updated On" field="updatedOn" ro />
-          <F label="Last Opened By" field="lastOpenedBy" ro />
-          <F label="Last Opened On" field="lastOpenedOn" ro />
-          <F label="Last Executed By" field="lastExecutedBy" ro />
-          <F label="Last Executed On" field="lastExecutedOn" ro />
-          <F label="Last Success On" field="lastSuccessOn" ro />
-          <F label="Last Failed On" field="lastFailedOn" ro />
-          <F label="Version" field="version" ro />
-          <F label="Lock State" field="lockState" ro />
+        <div className="space-y-6">
+          <SectionCard
+            title="Identity"
+            description="Core orchestrator identity and business-facing metadata."
+          >
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="xl:col-span-2"><F label="Orchestrator ID" field="orchId" ro /></div>
+              <div className="xl:col-span-2"><F label="Orchestrator Name" field="name" required /></div>
+              <div className="xl:col-span-2">
+                <label className="field-label">Description</label>
+                <textarea rows={4} value={data.description ?? ''} onChange={e => update('description', e.target.value)} className="field-textarea" />
+              </div>
+              <F label="Status" field="status" ro />
+              <div className="xl:col-span-2"><F label="Tags" field="tags" /></div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Runtime Configuration"
+            description="Execution behavior and operational controls."
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              <F label="Timeout Policy" field="timeoutPolicy" />
+              <F label="Retry Policy" field="retryPolicy" />
+              <F label="Concurrency Rule" field="concurrencyRule" />
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Audit Timeline"
+            description="Only the most useful lifecycle signals are shown here."
+          >
+            {auditFields.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {auditFields.map(item => (
+                  <F key={item.field} label={item.label} field={item.field} ro />
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-slate-800 bg-[#11182b] px-4 py-4 text-[13px] text-slate-400">
+                No meaningful audit timestamps are available for this orchestrator yet.
+              </div>
+            )}
+          </SectionCard>
         </div>
       </div>
     </div>

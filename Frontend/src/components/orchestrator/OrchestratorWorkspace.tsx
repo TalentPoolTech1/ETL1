@@ -37,15 +37,15 @@ export function OrchestratorWorkspace({ tabId }: OrchestratorWorkspaceProps) {
         type="orchestrator"
         name={tab?.objectName ?? ''}
         hierarchyPath={tab?.hierarchyPath}
-        status="draft"
         isDirty={tab?.isDirty}
+        hideTitle
       />
 
       <SubTabBar tabId={tabId} tabs={ORCHESTRATOR_SUB_TABS} defaultTab="editor" />
 
       {/* Designer: always mounted, hidden when not active */}
       <div className={`flex-1 overflow-hidden ${activeSubTab === 'editor' ? 'flex' : 'hidden'}`}>
-        <OrchestratorEditorSubTab />
+        <OrchestratorEditorSubTab orchId={orchId} onDirty={() => dispatch(markTabUnsaved(tabId))} />
       </div>
 
       {activeSubTab === 'properties'   && <OrchestratorPropertiesSubTab orchId={orchId} onDirty={() => dispatch(markTabUnsaved(tabId))} />}

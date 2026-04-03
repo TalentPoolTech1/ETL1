@@ -1,6 +1,6 @@
 /**
  * ObjectHeader — reusable tab content header with hierarchy breadcrumb,
- * status badge, and action buttons. Used by all object workspace tabs.
+ * status badge, and action buttons. All styles from CSS variables.
  */
 import React from 'react';
 import {
@@ -36,23 +36,33 @@ export function ObjectTypeIcon({ type, size = 18 }: { type: TabType; size?: numb
 
 // ─── Status badge ─────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<ObjectStatus, { label: string; className: string; Icon: React.ElementType }> = {
-  draft:       { label: 'Draft',     className: 'bg-slate-700 text-slate-300 border-slate-600',    Icon: Edit3 },
-  published:   { label: 'Published', className: 'bg-emerald-900/50 text-emerald-300 border-emerald-700', Icon: CheckCircle2 },
-  running:     { label: 'Running',   className: 'bg-blue-900/50 text-blue-300 border-blue-700',    Icon: Activity },
-  failed:      { label: 'Failed',    className: 'bg-red-900/50 text-red-300 border-red-700',       Icon: XCircle },
-  success:     { label: 'Success',   className: 'bg-emerald-900/50 text-emerald-300 border-emerald-700', Icon: CheckCircle2 },
-  warning:     { label: 'Warning',   className: 'bg-amber-900/50 text-amber-300 border-amber-700', Icon: FileWarning },
-  disabled:    { label: 'Disabled',  className: 'bg-slate-800 text-slate-500 border-slate-700',    Icon: PauseCircle },
-  locked:      { label: 'Locked',    className: 'bg-slate-700 text-slate-400 border-slate-600',    Icon: Lock },
-  archived:    { label: 'Archived',  className: 'bg-slate-800 text-slate-500 border-slate-700',    Icon: Archive },
+const STATUS_CONFIG: Record<ObjectStatus, { label: string; style: React.CSSProperties; Icon: React.ElementType }> = {
+  draft:     { label: 'Draft',     Icon: Edit3,       style: { background: 'rgba(71,85,105,0.3)',  color: 'var(--tx2)',  borderColor: 'var(--bd-2)' } },
+  published: { label: 'Published', Icon: CheckCircle2,style: { background: 'rgba(52,211,153,0.1)', color: '#34d399',    borderColor: 'rgba(52,211,153,0.35)' } },
+  running:   { label: 'Running',   Icon: Activity,    style: { background: 'rgba(59,130,246,0.1)', color: 'var(--ac-lt)',borderColor: 'rgba(59,130,246,0.35)' } },
+  failed:    { label: 'Failed',    Icon: XCircle,     style: { background: 'rgba(248,113,113,0.1)',color: 'var(--err)', borderColor: 'rgba(248,113,113,0.35)' } },
+  success:   { label: 'Success',   Icon: CheckCircle2,style: { background: 'rgba(52,211,153,0.1)', color: '#34d399',    borderColor: 'rgba(52,211,153,0.35)' } },
+  warning:   { label: 'Warning',   Icon: FileWarning, style: { background: 'rgba(251,191,36,0.1)', color: 'var(--warn)',borderColor: 'rgba(251,191,36,0.35)' } },
+  disabled:  { label: 'Disabled',  Icon: PauseCircle, style: { background: 'rgba(71,85,105,0.2)',  color: 'var(--tx2)', borderColor: 'var(--bd)' } },
+  locked:    { label: 'Locked',    Icon: Lock,        style: { background: 'rgba(71,85,105,0.2)',  color: 'var(--tx3)', borderColor: 'var(--bd)' } },
+  archived:  { label: 'Archived',  Icon: Archive,     style: { background: 'rgba(71,85,105,0.2)',  color: 'var(--tx2)', borderColor: 'var(--bd)' } },
 };
 
 export function StatusBadge({ status }: { status: ObjectStatus }) {
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
   const Icon = cfg.Icon;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded border ${cfg.className}`}>
+    <span
+      className="inline-flex items-center gap-1"
+      style={{
+        fontSize: 'var(--fs-micro)',
+        fontWeight: 'var(--fw-semi)',
+        padding: '2px 8px',
+        borderRadius: 3,
+        border: '1px solid',
+        ...cfg.style,
+      }}
+    >
       <Icon className="w-2.5 h-2.5" />
       {cfg.label}
     </span>
@@ -61,15 +71,27 @@ export function StatusBadge({ status }: { status: ObjectStatus }) {
 
 // ─── Hierarchy breadcrumb ─────────────────────────────────────────────────
 
-function HierarchyBreadcrumb({ path }: { path: string }) {
+function normalizeLabel(value: string): string {
+  return value.trim().replace(/^\*/, '').toLowerCase();
+}
+
+function HierarchyBreadcrumb({ path, currentName }: { path: string; currentName?: string }) {
   const parts = path.split('→').map(p => p.trim()).filter(Boolean);
+  const effectiveParts = currentName && parts.length > 0 && normalizeLabel(parts[parts.length - 1] ?? '') === normalizeLabel(currentName)
+    ? parts.slice(0, -1)
+    : parts;
+
+  if (effectiveParts.length === 0) return null;
+
   return (
-    <div className="flex items-center gap-0.5 text-[11px] text-slate-500 flex-wrap min-w-0">
-      {parts.map((part, i) => (
+    <div className="thm-obj-breadcrumb">
+      {effectiveParts.map((part, i) => (
         <React.Fragment key={i}>
-          {i > 0 && <ChevronRight className="w-3 h-3 text-slate-700 flex-shrink-0" />}
+          {i > 0 && (
+            <ChevronRight className="w-2.5 h-2.5 crumb-sep flex-shrink-0" style={{ color: 'var(--tx3)' }} />
+          )}
           <span
-            className={`truncate ${i < parts.length - 1 ? 'hover:text-slate-300 cursor-pointer transition-colors' : 'text-slate-400'}`}
+            className={i < effectiveParts.length - 1 ? 'crumb-link' : 'crumb-current'}
             title={part}
           >
             {part}
@@ -88,56 +110,77 @@ interface ObjectHeaderProps {
   hierarchyPath?: string;
   status?: ObjectStatus;
   isDirty?: boolean;
+  hideTitle?: boolean;
   isReadOnly?: boolean;
   isLocked?: boolean;
   actions?: React.ReactNode;
 }
 
 export function ObjectHeader({
-  type,
-  name,
-  hierarchyPath,
-  status,
-  isDirty,
-  isReadOnly,
-  isLocked,
-  actions,
+  type, name, hierarchyPath, status, isDirty, hideTitle, isReadOnly, isLocked, actions,
 }: ObjectHeaderProps) {
   return (
-    <div className="flex-shrink-0 px-5 pt-4 pb-3 border-b border-slate-800 bg-[#0d0f1a]">
+    <div className="thm-obj-header">
       <div className="flex items-start gap-3">
-        {/* Icon */}
+
+        {/* Object type icon */}
         <div className="mt-0.5 flex-shrink-0">
-          <ObjectTypeIcon type={type} size={20} />
+          <ObjectTypeIcon type={type} size={18} />
         </div>
 
         {/* Name + breadcrumb */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className={`text-[18px] font-semibold text-slate-100 leading-tight ${isDirty ? 'italic' : ''}`}>
-              {isDirty ? `*${name}` : name}
-            </h1>
+            {!hideTitle && (
+              <h1 className={`thm-obj-title ${isDirty ? 'italic' : ''}`}>
+                {isDirty ? `*${name}` : name}
+              </h1>
+            )}
+
             {status && <StatusBadge status={status} />}
+
             {isLocked && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border bg-slate-700 text-slate-400 border-slate-600">
+              <span
+                className="inline-flex items-center gap-1"
+                style={{
+                  fontSize: 'var(--fs-micro)', fontWeight: 'var(--fw-semi)',
+                  padding: '2px 8px', borderRadius: 3, border: '1px solid',
+                  background: 'rgba(71,85,105,0.2)', color: 'var(--tx3)', borderColor: 'var(--bd)',
+                }}
+              >
                 <Lock className="w-2.5 h-2.5" /> Locked
               </span>
             )}
+
             {isReadOnly && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border bg-slate-800 text-slate-500 border-slate-700">
+              <span
+                className="inline-flex items-center gap-1"
+                style={{
+                  fontSize: 'var(--fs-micro)', fontWeight: 'var(--fw-semi)',
+                  padding: '2px 8px', borderRadius: 3, border: '1px solid',
+                  background: 'rgba(71,85,105,0.15)', color: 'var(--tx2)', borderColor: 'var(--bd)',
+                }}
+              >
                 <AlertCircle className="w-2.5 h-2.5" /> Read-only
               </span>
             )}
+
             {isDirty && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border bg-amber-900/40 text-amber-300 border-amber-700">
+              <span
+                className="inline-flex items-center gap-1"
+                style={{
+                  fontSize: 'var(--fs-micro)', fontWeight: 'var(--fw-semi)',
+                  padding: '2px 8px', borderRadius: 3, border: '1px solid',
+                  background: 'rgba(251,191,36,0.10)', color: 'var(--warn)', borderColor: 'rgba(251,191,36,0.30)',
+                }}
+              >
                 <Clock className="w-2.5 h-2.5" /> Unsaved
               </span>
             )}
           </div>
+
           {hierarchyPath && (
-            <div className="mt-1">
-              <HierarchyBreadcrumb path={hierarchyPath} />
-            </div>
+            <HierarchyBreadcrumb path={hierarchyPath} currentName={name} />
           )}
         </div>
 

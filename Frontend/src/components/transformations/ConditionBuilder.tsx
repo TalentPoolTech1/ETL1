@@ -51,8 +51,8 @@ const OPERATORS: Record<ComparisonOperator, { label: string; requiresValue: bool
 };
 
 const CONTROL_CLASSNAME = 'w-full h-10 px-3 rounded-lg bg-[#1e2035] border border-slate-600 text-slate-100 text-[12px] font-medium placeholder-slate-500 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400/30 disabled:opacity-40 disabled:cursor-not-allowed';
-const MINI_SELECT_CLASSNAME = 'h-8 px-3 rounded-md bg-[#161a2f] border border-slate-600 text-[11px] font-semibold text-slate-200 focus:outline-none focus:border-blue-400';
-const ACTION_BUTTON_CLASSNAME = 'inline-flex items-center justify-center h-9 px-3 rounded-lg border text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
+const MINI_SELECT_CLASSNAME = 'h-8 px-3 rounded-md bg-[#161a2f] border border-slate-600 text-[12px] font-semibold text-slate-200 focus:outline-none focus:border-blue-400';
+const ACTION_BUTTON_CLASSNAME = 'inline-flex items-center justify-center h-9 px-3 rounded-lg border text-[12px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
 
 function cloneCondition(condition: ComplexCondition): ComplexCondition {
   return JSON.parse(JSON.stringify(condition)) as ComplexCondition;
@@ -98,7 +98,7 @@ function ConditionClauseEditor({
     <div className="rounded-xl border border-slate-700 bg-[#13182d] p-3">
       <div className="grid grid-cols-1 gap-3">
         <div>
-          <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
             Column
           </label>
           <select
@@ -117,7 +117,7 @@ function ConditionClauseEditor({
         </div>
 
         <div>
-          <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
             Operator
           </label>
           <select
@@ -136,7 +136,7 @@ function ConditionClauseEditor({
 
         {OPERATORS[clause.operator].requiresValue && (
           <div>
-            <label className="mb-1 block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+            <label className="mb-1 block text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
               Compare To
             </label>
             <input
@@ -152,7 +152,7 @@ function ConditionClauseEditor({
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="text-[11px] text-slate-400">{describeClause(clause)}</div>
+        <div className="text-[12px] text-slate-400">{describeClause(clause)}</div>
         <button
           type="button"
           onClick={onRemove}
@@ -254,8 +254,8 @@ export const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
   return (
     <div className="space-y-4 rounded-xl border border-slate-700 bg-[#111426] p-4">
       <div className="rounded-xl border border-blue-500/30 bg-[#0d1830] p-3">
-        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-blue-300">Logic Summary</div>
-        <p className="mt-2 text-[11px] font-mono leading-5 text-slate-100 break-words">
+        <div className="text-[12px] font-bold uppercase tracking-[0.16em] text-blue-300">Logic Summary</div>
+        <p className="mt-2 text-[12px] font-mono leading-5 text-slate-100 break-words">
           {summary}
         </p>
       </div>
@@ -265,10 +265,10 @@ export const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
           <div key={group.id} className="rounded-xl border border-slate-700 bg-[#171b31] p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                <div className="text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
                   Condition Group {gIdx + 1}
                 </div>
-                <div className="mt-1 text-[11px] text-slate-500">
+                <div className="mt-1 text-[12px] text-slate-300">
                   Rows in this group are combined with {group.logicalOp}.
                 </div>
               </div>
@@ -287,7 +287,7 @@ export const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
                 <div key={clause.id}>
                   {cIdx > 0 && (
                     <div className="my-3 flex items-center gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      <span className="text-[12px] font-bold uppercase tracking-[0.16em] text-slate-300">
                         Within this group
                       </span>
                       <select
@@ -327,12 +327,12 @@ export const ConditionBuilder: React.FC<ConditionBuilderProps> = ({
 
       {condition.groups.length > 0 && (
         <div className="rounded-xl border border-dashed border-slate-600 bg-[#111426] p-3">
-          <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.16em] text-slate-400">
             Connect Groups
           </div>
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-400">Across groups use</span>
+              <span className="text-[12px] text-slate-400">Across groups use</span>
               <select
                 value={condition.groupLogicalOp}
                 onChange={e => {

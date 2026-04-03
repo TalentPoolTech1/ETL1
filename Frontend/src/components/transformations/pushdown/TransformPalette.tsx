@@ -93,7 +93,7 @@ function FunctionCard({
     <div
       className={`
         border rounded-lg p-3 transition-all cursor-pointer
-        ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'}
+        ${isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-800 hover:border-slate-700'}
         ${!canAdd ? 'opacity-60 cursor-not-allowed' : ''}
       `}
       onClick={() => canAdd && onSelect()}
@@ -101,28 +101,28 @@ function FunctionCard({
       {/* Header */}
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1">
-          <h4 className="font-medium text-gray-900">{result.label}</h4>
-          <p className="text-xs text-gray-500 mt-1">{result.functionId}</p>
+          <h4 className="font-medium text-white">{result.label}</h4>
+          <p className="text-xs text-slate-300 mt-1">{result.functionId}</p>
         </div>
         <AvailabilityBadge result={result} />
       </div>
 
       {/* Source implementation info */}
       {result.sourceImplementation && (
-        <div className="mb-2 p-2 bg-blue-50 border border-blue-100 rounded text-xs text-gray-700">
+        <div className="mb-2 p-2 bg-blue-50 border border-blue-100 rounded text-xs text-slate-200">
           <span className="font-medium">
             {result.sourceImplementation.sourceTech}:
           </span>{' '}
           <code className="font-mono">{result.sourceImplementation.implementation}</code>
           {result.sourceImplementation.notes && (
-            <p className="mt-1 text-gray-600">{result.sourceImplementation.notes}</p>
+            <p className="mt-1 text-slate-300">{result.sourceImplementation.notes}</p>
           )}
         </div>
       )}
 
       {/* Message */}
       {result.message && (
-        <p className="text-xs text-gray-600 mb-2">{result.message}</p>
+        <p className="text-xs text-slate-300 mb-2">{result.message}</p>
       )}
 
       {/* Alternative suggestion */}
@@ -185,7 +185,7 @@ function CategorySection({
 
   return (
     <div className="mb-6">
-      <h3 className="font-semibold text-gray-900 mb-3 text-sm uppercase tracking-wide opacity-70">
+      <h3 className="font-semibold text-white mb-3 text-sm uppercase tracking-wide opacity-70">
         {title}
       </h3>
       <div className="grid grid-cols-1 gap-2">
@@ -226,8 +226,8 @@ export function TransformPalette({
     <div className="w-full max-w-md mx-auto p-4">
       {/* Header info */}
       <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-        <h2 className="font-semibold text-gray-900">Transform Functions</h2>
-        <p className="text-sm text-gray-600 mt-1">
+        <h2 className="font-semibold text-white">Transform Functions</h2>
+        <p className="text-sm text-slate-300 mt-1">
           Source: <span className="font-medium">{sourceTechnology}</span> · Execution:{' '}
           <span className="font-medium capitalize">{executionPoint}</span>
         </p>
@@ -278,10 +278,10 @@ export function TransformPalette({
         {/* Unavailable (only if allowed) */}
         {allowUnavailable && palette.unavailable.length > 0 && (
           <div className="border-t pt-6">
-            <h3 className="font-semibold text-gray-900 mb-3 text-sm uppercase tracking-wide opacity-70">
+            <h3 className="font-semibold text-white mb-3 text-sm uppercase tracking-wide opacity-70">
               Unavailable (PySpark only)
             </h3>
-            <p className="text-xs text-gray-600 mb-3">
+            <p className="text-xs text-slate-300 mb-3">
               These functions are not supported in {sourceTechnology}. Switch to PySpark execution to use them.
             </p>
             {/* Show as disabled but informative */}
@@ -289,19 +289,19 @@ export function TransformPalette({
               {palette.unavailable.slice(0, 3).map((result) => (
                 <div
                   key={result.functionId}
-                  className="border border-gray-200 rounded p-2 bg-gray-50"
+                  className="border border-slate-800 rounded p-2 bg-[#0d0f1a]"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-sm text-gray-700">
+                    <span className="font-medium text-sm text-slate-200">
                       {result.label}
                     </span>
-                    <span className="text-xs text-gray-500">Not available</span>
+                    <span className="text-xs text-slate-300">Not available</span>
                   </div>
-                  <p className="text-xs text-gray-600 mt-1">{result.message}</p>
+                  <p className="text-xs text-slate-300 mt-1">{result.message}</p>
                 </div>
               ))}
               {palette.unavailable.length > 3 && (
-                <p className="text-xs text-gray-500 pt-2">
+                <p className="text-xs text-slate-300 pt-2">
                   +{palette.unavailable.length - 3} more unavailable in PySpark
                 </p>
               )}
@@ -311,8 +311,8 @@ export function TransformPalette({
       </div>
 
       {/* Footer note */}
-      <div className="mt-6 p-3 bg-gray-50 rounded-lg border border-gray-200">
-        <p className="text-xs text-gray-600">
+      <div className="mt-6 p-3 bg-[#0d0f1a] rounded-lg border border-slate-800">
+        <p className="text-xs text-slate-300">
           💡 <strong>Tip:</strong> Available functions execute in {sourceTechnology} for better performance. Alternative functions work but may have different syntax. Unavailable functions require switching to PySpark.
         </p>
       </div>

@@ -5,20 +5,24 @@ import React, { useState, useEffect } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { updateActivePipeline } from '@/store/slices/pipelineSlice';
 
-function Field({ label, value, onChange, ro, ta, placeholder }: {
-  label: string; value: string; onChange?: (v: string) => void; ro?: boolean; ta?: boolean; placeholder?: string;
+function Field({ label, value, onChange, ro, ta, required, placeholder }: {
+  label: string; value: string; onChange?: (v: string) => void;
+  ro?: boolean; ta?: boolean; required?: boolean; placeholder?: string;
 }) {
+  const labelText = label.replace(/\s*\*$/, '');
   return (
     <div>
-      <label className="block text-[11px] text-slate-500 mb-1">{label}</label>
+      <label className="field-label">
+        {labelText}{required && <span className="field-required">*</span>}
+      </label>
       {ro ? (
-        <div className="h-8 flex items-center px-3 bg-slate-900/50 border border-slate-800 rounded text-[12px] text-slate-500 font-mono">{value || '—'}</div>
+        <div className="field-input-ro">{value || '—'}</div>
       ) : ta ? (
-        <textarea rows={3} value={value} onChange={e => onChange?.(e.target.value)} placeholder={placeholder}
-          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500 resize-none" />
+        <textarea rows={3} value={value} onChange={e => onChange?.(e.target.value)}
+          placeholder={placeholder} className="field-textarea" />
       ) : (
-        <input type="text" value={value} onChange={e => onChange?.(e.target.value)} placeholder={placeholder}
-          className="w-full h-8 px-3 bg-slate-800 border border-slate-700 rounded text-[12px] text-slate-200 outline-none focus:border-blue-500" />
+        <input type="text" value={value} onChange={e => onChange?.(e.target.value)}
+          placeholder={placeholder} className="field-input" />
       )}
     </div>
   );
@@ -90,29 +94,38 @@ export function PipelinePropertiesSubTab({ pipelineId, onDirty }: Props) {
     onDirty?.();
   };
 
-  const F = (p: { label: string; field: string; ro?: boolean; ta?: boolean }) => (
-    <Field label={p.label} value={data[p.field] ?? ''} onChange={v => handleChange(p.field, v)} ro={p.ro} ta={p.ta} />
+  const F = (p: { label: string; field: string; ro?: boolean; ta?: boolean; required?: boolean }) => (
+    <Field label={p.label} value={data[p.field] ?? ''} onChange={v => handleChange(p.field, v)}
+      ro={p.ro} ta={p.ta} required={p.required} />
   );
 
   return (
-    <div className="flex-1 overflow-auto p-5">
-      <div className="max-w-2xl space-y-4">
-        <F label="Pipeline ID" field="pipelineId" ro />
-        <F label="Pipeline Name *" field="name" />
-        <F label="Description" field="description" ta />
-        <div className="grid grid-cols-2 gap-4">
-          <F label="Project" field="project" ro />
-          <F label="Folder" field="folder" ro />
+    <div className="panel-page">
+      <div className="max-w-2xl flex flex-col gap-5">
+
+        {/* Identity */}
+        <div className="panel-card">
+          <p className="panel-section-title">Identity</p>
+          <F label="Pipeline ID" field="pipelineId" ro />
+          <F label="Pipeline Name" field="name" required />
+          <F label="Description" field="description" ta />
+          <div className="grid grid-cols-2 gap-4">
+            <F label="Project" field="project" ro />
+            <F label="Folder" field="folder" ro />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <F label="Status" field="status" ro />
+            <F label="Owner" field="owner" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <F label="Tags" field="tags" />
+            <F label="Labels" field="labels" />
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <F label="Status" field="status" ro />
-          <F label="Owner" field="owner" />
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <F label="Tags" field="tags" />
-          <F label="Labels" field="labels" />
-        </div>
-        <div className="border-t border-slate-800 pt-4 space-y-4">
+
+        {/* Runtime */}
+        <div className="panel-card">
+          <p className="panel-section-title">Runtime Configuration</p>
           <div className="grid grid-cols-2 gap-4">
             <F label="Runtime Engine" field="runtimeEngine" ro />
             <F label="Execution Mode" field="executionMode" />
@@ -126,20 +139,26 @@ export function PipelinePropertiesSubTab({ pipelineId, onDirty }: Props) {
             <F label="Published State" field="publishedState" ro />
           </div>
         </div>
-        <div className="border-t border-slate-800 pt-4 grid grid-cols-2 gap-4">
-          <F label="Created By" field="createdBy" ro />
-          <F label="Created On" field="createdOn" ro />
-          <F label="Updated By" field="updatedBy" ro />
-          <F label="Updated On" field="updatedOn" ro />
-          <F label="Last Opened By" field="lastOpenedBy" ro />
-          <F label="Last Opened On" field="lastOpenedOn" ro />
-          <F label="Last Executed By" field="lastExecutedBy" ro />
-          <F label="Last Executed On" field="lastExecutedOn" ro />
-          <F label="Last Success On" field="lastSuccessOn" ro />
-          <F label="Last Failed On" field="lastFailedOn" ro />
-          <F label="Version" field="version" ro />
-          <F label="Lock State" field="lockState" ro />
+
+        {/* Audit */}
+        <div className="panel-card">
+          <p className="panel-section-title">Audit</p>
+          <div className="grid grid-cols-2 gap-4">
+            <F label="Created By" field="createdBy" ro />
+            <F label="Created On" field="createdOn" ro />
+            <F label="Updated By" field="updatedBy" ro />
+            <F label="Updated On" field="updatedOn" ro />
+            <F label="Last Opened By" field="lastOpenedBy" ro />
+            <F label="Last Opened On" field="lastOpenedOn" ro />
+            <F label="Last Executed By" field="lastExecutedBy" ro />
+            <F label="Last Executed On" field="lastExecutedOn" ro />
+            <F label="Last Success On" field="lastSuccessOn" ro />
+            <F label="Last Failed On" field="lastFailedOn" ro />
+            <F label="Version" field="version" ro />
+            <F label="Lock State" field="lockState" ro />
+          </div>
         </div>
+
       </div>
     </div>
   );
